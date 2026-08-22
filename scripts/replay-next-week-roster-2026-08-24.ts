@@ -9,6 +9,7 @@ import {
   replayDeskSameClockCapacity,
   type DeskReplayCandidate,
   type DeskReplayPolicy,
+  type DeskReplayResult,
 } from "../lib/research/deskSameClockCapacityReplay";
 
 const arg = (name: string, fallback: string): string => {
@@ -96,6 +97,33 @@ const managerBySlug: Record<string, string> = {
 };
 const round = (value: number): number => Math.round(value * 100) / 100;
 const money = (value: number): string => `${value >= 0 ? "+" : "-"}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
+const counts = (rows: Array<{ reason?: string; slug?: string }>, key: "reason" | "slug") =>
+  Object.entries(rows.reduce<Record<string, number>>((accumulator, row) => {
+    const value = String(row[key] ?? "unknown");
+    accumulator[value] = (accumulator[value] ?? 0) + 1;
+    return accumulator;
+  }, {})).map(([label, count]) => ({ label, count }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+
+function resultDelta(baseline: DeskReplayResult, candidate: DeskReplayResult): number {
+  return round(candidate.modeledPnlUsd - baseline.modeledPnlUsd);
+}
+
+function policiesWithPriorityFirst(
+  policies: readonly DeskReplayPolicy[], domainId: string, slug: string,
+): DeskReplayPolicy[] {
+  return structuredClone(policies).map((policy) => {
+    if (policy.id !== domainId) return policy;
+    const remainder = Object.entries(policy.priorityBySlug)
+      .sort((left, right) => left[1] - right[1] || left[0].localeCompare(right[0]))
+      .map(([channel]) => channel)
+      .filter((channel) => channel !== slug);
+    policy.priorityBySlug = Object.fromEntries(
+      [slug, ...remainder].map((channel, index) => [channel, index + 1]),
+    );
+    return policy;
+  });
+}
 
 function markdown(report: any): string {
   return [
@@ -116,6 +144,31 @@ function markdown(report: any): string {
     "| Session | Admitted | Modeled result |",
     "|---|---:|---:|",
     ...report.chronological.sessions.map((row: any) => `| ${row.session} | ${row.admitted} | ${money(row.modeledPnlUsd)} |`),
+    "",
+    "## Admission and collision audit",
+    "",
+    "| Block reason | Opportunities |",
+    "|---|---:|",
+    ...report.chronological.rejectedByReason.map((row: any) => `| ${row.label} | ${row.count} |`),
+    "",
+    "| Channel | Blocked opportunities |",
+    "|---|---:|",
+    ...report.chronological.rejectedByChannel.map((row: any) => `| ${row.label} | ${row.count} |`),
+    "",
+    "## Portfolio tournament",
+    "",
+    "A channel's leave-one-out contribution includes the opportunities it prevented or released; it is not isolated P&L.",
+    "",
+    "| Channel removed | Portfolio contribution | Opportunities released |",
+    "|---|---:|---:|",
+    ...report.tournament.leaveOneOut
+      .sort((left: any, right: any) => right.channelPortfolioContributionUsd - left.channelPortfolioContributionUsd)
+      .map((row: any) => `| ${row.channel} | ${money(row.channelPortfolioContributionUsd)} | ${row.displacedOpportunityDelta} |`),
+    "",
+    "| Priority-first test | Change vs current order | Admitted change |",
+    "|---|---:|---:|",
+    ...report.tournament.priorityFirst
+      .map((row: any) => `| ${row.channel} | ${money(row.deltaUsd)} | ${row.admittedDelta} |`),
     "",
     "## New-trial contribution (kept separate)",
     "",
@@ -241,6 +294,50 @@ function main(): void {
       policies: packet.candidate.manifest.admissionPolicies,
     },
   });
+  const liveSpecs = [...specBySlug.values()].sort((left, right) =>
+    left.accountId.localeCompare(right.accountId) || left.slug.localeCompare(right.slug));
+  const leaveOneOut = liveSpecs.map((spec) => {
+    const result = replayDeskSameClockCapacity({
+      candidates: candidates.filter((row) => row.slug !== spec.slug),
+      variant: {
+        id: `without-${spec.slug}`,
+        label: `Without ${spec.slug}`,
+        distinctOccAtSameClock: false,
+        policies: packet.candidate.manifest.admissionPolicies,
+      },
+    });
+    return {
+      channel: spec.slug,
+      accountId: spec.accountId,
+      resultWithoutUsd: result.modeledPnlUsd,
+      channelPortfolioContributionUsd: round(chronological.modeledPnlUsd - result.modeledPnlUsd),
+      admittedWithout: result.admitted.length,
+      displacedOpportunityDelta: result.admitted.length - chronological.admitted.length,
+    };
+  });
+  const priorityFirst = liveSpecs.map((spec) => {
+    const result = replayDeskSameClockCapacity({
+      candidates,
+      variant: {
+        id: `priority-first-${spec.slug}`,
+        label: `${spec.slug} first`,
+        distinctOccAtSameClock: false,
+        policies: policiesWithPriorityFirst(
+          packet.candidate.manifest.admissionPolicies,
+          spec.collisionDomain,
+          spec.slug,
+        ),
+      },
+    });
+    return {
+      channel: spec.slug,
+      accountId: spec.accountId,
+      resultUsd: result.modeledPnlUsd,
+      deltaUsd: resultDelta(chronological, result),
+      admitted: result.admitted.length,
+      admittedDelta: result.admitted.length - chronological.admitted.length,
+    };
+  }).sort((left, right) => right.deltaUsd - left.deltaUsd || left.channel.localeCompare(right.channel));
   const newTrials = Object.fromEntries(["vb-curl-reversal-qqq", "vb-rsi-revert-iwm"].map((slug) => {
     const rows = chronological.admitted.filter((row) => row.slug === slug);
     return [slug, { admitted: rows.length, modeledPnlUsd: round(rows.reduce((sum, row) => sum + row.pnlUsd, 0)) }];
@@ -265,10 +362,22 @@ function main(): void {
       actualPaths: chronological.actualPaths,
       virtualPaths: chronological.virtualPaths,
       sessions: chronological.sessions,
+      rejectedByReason: counts(chronological.rejected, "reason"),
+      rejectedByChannel: counts(chronological.rejected, "slug"),
       byChannel: Object.fromEntries([...specBySlug.keys()].sort().map((slug) => {
         const rows = chronological.admitted.filter((row) => row.slug === slug);
         return [slug, { admitted: rows.length, modeledPnlUsd: round(rows.reduce((sum, row) => sum + row.pnlUsd, 0)), actualPaths: rows.filter((row) => row.basis === "actual-executed").length, virtualPaths: rows.filter((row) => row.basis === "virtual-mid-basis").length }];
       })),
+    },
+    tournament: {
+      baselineUsd: chronological.modeledPnlUsd,
+      leaveOneOut,
+      priorityFirst,
+      interpretation: [
+        "leave-one-out contribution includes opportunities released to other channels, so it is portfolio contribution rather than isolated channel profit",
+        "priority-first deltas change ordering only; entries, sizes, managers, routes, and collision rules remain fixed",
+        "actual and virtual evidence remain visibly mixed in the chronological research scenario",
+      ],
     },
     newTrials,
     exclusions,
