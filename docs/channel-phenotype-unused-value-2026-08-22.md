@@ -61,12 +61,12 @@ No feature-conditioned manager rule passed. In other words, the data does **not*
 
 The best unused value is not another global exit preset. It is a tighter research loop:
 
-1. **Preserve the corrected roster packet.** Do not destabilize Monday with the exploratory phenotype scan.
+1. **Re-score the corrected Monday roster before activation.** The phenotype evidence should affect selection and admission: favor channels that repeatedly find movement, retain the existing `breakout` cap-one protection, add the bounded `momo-shape-2` and `vb-macd-state` entry experiments below, and do not keep a channel merely because it was already in the packet.
 2. **Preregister two admission tests:** `momo-shape-2` max-two entries and one `vb-macd-state` extension guard. These address the largest replicated controllable entry leaks.
 3. **Keep exit rehabilitation separate:** continue the already prepared channel-specific exits for `momo-shape-2`, `vb-level-break`, `breakout`, and `grind-smart-entries`, shadowing displaced behavior.
 4. **Build bespoke sibling studies for PB and Grind.** Standard manager presets did not capture the opportunity; examine contract selection, first bank, runner handoff, and time-to-MFE on matched opportunities.
-5. **Use `breakout-smart-entries` as an information-value candidate only.** If given a paper slot, freeze Account 1, two contracts, cap one, and `FULL-R35-K67`; judge it prospectively rather than crediting the tiny backtest holdout.
-6. **Add the phenotype run to nightly research only after review.** The dashboard should show one sentence—entry issue, conversion issue, or both—with the evidence and correlated features behind disclosure.
+5. **Do not award the open lane to `breakout-smart-entries` yet.** Its tiny holdout earns entry into a portfolio-aware candidate tournament, not the lane itself. Compare it with `orb-trend-rider`, `vb-level-break-qqq`, `vb-or-fail-qqq`, the stronger Momo sibling combination, and any other compatible candidate using marginal desk contribution, displacement, collision, uniqueness, and evidence value.
+6. **Make the phenotype conclusion part of the larger dashboard trust cleanup.** Do not create another panel. Replace redundant and stale tables with one canonical per-channel decision summary—entry issue, conversion issue, both, or collecting—and put evidence-layer, era, freshness, and raw comparisons behind disclosure.
 
 ## What not to do
 
