@@ -15,6 +15,7 @@ const research = read("components/perform/ShadowResearchWorkspace.tsx");
 const book = read("components/mobile2/MobileDeskSheet.tsx");
 
 for (const phrase of ["WHAT CHANGED?", "WHAT NEEDS ATTENTION?", "WHAT SHOULD I DO NEXT?"]) assert.match(home, new RegExp(phrase.replace("?", "\\?")));
+for (const label of ["ACTUAL ACCOUNT", "NIGHTLY RESEARCH · READ ONLY", "PLATFORM EVENT", "PROPOSAL ONLY"]) assert.match(home, new RegExp(label));
 assert.match(shell, /label: "Home"/);
 assert.match(shell, /label: "System"/);
 for (const label of ["EVIDENCE", "SCOPE", "AS OF", "CONFIGURATION", "SAMPLE"]) assert.match(evidence, new RegExp(label));
@@ -24,6 +25,7 @@ assert.match(evidence, /<summary>/);
 assert(sentinel.indexOf("NEXT ACTION") < sentinel.indexOf("sntw-technical"));
 assert(ops.indexOf("NEEDS ATTENTION") < ops.indexOf("opsw-technical"));
 assert.match(sentinel, /<details className="sntw-technical"/);
+for (const label of ["PLAN STATUS", "EXCEPTIONS", "NO OTHER CHANGES"]) assert.match(sentinel, new RegExp(label));
 assert.match(ops, /<details className="opsw-technical"/);
 
 for (const heading of ["STATE", "WHY THIS STATE", "CURRENT SESSION", "NEXT REVIEW"]) assert.match(fleet, new RegExp(`>${heading}<`));

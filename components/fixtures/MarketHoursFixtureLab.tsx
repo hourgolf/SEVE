@@ -96,18 +96,19 @@ export function MarketHoursFixtureLab() {
           </section>
           <section id="decision-clarity" className="fixture-decision-clarity">
             <header><span>DIRTY DASHBOARD · DECISION CLARITY</span><b>FIXTURE · NO LIVE READS</b></header>
-            <ResearchBookBoard reports={researchBookFixture} />
-            <EntryFinishMap stories={lineupFixtures} selectedSlug="orb-ustop-ctl" postureBySlug={{ "orb-ustop-ctl": "trading", "breakout-alt-v3-itm": "trading", "pb-ride-itm": "observing", grind: "retired" }} />
-            <div className="fixture-lineup-states">
-              {lineupFixtures.map((story) => <article key={story.channel}><small>{story.group}</small><b>{story.channel}</b><span>{story.sessions}s / {story.opportunities} logical opportunities · through {story.throughSession}</span><p>{story.why}</p></article>)}
-            </div>
-            <SessionDistributionStrip story={lineupFixtures[2]} />
+            <section className="atlas-fleet-pulse" aria-label="Fleet decision hierarchy fixture"><span className="atlas-fleet-lead"><small>NEXT CHANNEL DECISION · NIGHTLY RESEARCH</small><b>orb-ustop-ctl · TEST EXIT</b></span><div><span><b>6</b><small>TESTS TO REVIEW</small></span><span><b>2</b><small>ROSTER CALLS</small></span><span><b>12</b><small>STILL COLLECTING</small></span></div><em>THROUGH 2026-08-20 · READ ONLY</em></section>
             <section className="atlas-preview authoritative decision-first fixture-decision-card" aria-label="Decision-first channel card fixture">
               <ChannelDecisionAtGlance channel={lineupFixtures[0].channel} story={lineupFixtures[0]} posture="trading"
                 nextTest="Compare one profit-protection exit with the current exit on the same opportunities."
                 keepFixed={["entry", "size", "account route"]} />
               <details><summary>See supporting evidence</summary><p>Detailed cohorts, charts, manager comparisons, and provenance stay here.</p></details>
             </section>
+            <details className="fixture-supporting-room"><summary><span><small>COMPARE THE FLEET</small><b>Opportunity found versus profit kept</b></span><em>OPEN MAP</em></summary><div><EntryFinishMap stories={lineupFixtures} selectedSlug="orb-ustop-ctl" postureBySlug={{ "orb-ustop-ctl": "trading", "breakout-alt-v3-itm": "trading", "pb-ride-itm": "observing", grind: "retired" }} /></div></details>
+            <details className="fixture-supporting-room"><summary><span><small>CHANNEL DECISION QUEUE</small><b>Trading posture, evidence, and next review</b></span><em>OPEN QUEUE</em></summary><div className="fixture-lineup-states">
+              {lineupFixtures.map((story) => <article key={story.channel}><small>{story.channel === "pb-ride-itm" ? "SHADOWING" : story.channel === "grind" ? "RETIRED" : "TRADING"} · {story.sessions} SESSIONS · {story.opportunities} OPPORTUNITIES</small><b>{story.channel}</b><span>{story.group} · through {story.throughSession}</span><p>{story.why}</p></article>)}
+            </div></details>
+            <details className="fixture-supporting-room"><summary><span><small>CHANNEL RESEARCH PROGRAM</small><b>Trading, controlled experiments, shadows, and archive</b></span><em>OPEN PROGRAM</em></summary><div><ResearchBookBoard reports={researchBookFixture} /></div></details>
+            <details className="fixture-supporting-room"><summary><span><small>SESSION RANGE</small><b>Weak, typical, and strong outcomes</b></span><em>OPEN RANGE</em></summary><div><SessionDistributionStrip story={lineupFixtures[2]} /></div></details>
             <footer><span>CURRENT SETTINGS · 1s / 2</span><span>COMPARABLE EVIDENCE · 23s / 46</span><span>ALL CHANNEL HISTORY · 28s / 83</span></footer>
           </section>
         </section>

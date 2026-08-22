@@ -35,10 +35,9 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
   const atlasStale = surface.decisionAtlas.state === "ready" && surface.decisionAtlas.freshness === "stale";
   const evidenceQuality = readiness.tone === "red" || surface.decisionAtlas.state === "error" || atlasStale ? "partial"
     : surface.decisionAtlas.state === "ready" ? "complete" : "checking";
-  const attention = [
+  const operationalAttention = [
     surface.incident.severity !== "normal" ? { label: surface.incident.title, destination: { section: "ops" as const, check: "reconciliation" } } : null,
     atlasStale ? { label: "Nightly channel decisions need a fresh close", destination: { section: "research" as const, researchMode: "decisions" as const } } : null,
-    fleet.lead ? { label: `${fleet.lead.channel}: ${fleet.lead.disposition.toLowerCase()}`, destination: { section: "research" as const, channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" as const } } : null,
     readiness.tone === "red" ? { label: readiness.detail, destination: { section: "ops" as const } } : null,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 3);
 
@@ -61,20 +60,20 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
     <div className="decision-home-grid">
       <section className="decision-home-card changed"><header><small>01</small><b>WHAT CHANGED?</b></header>
         <ul>
-          <li><b>Latest result</b><span>{signedUsd(surface.liveFund.dayPnl)} selected-account session NAV change.</span></li>
-          <li><b>Channel evidence</b><span>{fleet.reports} reports through {fleet.throughSession ?? "the latest close"}{atlasStale && surface.decisionAtlas.evidenceThroughSession ? `; raw paths continue through ${surface.decisionAtlas.evidenceThroughSession}.` : "."}</span></li>
-          <li><b>Platform</b><span>{latestEvent ? plainChange(latestEvent.message) : "No new operational event is available."}</span></li>
+          <li><small>ACTUAL ACCOUNT</small><b>Latest result</b><span>{signedUsd(surface.liveFund.dayPnl)} selected-account session NAV change.</span></li>
+          <li><small>NIGHTLY RESEARCH · READ ONLY</small><b>Channel evidence</b><span>{fleet.reports} reports through {fleet.throughSession ?? "the latest close"}{atlasStale && surface.decisionAtlas.evidenceThroughSession ? `; raw paths continue through ${surface.decisionAtlas.evidenceThroughSession}.` : "."}</span></li>
+          <li><small>PLATFORM EVENT</small><b>System change</b><span>{latestEvent ? plainChange(latestEvent.message) : "No new operational event is available."}</span></li>
         </ul>
         <button type="button" onClick={() => onNavigate({ section: "tape", reviewSection: "tape", session: fleet.throughSession ?? undefined })}>REVIEW THE LAST CLOSE</button>
       </section>
       <section className="decision-home-card attention"><header><small>02</small><b>WHAT NEEDS ATTENTION?</b></header>
-        {attention.length ? <ol>{attention.map((item) => <li key={item.label}><button type="button" onClick={() => onNavigate(item.destination)}>{item.label}<span aria-hidden="true">→</span></button></li>)}</ol> : <p className="decision-home-clear">No urgent operator action. Continue collecting channel evidence.</p>}
-        <button type="button" onClick={() => onNavigate(fleet.lead ? { section: "research", channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" } : { section: "sentinel" })}>{fleet.lead ? "OPEN CHANNEL DECISIONS" : "OPEN NEXT-SESSION BRIEF"}</button>
+        {operationalAttention.length ? <ol>{operationalAttention.map((item) => <li key={item.label}><button type="button" onClick={() => onNavigate(item.destination)}>{item.label}<span aria-hidden="true">→</span></button></li>)}</ol> : <p className="decision-home-clear">No operational blocker. The paper desk and reporting can continue.</p>}
+        <button type="button" onClick={() => onNavigate({ section: "ops" })}>OPEN SYSTEM CHECKS</button>
       </section>
       <section className="decision-home-card next"><header><small>03</small><b>WHAT SHOULD I DO NEXT?</b></header>
-        <strong>{fleet.lead ? `Review ${fleet.lead.channel}` : "Keep the current paper configuration"}</strong>
-        <p>{fleet.lead ? `${fleet.lead.disposition}. Compare the supporting evidence before preparing a controlled proposal.` : "No channel decision currently clears the evidence floor for immediate review."}</p>
-        <div><button type="button" onClick={() => onNavigate({ section: "studio", channel: fleet.lead?.channel })}>OPEN CHANNEL</button><button type="button" onClick={() => onNavigate({ section: "market" })}>OPEN MARKETS</button></div>
+        <small>NIGHTLY RESEARCH · PROPOSAL ONLY</small><strong>{fleet.lead ? `Review ${fleet.lead.channel}` : "Keep the current paper configuration"}</strong>
+        <p>{fleet.lead ? `${fleet.lead.disposition}. Review one controlled move; nothing changes trading until separately approved.` : "No channel decision currently clears the evidence floor for immediate review."}</p>
+        <div><button type="button" onClick={() => onNavigate(fleet.lead ? { section: "research", channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" } : { section: "sentinel" })}>{fleet.lead ? "REVIEW DECISION" : "OPEN NEXT-SESSION PLAN"}</button><button type="button" onClick={() => onNavigate({ section: "studio", channel: fleet.lead?.channel })}>OPEN CHANNEL</button></div>
       </section>
     </div>
     <details className="decision-home-technical"><summary><span><small>TECHNICAL CONTEXT</small><b>Current receipt and feed details</b></span><em>OPEN ONLY FOR TROUBLESHOOTING</em><i>▾</i></summary><div>

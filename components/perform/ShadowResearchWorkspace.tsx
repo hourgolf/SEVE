@@ -365,41 +365,23 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       : !selected ? <div className="srw-empty">no reconstructed virtual paths since the Day 1 cohort</div>
       : <>
         <section className="srw-atlas-brief" aria-label="Decision Atlas research summary">
-          <span><small>DECISION ATLAS</small><b>WHERE SHOULD WE LOOK NEXT?</b></span>
-          <button type="button" className={decisionFilter === "promising" ? "on" : ""} onClick={() => { const next = decisionFilter === "promising" ? undefined : "promising"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>PROMISING</small><b>{atlasWorking.length}</b></button>
-          <button type="button" className={decisionFilter === "review" ? "on" : ""} onClick={() => { const next = decisionFilter === "review" ? undefined : "review"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>NEEDS REVIEW</small><b>{atlasReview.length}</b></button>
-          <button type="button" className={decisionFilter === "collecting" ? "on" : ""} onClick={() => { const next = decisionFilter === "collecting" ? undefined : "collecting"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></button>
-          <button type="button" onClick={() => atlasNext && onNavigate?.({ section: "research", channel: atlasNext.slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[atlasNext.slug]?.recommendation.axis), researchMode: "decisions" })}><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></button>
+          <span><small>NIGHTLY CHANNEL DECISIONS · READ ONLY</small><b>WHAT SHOULD WE REVIEW NEXT?</b></span>
+          <button type="button" className={decisionFilter === "promising" ? "on" : ""} onClick={() => { const next = decisionFilter === "promising" ? undefined : "promising"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>PROMOTION / SIZE / MANAGER</small><b>{atlasWorking.length}</b></button>
+          <button type="button" className={decisionFilter === "review" ? "on" : ""} onClick={() => { const next = decisionFilter === "review" ? undefined : "review"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>ENTRY / EXIT / RETIRE</small><b>{atlasReview.length}</b></button>
+          <button type="button" className={decisionFilter === "collecting" ? "on" : ""} onClick={() => { const next = decisionFilter === "collecting" ? undefined : "collecting"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>STILL COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></button>
+          <button type="button" onClick={() => atlasNext && onNavigate?.({ section: "research", channel: atlasNext.slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[atlasNext.slug]?.recommendation.axis), researchMode: "decisions" })}><small>NEXT CHANNEL DECISION</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO DECISION DUE"}</b></button>
         </section>
         {viewMode === "decisions" && <section className="srw-decisions" aria-label="Channel research decisions">
-          <ResearchBookBoard reports={surface.decisionAtlas} onSelect={(slug) => {
-            setFocusSlug(slug);
-            onNavigate?.({ section: "research", channel: slug,
-              axis: axisForDisposition(surface.decisionAtlas.bySlug[slug]?.recommendation.axis),
-              researchMode: "decisions" });
-          }} />
-          <ResearchCouncilRoom reports={surface.decisionAtlas} onNavigate={onNavigate} />
-          <EntryFinishMap
-            stories={lineupStories}
-            selectedSlug={focusSlug}
-            postureBySlug={postureBySlug}
-            scopeLabel={evidenceLens === "current" ? "CURRENT SETTINGS" : "COMPARABLE EVIDENCE"}
-            emptyMessage={evidenceLens === "current"
-              ? "No current-setting best-move and finish pairs are available yet."
-              : "Comparable fleet view is withheld until the nightly briefs are refreshed with same-cohort session distributions."}
-            onSelect={(slug) => {
-            setFocusSlug(slug);
-            onNavigate?.({ section: "research", channel: slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[slug]?.recommendation.axis), researchMode: "decisions", researchFilter: decisionFilter ?? undefined });
-          }} />
           <header><span><small>WHAT DESERVES REVIEW?</small><b>{decisionFilter ? `${decisionFilter.toUpperCase()} CHANNELS` : "What is working, what is not, and what to test next"}</b></span><div><em>{showAllDecisions ? `ALL ${filteredDecisionRows.length}` : `TOP ${Math.min(DEFAULT_DECISION_LIMIT, filteredDecisionRows.length)} OF ${filteredDecisionRows.length}`}</em>{filteredDecisionRows.length > DEFAULT_DECISION_LIMIT ? <button type="button" aria-expanded={showAllDecisions} onClick={() => setShowAllDecisions((current) => !current)}>{showAllDecisions ? `SHOW TOP ${DEFAULT_DECISION_LIMIT}` : `SHOW ALL ${filteredDecisionRows.length}`}</button> : null}</div></header>
           <div className="srw-decision-list">{displayedDecisionRows.map((item) => {
             const row = rows.find((candidate) => candidate.slug === item.slug);
             const brief = surface.decisionAtlas.bySlug[item.slug];
             const label = item.label ?? item.read.label;
+            const story = lineupBySlug[item.slug];
+            const posture = postureBySlug[item.slug] === "trading" ? "TRADING"
+              : postureBySlug[item.slug] === "observing" ? "SHADOWING" : "RETIRED";
             return <button type="button" key={item.slug} className={focusSlug === item.slug ? "on" : ""} aria-pressed={focusSlug === item.slug} onClick={() => { setFocusSlug(item.slug); onNavigate?.({ section: "research", channel: item.slug, axis: axisForDisposition(brief?.recommendation.axis), researchMode: "decisions", researchFilter: decisionFilter ?? undefined }); }}>
-              <span><b>{item.slug}</b><small>{lineupBySlug[item.slug]?.maturity
-                ?? (evidenceLens === "current" ? "NO CURRENT VIRTUAL SAMPLE" : brief ? "BRIEF NEEDS REFRESH" : "NO COMPARABLE BRIEF")} · {lineupBySlug[item.slug]?.freshness
-                ?? (evidenceLens === "current" ? "UNKNOWN" : "COMPARABLE WITHHELD")}</small></span>
+              <span><b>{item.slug}</b><small>{posture} · {story ? `${story.sessions} SESSIONS · ${story.opportunities} OPPORTUNITIES` : evidenceLens === "current" ? "NO CURRENT VIRTUAL SAMPLE" : brief ? "BRIEF NEEDS REFRESH" : "NO COMPARABLE BRIEF"}</small></span>
               <strong>{lineupBySlug[item.slug]?.group ?? label}</strong>
               <p>{lineupBySlug[item.slug]?.why ?? brief?.recommendation.summary ?? item.read.summary}</p>
             </button>;
@@ -412,6 +394,25 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
               <ChannelManagerEvidencePanel evidence={focusedManagerEvidence} currentManagerLabel={focusedPassport?.rootPolicy?.managerLabel} currentConfigurationEpochId={surface.channelControlPlane.view?.configurationEpochId} />
             </div></details>
           </div>}
+          <details className="srw-supporting-room"><summary><span><small>COMPARE THE FLEET</small><b>Opportunity found versus profit kept</b></span><em>OPEN MAP</em><i>▾</i></summary><div><EntryFinishMap
+            stories={lineupStories}
+            selectedSlug={focusSlug}
+            postureBySlug={postureBySlug}
+            scopeLabel={evidenceLens === "current" ? "CURRENT SETTINGS" : "COMPARABLE EVIDENCE"}
+            emptyMessage={evidenceLens === "current"
+              ? "No current-setting best-move and finish pairs are available yet."
+              : "Comparable fleet view is withheld until the nightly briefs are refreshed with same-cohort session distributions."}
+            onSelect={(slug) => {
+              setFocusSlug(slug);
+              onNavigate?.({ section: "research", channel: slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[slug]?.recommendation.axis), researchMode: "decisions", researchFilter: decisionFilter ?? undefined });
+            }} /></div></details>
+          <details className="srw-supporting-room"><summary><span><small>CHANNEL RESEARCH PROGRAM</small><b>Trading, controlled experiments, shadows, and archive</b></span><em>OPEN PROGRAM</em><i>▾</i></summary><div><ResearchBookBoard reports={surface.decisionAtlas} onSelect={(slug) => {
+            setFocusSlug(slug);
+            onNavigate?.({ section: "research", channel: slug,
+              axis: axisForDisposition(surface.decisionAtlas.bySlug[slug]?.recommendation.axis),
+              researchMode: "decisions" });
+          }} /></div></details>
+          <details className="srw-supporting-room"><summary><span><small>NIGHTLY AGENT ROOM</small><b>Challenges and interpretations from the same frozen evidence</b></span><em>OPEN ROOM</em><i>▾</i></summary><div><ResearchCouncilRoom reports={surface.decisionAtlas} onNavigate={onNavigate} /></div></details>
         </section>}
         {viewMode === "data" && <>
         {shadowResearch.cumulative ? <div className={`srw-running${shadowResearch.truncated ? " partial" : ""}`}>

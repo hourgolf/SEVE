@@ -34,6 +34,16 @@ assert(research.indexOf("<CurrentEvidenceCard") > research.indexOf("<details cla
 for (const surface of [dashboard, positions, review, ops, mobile]) assert.match(surface, /DecisionAtlasFleetPulse/);
 assert.match(pulse, /purpose === "operations"/);
 assert.match(pulse, /purpose === "positions"/);
+for (const label of ["NIGHTLY RESEARCH · READ ONLY", "TESTS TO REVIEW", "ROSTER CALLS", "STILL COLLECTING"]) assert.match(pulse, new RegExp(label));
+assert.doesNotMatch(pulse, /<small>TEST<\/small>|<small>ROSTER<\/small>|<small>COLLECT<\/small>/,
+  "fleet summaries must not return to unexplained shorthand");
+assert(research.indexOf("srw-decision-list") < research.indexOf("<EntryFinishMap"),
+  "Research must lead with channel decisions before the comparative fleet map");
+assert(research.indexOf("srw-decision-list") < research.indexOf("<ResearchCouncilRoom"),
+  "Research must lead with channel decisions before the agent room");
+for (const label of ["NIGHTLY CHANNEL DECISIONS · READ ONLY", "NEXT CHANNEL DECISION", "STILL COLLECTING", "TRADING", "SHADOWING", "RETIRED"]) assert.match(research, new RegExp(label));
+assert.equal((research.match(/className="srw-supporting-room"/g) ?? []).length, 3,
+  "fleet map, research program, and agent room must use progressive disclosure");
 assert.doesNotMatch(`${card}\n${pulse}\n${research}`, /recommendation\.label/, "all visible dispositions must use the shared canonical wording");
 
 assert.match(css, /data-skin="blackout"/);
