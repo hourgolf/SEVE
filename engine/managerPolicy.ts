@@ -16,8 +16,10 @@ export const BASE_MANAGER_IDS = [
 export const PB_RIDE_2_MANAGER_ID = "PB2-BANK15/HALF-GIVEBACK" as const;
 export const GRIND_CURRENT_MANAGER_ID = "GRIND-B25/CURRENT-A13" as const;
 export const VB_MACD_CURRENT_MANAGER_ID = "VB-MACD-CURRENT-LOCK18" as const;
+export const VB_LEVEL_CURRENT_MANAGER_ID = "VB-LEVEL-CURRENT-LOCK25" as const;
 export const MOMO2_CURRENT_MANAGER_ID = "MOMO2-CURRENT-LOCK27" as const;
 export const VB_MACD_LOCK18_NATIVE_START_SESSION = "2026-08-20" as const;
+export const NEXT_WEEK_MANAGER_NATIVE_START_SESSION = "2026-08-24" as const;
 export const MOMO2_BANK_RUNNER_NATIVE_START_SESSION = "2026-08-21" as const;
 
 export const MANAGER_IDS = [
@@ -25,6 +27,7 @@ export const MANAGER_IDS = [
   PB_RIDE_2_MANAGER_ID,
   GRIND_CURRENT_MANAGER_ID,
   VB_MACD_CURRENT_MANAGER_ID,
+  VB_LEVEL_CURRENT_MANAGER_ID,
   MOMO2_CURRENT_MANAGER_ID,
 ] as const;
 
@@ -54,9 +57,24 @@ export function managerIdsForChannel(
   // Historical exact replays retain the arm set that existed for their
   // session. A later native change must not rewrite immutable path coverage.
   if (slug === "vb-macd-state"
-      && asOfSessionDateEt
-      && asOfSessionDateEt < VB_MACD_LOCK18_NATIVE_START_SESSION) {
-    return [...BASE_MANAGER_IDS, VB_MACD_CURRENT_MANAGER_ID];
+      && (!asOfSessionDateEt
+        || asOfSessionDateEt < VB_MACD_LOCK18_NATIVE_START_SESSION
+        || asOfSessionDateEt >= NEXT_WEEK_MANAGER_NATIVE_START_SESSION)) {
+    return [
+      ...BASE_MANAGER_IDS.filter((id) => id !== "WIDE20/50"),
+      VB_MACD_CURRENT_MANAGER_ID,
+    ];
+  }
+  // LOCK50/30 becomes vb-level-break's native manager on 2026-08-24.
+  // Keep its displaced all-out +25/-30 policy as the paired channel-only
+  // shadow without duplicating the now-native LOCK50/30 arm.
+  if (slug === "vb-level-break"
+      && (!asOfSessionDateEt
+        || asOfSessionDateEt >= NEXT_WEEK_MANAGER_NATIVE_START_SESSION)) {
+    return [
+      ...BASE_MANAGER_IDS.filter((id) => id !== "LOCK50/30"),
+      VB_LEVEL_CURRENT_MANAGER_ID,
+    ];
   }
   // BANK20/RUN50 becomes the paper-native momo-shape-2 manager on 2026-08-21.
   // Preserve the displaced +27/-40 all-out policy as a distinct shadow while
@@ -119,6 +137,7 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
       return { state, exit: null };
     }
     case "VB-MACD-CURRENT-LOCK18": return lock(managerId, ret, 18, 30, isBell, state);
+    case "VB-LEVEL-CURRENT-LOCK25": return lock(managerId, ret, 25, 30, isBell, state);
     case "MOMO2-CURRENT-LOCK27": return lock(managerId, ret, 27, 40, isBell, state);
     case "PB2-BANK15/HALF-GIVEBACK": {
       if (state.bankReturnPct == null) {
