@@ -14,6 +14,7 @@ const mobileShell = read("components/mobile2/MobileShell.tsx");
 const research = read("components/perform/ShadowResearchWorkspace.tsx");
 const book = read("components/mobile2/MobileDeskSheet.tsx");
 const pnl = read("components/console/PnlPanel.tsx");
+const inspector = read("components/studio/ChannelInspector.tsx");
 
 for (const phrase of ["WHAT CHANGED?", "WHAT NEEDS ATTENTION?", "WHAT SHOULD I DO NEXT?"]) assert.match(home, new RegExp(phrase.replace("?", "\\?")));
 for (const label of ["ACTUAL ACCOUNT", "NIGHTLY RESEARCH · READ ONLY", "PLATFORM EVENT", "PROPOSAL ONLY"]) assert.match(home, new RegExp(label));
@@ -58,5 +59,9 @@ for (const label of ["actual fills · selected paper account", "ACTUAL FILLS ONL
 assert.match(pnl, /pnl-coverage-notice/);
 assert.match(book, /m2-period-coverage/);
 assert.doesNotMatch(pnl, /No strategist-account fallback was used/);
+for (const label of ["CURRENT TRADING SETUP", "SAVED CHANNEL SETUP", "PROPOSED TRADING SETUP", "LIVE SETTINGS PROTECTED"]) assert.match(inspector, new RegExp(label));
+assert.match(inspector, /className="channel-disclosure settings-context"/);
+assert.doesNotMatch(inspector, /session attrib/);
+assert.doesNotMatch(inspector, /RECEIPT-BOUND RUNTIME · DIRECT WRITES FENCED/);
 
 console.log("decision-first-platform-selftest: PASS");

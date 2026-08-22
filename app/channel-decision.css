@@ -284,6 +284,18 @@
 .shell-root[data-skin="cream"] .decision-evidence-layer > b {
   color: var(--909-text-primary, #262521);
 }
+.shell-root[data-skin="cream"] .channel-disclosure {
+  border-color: var(--909-line, #c8c2b7);
+  background: color-mix(in srgb, white 32%, var(--909-panel, #ebe8df));
+}
+.shell-root[data-skin="cream"] .channel-disclosure > summary b {
+  color: var(--909-text-primary, #262521);
+}
+.shell-root[data-skin="cream"] .channel-disclosure > summary small,
+.shell-root[data-skin="cream"] .channel-disclosure > summary em,
+.shell-root[data-skin="cream"] .channel-disclosure > summary i {
+  color: var(--909-text-muted, #6d6961);
+}
 
 .m2-app .channel-decision-card { margin-top: 10px; }
 .m2-app .channel-decision-card > summary { min-height: 48px; }

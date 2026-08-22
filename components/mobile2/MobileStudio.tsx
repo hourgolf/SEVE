@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { resolveChannelRuntimeAuthority } from "@/lib/studio/channelRuntimeAuthority";
 
 // =============================================================================
 // MOBILE · STUDIO (S5) — the tune surface (the gallery mock's studio frame):
@@ -36,19 +37,27 @@ export function MobileStudio({
   const passports = props.channelWorkspace;
   const roster = useChannelRosterBundleControl(props.channelControlPlane);
   const [scope, setScope] = useState<"roots" | "dark" | "all">("roots");
+  const runtimeCounts = useMemo(() => channels.reduce((counts, channel) => {
+    const authority = resolveChannelRuntimeAuthority(channel.slug, passports.bySlug[channel.slug], props.channelControlPlane?.view, props.acctId);
+    if (authority.scope === "roots") counts.roots += 1;
+    else counts.dark += 1;
+    return counts;
+  }, { roots: 0, dark: 0 }), [channels, passports, props.acctId, props.channelControlPlane?.view]);
   const visibleChannels = useMemo(() => channels.filter((channel) => {
-    const lifecycle = passports.bySlug[channel.slug]?.lifecycle;
-    if (scope === "roots") return lifecycle === "paper-root";
-    if (scope === "dark") return lifecycle === "dark-evidence";
+    const authority = resolveChannelRuntimeAuthority(channel.slug, passports.bySlug[channel.slug], props.channelControlPlane?.view, props.acctId);
+    if (scope === "roots") return authority.scope === "roots";
+    if (scope === "dark") return authority.scope === "dark";
     return true;
-  }), [channels, passports, scope]);
-  const selectedLifecycle = openSlug ? passports.bySlug[openSlug]?.lifecycle : undefined;
+  }), [channels, passports, props.acctId, props.channelControlPlane?.view, scope]);
+  const selectedScope = openSlug
+    ? resolveChannelRuntimeAuthority(openSlug, passports.bySlug[openSlug], props.channelControlPlane?.view, props.acctId).scope
+    : undefined;
 
   useEffect(() => {
     if (!openSlug) return;
-    setScope(selectedLifecycle === "paper-root" ? "roots" : selectedLifecycle === "dark-evidence" ? "dark" : "all");
+    setScope(selectedScope ?? "all");
     window.setTimeout(() => document.getElementById(`m2-channel-${openSlug}`)?.scrollIntoView({ block: "start" }), 0);
-  }, [openSlug, selectedLifecycle]);
+  }, [openSlug, selectedScope]);
 
   return (
     <>
@@ -60,11 +69,11 @@ export function MobileStudio({
         />
         <div className="m2-studio-tools"><span>RACK · {channels.length}</span><button type="button" disabled={canWrite && !canDirectConfigure} title={canDirectConfigure ? "Add a channel" : props.write.configurationWriteFact} onClick={canDirectConfigure ? onAddChannel : onOpenSettings}>{canWrite ? "+ ADD VIA PROPOSAL" : "SIGN IN TO REVIEW"}</button></div>
         <div className="m2-channel-scope" role="group" aria-label="Channel runtime scope">
-          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>TRADING <b>{passports.roots}</b></button>
-          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>OBSERVING <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => setScope("roots")}>TRADING <b>{runtimeCounts.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => setScope("dark")}>NOT TRADING <b>{runtimeCounts.dark}</b></button>
           <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>ALL <b>{channels.length}</b></button>
         </div>
-        {passports.release.state === "verified" && <p className="m2-roster-reconciliation" title={passports.release.receipt?.configHash ?? passports.release.expectedHash}>LIVE ROSTER {passports.releaseView.shortHash} · <b>{passports.release.rootSlugs.length} TRADING ROOTS</b></p>}
+        {(props.channelControlPlane?.view?.state === "receipt-bound" || passports.release.state === "verified") && <p className="m2-roster-reconciliation" title={props.channelControlPlane?.view?.manifestContentHash ?? passports.release.receipt?.configHash ?? passports.release.expectedHash}>DESK ROSTER {(props.channelControlPlane?.view?.manifestContentHash ?? passports.releaseView.shortHash)?.replace(/^sha256:/, "").slice(0, 8)} · <b>{props.channelControlPlane?.view?.state === "receipt-bound" ? props.channelControlPlane.view.specs.filter((spec) => spec.executionPosture === "paper").length : passports.release.rootSlugs.length} TRADING ROOTS</b></p>}
         <div className="m2-seam"><span className="m2-silk">TAP A CHANNEL FOR EVIDENCE</span><span className="ln" /></div>
         {visibleChannels.length === 0 ? (
           <div className="m2-ghost">no channels in this runtime scope</div>
@@ -76,6 +85,7 @@ export function MobileStudio({
             active={isActive(s.slug) && !(anySolo && !s.config.soloed && !s.config.muted)}
             write={props.write}
             passport={passports.bySlug[s.slug]}
+            accountId={props.acctId}
             dryPowder={props.shadowResearch.dryPowderBySlug[s.slug]}
             shadowSummary={props.shadowResearch.currentCumulative?.dark.find((item) => item.slug === s.slug)}
             managerEvidence={props.managerEvidence.book?.channels[s.slug]}

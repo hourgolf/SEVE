@@ -9,6 +9,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort } from "@/lib/studio/deriveStudioView";
 import type { StudioScope } from "@/components/studio/StudioFleet";
 import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { resolveChannelRuntimeAuthority } from "@/lib/studio/channelRuntimeAuthority";
 
 // =============================================================================
 // STUDIO surface (P5 slice 4) — exception-first fleet tuning. The primary pane
@@ -36,23 +37,44 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, 
     [channels, livePnl, feed.signals, feed.updatedAt],
   );
   const summary = useMemo(() => summarizeStudioFleet(rows), [rows]);
+  const runtimeCounts = useMemo(() => rows.reduce((counts, row) => {
+    const authority = resolveChannelRuntimeAuthority(
+      row.channel.slug,
+      channelWorkspace.bySlug[row.channel.slug],
+      channelControlPlane?.view,
+      acctId,
+    );
+    if (authority.scope === "roots") counts.roots += 1;
+    else counts.dark += 1;
+    return counts;
+  }, { roots: 0, dark: 0 }), [acctId, channelControlPlane?.view, channelWorkspace, rows]);
   const visibleRows = useMemo(() => sortStudioRows(rows.filter((row) => {
-    const lifecycle = channelWorkspace.bySlug[row.channel.slug]?.lifecycle;
+    const authority = resolveChannelRuntimeAuthority(
+      row.channel.slug,
+      channelWorkspace.bySlug[row.channel.slug],
+      channelControlPlane?.view,
+      acctId,
+    );
     if (scope === "attention") return row.attentionReasons.length > 0;
-    if (scope === "roots") return lifecycle === "paper-root";
-    if (scope === "dark") return lifecycle === "dark-evidence";
+    if (scope === "roots") return authority.scope === "roots";
+    if (scope === "dark") return authority.scope === "dark";
     return true;
-  }), sort), [rows, scope, sort, channelWorkspace]);
+  }), sort), [acctId, channelControlPlane?.view, rows, scope, sort, channelWorkspace]);
   const selectedRow = selSlug
     ? rows.find((row) => row.channel.slug === selSlug)
     : undefined;
   useEffect(() => {
     if (!destination?.channel || !rows.some((row) => row.channel.slug === destination.channel)) return;
     setSelSlug(destination.channel);
-    const lifecycle = channelWorkspace.bySlug[destination.channel]?.lifecycle;
-    setScope(lifecycle === "paper-root" ? "roots" : lifecycle === "dark-evidence" ? "dark" : "all");
+    const authority = resolveChannelRuntimeAuthority(
+      destination.channel,
+      channelWorkspace.bySlug[destination.channel],
+      channelControlPlane?.view,
+      acctId,
+    );
+    setScope(authority.scope);
     window.setTimeout(() => document.querySelector(`[data-channel-row="${CSS.escape(destination.channel!)}"]`)?.scrollIntoView({ block: "nearest" }), 0);
-  }, [channelWorkspace, destination?.channel, rows]);
+  }, [acctId, channelControlPlane?.view, channelWorkspace, destination?.channel, rows]);
   const evidenceAsOf = feed.updatedAt
     ? new Date(feed.updatedAt).toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " PT"
     : decisionAtlas.throughSession ?? "checking";
@@ -62,6 +84,8 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, 
       <StudioFleet
         rows={visibleRows}
         summary={summary}
+        runtimeCounts={runtimeCounts}
+        accountId={acctId}
         selectedSlug={selectedRow?.channel.slug}
         scope={scope}
         sort={sort}
@@ -77,7 +101,7 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, 
         onNextReview={(slug) => onNavigate?.({ section: "research", channel: slug, axis: axisForDisposition(decisionAtlas.bySlug[slug]?.recommendation.axis), researchMode: "decisions" })}
       />
 
-      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} controlPlane={channelControlPlane} dryPowder={selectedRow ? shadowResearch.dryPowderBySlug[selectedRow.channel.slug] : undefined} shadowSummary={selectedRow ? shadowResearch.currentCumulative?.dark.find((item) => item.slug === selectedRow.channel.slug) : undefined} managerEvidence={selectedRow ? managerEvidence.book?.channels[selectedRow.channel.slug] : undefined} decisionBrief={selectedRow ? decisionAtlas.bySlug[selectedRow.channel.slug] : undefined} researchEvidence={shadowResearch} decisionAxis={destination?.channel === selectedRow?.channel.slug ? destination?.axis : undefined} onClose={() => setSelSlug(null)} />
+      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} accountId={acctId} write={write} controlPlane={channelControlPlane} dryPowder={selectedRow ? shadowResearch.dryPowderBySlug[selectedRow.channel.slug] : undefined} shadowSummary={selectedRow ? shadowResearch.currentCumulative?.dark.find((item) => item.slug === selectedRow.channel.slug) : undefined} managerEvidence={selectedRow ? managerEvidence.book?.channels[selectedRow.channel.slug] : undefined} decisionBrief={selectedRow ? decisionAtlas.bySlug[selectedRow.channel.slug] : undefined} researchEvidence={shadowResearch} decisionAxis={destination?.channel === selectedRow?.channel.slug ? destination?.axis : undefined} onClose={() => setSelSlug(null)} />
 
       <StudioBand
         fund={desk.fund}

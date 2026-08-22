@@ -17,6 +17,7 @@ const studioCss = source("app/studio.css");
 const performCss = source("app/perform.css");
 const workstationCss = source("app/workstation.css");
 const evidenceCss = source("app/seve-909.css");
+const channelDecisionCss = source("app/channel-decision.css");
 const fixture = source("components/fixtures/MarketHoursFixtureLab.tsx");
 
 // These are the required manual/browser QA targets for every hierarchy change.
@@ -30,19 +31,23 @@ assert.match(studioCss, /\.inspector-scroll\s*\{[^}]*min-height:0;[^}]*overflow-
 assert.match(studioCss, /\.inspector-scroll \.mixer-deck\s*\{[^}]*overflow:visible;/s);
 assert.match(studioCss, /@media \(min-width: 951px\) and \(max-width: 1550px\)/);
 assert.match(studioCss, /\.studio-v4b\.inspector-open \.inspector\s*\{[^}]*position:absolute;[^}]*grid-column:1;/s);
+assert.match(channelDecisionCss, /data-skin="cream"\] \.channel-disclosure\s*\{[^}]*background:/s,
+  "cream mode disclosures must not inherit blackout panel fills");
 
 assert(mobileInspector.indexOf("<DecisionAtlasPreviewCard") < mobileInspector.indexOf("className=\"m2-fireslbl\""));
 assert.match(fleet, />TRADING IN VIEW </);
-assert.match(fleet, />OBSERVING IN VIEW </);
-assert.match(fleet, /ROSTER \{passports\.releaseView\.shortHash\}/);
-assert.match(source("components\/mobile2\/MobileStudio.tsx"), /LIVE ROSTER \{passports\.releaseView\.shortHash\}/);
+assert.match(fleet, />NOT TRADING IN VIEW </);
+assert.match(fleet, /CURRENT ENTRY AUTHORITY/);
+assert.match(source("components\/mobile2\/MobileStudio.tsx"), /DESK ROSTER/);
 assert.doesNotMatch(fleet, /<small>ARMED<\/small>|<small>MUTED<\/small>|runtime overlay differs/);
-assert.match(inspector, /passport\?\.lifecycle === "paper-root"[\s\S]*?\? "TRADING"/,
-  "desktop inspector must prefer receipt-bound runtime posture over legacy database mute state");
+assert.match(inspector, /resolveChannelRuntimeAuthority\(slug, passport, controlPlane\?\.view, accountId\)/,
+  "desktop inspector must derive posture from the shared receipt-bound authority resolver");
+assert.match(fleet, /resolveChannelRuntimeAuthority\(row\.channel\.slug, passport, controlPlane\?\.view, accountId\)/,
+  "desktop fleet and inspector must share one runtime authority source");
 assert.match(inspector, /SAVED DATABASE/,
   "desktop inspector must label divergent database posture as saved-only context");
-assert.match(mobileInspector, /passport\?\.lifecycle !== "paper-root" && config\.muted/,
-  "mobile active roots must not be visually muted by a legacy database flag");
+assert.match(mobileInspector, /resolveChannelRuntimeAuthority\(slug, passport, controlPlane\?\.view, accountId\)/,
+  "mobile inspector must use the same receipt-bound authority resolver");
 assert.match(mobileInspector, /SAVED DATABASE/,
   "mobile passport must label divergent database posture as saved-only context");
 

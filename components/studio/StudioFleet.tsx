@@ -11,6 +11,7 @@ import { useChannelRosterBundleControl } from "@/hooks/useChannelRosterBundleCon
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
+import { resolveChannelRuntimeAuthority } from "@/lib/studio/channelRuntimeAuthority";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -21,9 +22,11 @@ const SORTS: { value: StudioSort; label: string }[] = [
 
 export type StudioScope = "attention" | "roots" | "dark" | "all";
 
-export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect, onCurrentSession, onNextReview }: {
+export function StudioFleet({ rows, summary, runtimeCounts, accountId, selectedSlug, scope, sort, passports, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect, onCurrentSession, onNextReview }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
+  runtimeCounts: { roots: number; dark: number };
+  accountId: string | null;
   selectedSlug?: string;
   scope: StudioScope;
   sort: StudioSort;
@@ -39,11 +42,14 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
   onNextReview?: (slug: string) => void;
 }) {
   const roster = useChannelRosterBundleControl(controlPlane);
-  const authorityRootSlugs = passports.release.state === "verified"
-    ? passports.release.rootSlugs
-    : [];
+  const currentManifest = controlPlane?.view?.state === "receipt-bound"
+    ? controlPlane.view
+    : null;
+  const authorityRootSlugs = currentManifest
+    ? currentManifest.specs.filter((spec) => spec.executionPosture === "paper").map((spec) => spec.slug)
+    : passports.release.state === "verified" ? passports.release.rootSlugs : [];
   const deskPaperSlugs = Object.values(passports.bySlug)
-    .filter((passport) => passport.lifecycle === "paper-root")
+    .filter((passport) => resolveChannelRuntimeAuthority(passport.slug, passport, controlPlane?.view, accountId).scope === "roots")
     .map((passport) => passport.slug);
   const outsideDeskView = authorityRootSlugs.filter((slug) =>
     !deskPaperSlugs.includes(slug));
@@ -64,8 +70,8 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
       <div className="fleet-tools">
         <div className="fleet-scope" role="group" aria-label="Channel scope">
           <button type="button" className={scope === "attention" ? "on" : ""} onClick={() => onScope("attention")}>ATTENTION <b>{summary.attention}</b></button>
-          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>TRADING IN VIEW <b>{passports.roots}</b></button>
-          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>OBSERVING IN VIEW <b>{passports.dark}</b></button>
+          <button type="button" className={scope === "roots" ? "on" : ""} onClick={() => onScope("roots")}>TRADING IN VIEW <b>{runtimeCounts.roots}</b></button>
+          <button type="button" className={scope === "dark" ? "on" : ""} onClick={() => onScope("dark")}>NOT TRADING IN VIEW <b>{runtimeCounts.dark}</b></button>
           <button type="button" className={scope === "all" ? "on" : ""} onClick={() => onScope("all")}>ALL IN VIEW <b>{summary.total}</b></button>
         </div>
         <label className="fleet-sort">SORT
@@ -74,17 +80,17 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
           </select>
         </label>
       </div>
-      {passports.release.state === "verified" && <details className="runtime-roster-map">
+      {(currentManifest || passports.release.state === "verified") && <details className="runtime-roster-map">
         <summary>
-          <b>LIVE ENTRY AUTHORITY</b>
-          <small title={passports.release.receipt?.configHash ?? passports.release.expectedHash}>ROSTER {passports.releaseView.shortHash}</small>
+          <b>CURRENT ENTRY AUTHORITY</b>
+          <small title={currentManifest?.manifestContentHash ?? passports.release.receipt?.configHash ?? passports.release.expectedHash}>ROSTER {(currentManifest?.manifestContentHash ?? passports.releaseView.shortHash)?.replace(/^sha256:/, "").slice(0, 8)}</small>
           <em>{authorityRootSlugs.length} TRADING ROOTS</em>
           <i aria-hidden="true">▾</i>
         </summary>
         <div>
           <span><small>CHANNELS ALLOWED TO OPEN PAPER TRADES</small><b>{authorityRootSlugs.join(" · ")}</b></span>
           <span><small>TRADING ROOTS OUTSIDE THIS {summary.total}-ROW VIEW</small><b>{outsideDeskView.length ? outsideDeskView.join(" · ") : "NONE"}</b></span>
-          <p>This receipt-bound roster is the live authority. Trading channels may open paper positions; observing channels collect research only. Saved database labels are supporting context.</p>
+          <p>This receipt-bound roster is the current authority. Trading channels may open paper positions. Observing channels collect research only; channels absent from the roster do neither. Saved labels are supporting context.</p>
         </div>
       </details>}
       <ChannelCollectionCullPanel />
@@ -100,27 +106,26 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
         <div className="fleet-rows" role="rowgroup">
           {rows.map((row) => {
             const passport = passports.bySlug[row.channel.slug];
+            const authority = resolveChannelRuntimeAuthority(row.channel.slug, passport, controlPlane?.view, accountId);
             const pnlClass = row.pnl.dayPnl < 0 ? "neg" : row.pnl.dayPnl > 0 ? "pos" : "";
             const decision = channelDecisionState(row.lastSignal);
             const brief = decisions[row.channel.slug];
-            const liveMode = passport?.lifecycle === "paper-root"
-              ? "TRADING"
-              : passport?.lifecycle === "dark-evidence"
-                ? "OBSERVING"
-                : "UNVERIFIED";
-            const liveModeDetail = passport?.lifecycle === "paper-root"
-                ? passport.rootPolicy ? `${passport.rootPolicy.quantity} CT` : null
-                : passport?.lifecycle === "dark-evidence"
-                  ? "NO ENTRY"
-                  : null;
-            const receiptSettingsActive = passport?.lifecycle === "paper-root"
-              && passport.database.differsFromRuntime;
+            const liveMode = authority.label;
+            const liveModeDetail = authority.spec?.executionPosture === "paper"
+              ? `${authority.spec.quantity} CT`
+              : authority.posture === "observing" ? "RESEARCH ONLY" : authority.posture === "trading-elsewhere" ? authority.spec?.accountLabel : authority.posture === "not-trading" ? "NO AUTHORITY" : null;
+            const receiptSettingsActive = authority.posture === "trading"
+              && Boolean(passport?.database.differsFromRuntime);
             const reasonLabel = row.attentionReasons[0]
-              ?? (receiptSettingsActive ? "Live settings active" : passport?.database.differsFromRuntime ? "Saved settings differ" : decision.label === "IDLE" ? "Ready" : decision.label);
+              ?? (authority.posture === "trading-elsewhere" ? `Trades in ${authority.spec?.accountLabel}` : authority.posture === "not-trading" ? "Not in current live roster" : receiptSettingsActive ? "Live settings active" : passport?.database.differsFromRuntime ? "Saved settings differ" : decision.label === "IDLE" ? "Ready" : decision.label);
             const reasonDetail = receiptSettingsActive
               ? "Collecting clean evidence"
-              : liveMode === "OBSERVING"
+              : authority.posture === "observing"
               ? "Collecting only"
+              : authority.posture === "not-trading"
+                ? "Saved channel context only"
+              : authority.posture === "trading-elsewhere"
+                ? "No entry authority in this account"
               : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? null;
             return (
               <div
@@ -132,7 +137,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
               >
                 <button type="button" className="fleet-channel fleet-cell-link" role="cell" onClick={() => onSelect(row.channel.slug)} aria-expanded={selectedSlug === row.channel.slug}><i /><b>{row.channel.slug}</b><small>{row.channel.underlying}</small></button>
                 <span className="fleet-runtime" role="cell">
-                  <em className={`fleet-state ${passport?.effective.execution.posture ?? row.stateLabel.toLowerCase()}`}>{liveMode}</em>
+                  <em className={`fleet-state ${authority.posture}`}>{liveMode}</em>
                   {liveModeDetail && <small>{liveModeDetail}</small>}
                 </span>
                 <span className="fleet-reason" role="cell">

@@ -26,6 +26,7 @@ import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEviden
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
+import { resolveChannelRuntimeAuthority } from "@/lib/studio/channelRuntimeAuthority";
 
 // =============================================================================
 // MOBILE · STUDIO RACK ROW (S5) — the accordion channel row + its INLINE
@@ -45,7 +46,7 @@ const etTime = (iso: string) => new Intl.DateTimeFormat("en-US", {
 }).format(new Date(iso));
 
 export function MobileRackRow({
-  strategist, pnl, active, open, onToggle, write, passport, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, controlPlane, focusAxis, onCurrentSession, onNextReview,
+  strategist, pnl, active, open, onToggle, write, passport, accountId, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, controlPlane, focusAxis, onCurrentSession, onNextReview,
 }: {
   strategist: StrategistState;
   pnl: ChannelPnl | undefined;
@@ -54,6 +55,7 @@ export function MobileRackRow({
   onToggle: () => void;
   write: SurfaceProps["write"];
   passport?: ChannelPassport;
+  accountId: string | null;
   dryPowder?: DryPowderCurve;
   shadowSummary?: ShadowChannelSummary;
   managerEvidence?: ChannelManagerEvidence;
@@ -83,9 +85,10 @@ export function MobileRackRow({
     onSealed: draft.discard,
   });
   const { id, slug, color, status, config: databaseConfig } = strategist;
+  const authority = resolveChannelRuntimeAuthority(slug, passport, controlPlane?.view, accountId);
   const sealed = passport?.release.state === "verified";
   const rootPolicy = passport?.rootPolicy;
-  const receiptSettingsActive = passport?.lifecycle === "paper-root" && activeSpec != null;
+  const receiptSettingsActive = authority.posture === "trading" && activeSpec != null;
   const managerLabel = activeSpec?.managerLabel ?? rootPolicy?.managerLabel;
   const config = draft.active
     ? draft.proposed ?? draft.baseConfig ?? databaseConfig
@@ -161,25 +164,26 @@ export function MobileRackRow({
     if (v !== tp) setCfg({ take_profit_pct: v });
   };
 
-  const dot = passport?.lifecycle === "paper-root"
-    ? true
-    : passport?.lifecycle === "dark-evidence"
-      ? false
-      : active && status === "armed" && !config.muted;
-  const runtimeTag = passport?.lifecycle === "paper-root" ? { txt: "TRADING", cls: "root" }
-    : passport?.lifecycle === "dark-evidence" ? { txt: "OBSERVING", cls: "dark" }
+  const dot = authority.posture === "trading";
+  const runtimeTag = authority.posture === "trading" ? { txt: "TRADING", cls: "root" }
+    : authority.posture === "observing" ? { txt: "OBSERVING", cls: "dark" }
+    : authority.posture === "not-trading" ? { txt: "NOT TRADING", cls: "dark" }
     : { txt: "UNVERIFIED", cls: "unverified" };
-  const runtimeMuted = passport?.lifecycle !== "paper-root" && config.muted;
+  const runtimeMuted = authority.posture !== "trading" && config.muted;
   const databaseStateLabel = passport
     ? `${passport.database.state} · ${passport.database.differsFromRuntime ? "SAVED ONLY" : passport.database.executor}`
     : status.toUpperCase();
-  const plainReason = receiptSettingsActive && passport?.database.differsFromRuntime
+  const plainReason = authority.posture === "trading-elsewhere"
+    ? `TRADES IN ${authority.spec?.accountLabel}`
+    : authority.posture === "not-trading"
+      ? "NOT IN CURRENT LIVE ROSTER"
+    : receiptSettingsActive && passport?.database.differsFromRuntime
     ? "LIVE SETTINGS ACTIVE · COLLECTING"
     : passport?.database.differsFromRuntime
       ? "SAVED SETTINGS DIFFER"
     : status === "draft" ? "On the bench"
       : status === "disabled" ? "Entries are disabled"
-        : passport?.lifecycle === "dark-evidence" ? "COLLECTING EVIDENCE"
+        : authority.posture === "observing" ? "COLLECTING EVIDENCE"
           : decisionBrief?.recommendation.label ?? "READY";
 
   return (
@@ -203,12 +207,12 @@ export function MobileRackRow({
         <div className="m2-insp">
           <nav className="m2-channel-links" aria-label={`${slug} related workspaces`}><button type="button" onClick={onCurrentSession}>CURRENT SESSION →</button><button type="button" onClick={onNextReview}>NEXT REVIEW →</button></nav>
           <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
-          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={focusAxis} posture={passport?.lifecycle === "paper-root" ? "trading" : passport?.lifecycle === "dark-evidence" ? "observing" : "retired"} compact />
+          <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={focusAxis} posture={authority.posture === "trading" ? "trading" : authority.posture === "observing" ? "observing" : "retired"} compact />
           {passport?.effective && <details className="channel-disclosure operating-context">
             <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS MODE</em><i>▾</i></summary>
             <div><ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} decisionBrief={decisionBrief} compact /></div>
           </details>}
-          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : receiptSettingsActive ? "ACTIVE RUNTIME · EXIT SHAPE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : passport?.release.state === "verified" ? "OBSERVE-ONLY EXIT REFERENCE" : "FIRES — BINDING EXITS · USE TIGHTEN / WIDEN OR TAP VALUE"}</span><span className="ln" /></div>
+          <div className="m2-fireslbl"><span className="fl">{draft.active ? "LOCAL DRAFT · EXIT SHAPE" : receiptSettingsActive ? "ACTIVE RUNTIME · EXIT SHAPE" : authority.posture === "observing" ? "OBSERVE-ONLY EXIT REFERENCE" : authority.posture === "not-trading" || authority.posture === "trading-elsewhere" ? "SAVED EXIT REFERENCE · NOT LIVE HERE" : rootPolicy ? "SEALED RUNTIME · EXIT SHAPE" : "FIRES — BINDING EXITS · USE TIGHTEN / WIDEN OR TAP VALUE"}</span><span className="ln" /></div>
           <div className="m2-fpills">
             <div className="m2-fp stop">
               <div className="m2-exit-stepper">
@@ -314,12 +318,12 @@ export function MobileRackRow({
             </button>
           </div>
           {writeError && <div className="m2-write-error" role="alert" title={writeError}>WRITE FAILED · CHANGE NOT CONFIRMED</div>}
-          <div className={`m2-passport lane-${passport?.lifecycle ?? "unverified"}${passportOpen ? " open" : " collapsed"}`}>
+          <div className={`m2-passport lane-${authority.posture}${passportOpen ? " open" : " collapsed"}`}>
             <button type="button" className="m2-passport-toggle" onClick={() => setPassportOpen((value) => !value)} aria-expanded={passportOpen}>
-              <span>RUNTIME PASSPORT</span><b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b><i>{passportOpen ? "▾" : "▸"}</i>
+              <span>AUTHORITY + SAVED CONTEXT</span><b>{authority.label}</b><i>{passportOpen ? "▾" : "▸"}</i>
             </button>
             {passportOpen && <>
-              <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
+              <p>{authority.fact}</p>
               <div>
                 <span><small>{passport?.database.differsFromRuntime ? "SAVED DATABASE" : "DATABASE"}</small><b>{databaseStateLabel}</b></span>
                 <span><small>FAMILY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>

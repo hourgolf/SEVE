@@ -27,13 +27,15 @@ import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEviden
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
+import { resolveChannelRuntimeAuthority } from "@/lib/studio/channelRuntimeAuthority";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, decisionAxis, onClose }: {
+export function ChannelInspector({ strategist, summary, passport, accountId, write, controlPlane, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, decisionAxis, onClose }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
+  accountId: string | null;
   write: SurfaceProps["write"];
   controlPlane?: ChannelControlPlaneViewRead;
   dryPowder?: DryPowderCurve;
@@ -71,6 +73,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   </aside>;
 
   const { id, slug, underlying, color, status, config: databaseConfig } = strategist;
+  const authority = resolveChannelRuntimeAuthority(slug, passport, controlPlane?.view, accountId);
   const sealed = passport?.release.state === "verified";
   const rootPolicy = passport?.rootPolicy;
   const config = draft.active
@@ -85,21 +88,20 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const ustopOff = ustop > 0 && ustop * 180 >= premStop;
   const pyr = config.pyramid_adds ?? 0;
   const pyrEligible = PYRAMID_ELIGIBLE.has(slug);
-  const receiptSettingsActive = passport?.lifecycle === "paper-root" && activeSpec != null;
+  const receiptSettingsActive = authority.posture === "trading" && activeSpec != null;
   const managerLabel = activeSpec?.managerLabel ?? rootPolicy?.managerLabel;
-  const a13 = rootPolicy?.runner === "a13";
-  const liveModeLabel = passport?.lifecycle === "paper-root"
-    ? "TRADING"
-    : passport?.lifecycle === "dark-evidence"
-      ? "OBSERVING"
-      : "UNVERIFIED";
+  const a13 = authority.posture === "trading" && (activeSpec?.managerLabel.toLowerCase().includes("a13") || rootPolicy?.runner === "a13");
+  const liveModeLabel = authority.label;
   const effectiveStateLabel = (summary?.pnl.openCount ?? 0) > 0
     ? "OPEN"
-    : passport?.lifecycle === "paper-root"
-      ? "TRADING"
-      : passport?.lifecycle === "dark-evidence"
-        ? "OBSERVING"
-        : summary?.stateLabel ?? status.toUpperCase();
+    : authority.label;
+  const atlasPosture = authority.posture === "trading" ? "trading" : authority.posture === "observing" ? "observing" : "retired";
+  const setupLabel = draft.active
+    ? "PROPOSED TRADING SETUP"
+    : authority.posture === "trading" ? "CURRENT TRADING SETUP" : "SAVED CHANNEL SETUP";
+  const setupDetail = authority.posture === "trading"
+    ? `${authority.spec?.quantity ?? rootPolicy?.quantity ?? config.max_contracts} CT · ${managerLabel ?? "NATIVE"}${rootPolicy ? ` · ${activeRootExitLabel(rootPolicy)}` : ""}`
+    : authority.posture === "trading-elsewhere" ? `${authority.spec?.accountLabel} ONLY · NO AUTHORITY HERE` : authority.posture === "observing" ? "RESEARCH ONLY · NO ORDER AUTHORITY" : authority.posture === "not-trading" ? "NOT IN LIVE ROSTER · SAVED SETTINGS ONLY" : "CURRENT AUTHORITY UNAVAILABLE";
   const databaseStateLabel = passport
     ? `${passport.database.state} · ${passport.database.differsFromRuntime ? "SAVED ONLY" : passport.database.executor}`
     : status.toUpperCase();
@@ -142,12 +144,12 @@ export function ChannelInspector({ strategist, summary, passport, write, control
       <div className="inspector-scroll" tabIndex={0} aria-label={`${slug} channel details`}>
         <div className="insp-hero">
           <span className="ih-slug">{slug}</span><span className="ih-tk">{underlying}</span>
-          {passport && <span className={`ih-tag lane-${passport.lifecycle}`}>{liveModeLabel}</span>}
+          <span className={`ih-tag lane-${authority.posture}`}>{liveModeLabel}</span>
           {a13 && <span className="ih-tag amber">⚡ A13</span>}
-          <span className="ih-stats">state <b>{effectiveStateLabel}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
+          <span className="ih-stats">state <b>{effectiveStateLabel}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session result <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
         </div>
         <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
-        <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} posture={passport?.lifecycle === "paper-root" ? "trading" : passport?.lifecycle === "dark-evidence" ? "observing" : "retired"} compact />
+        <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} posture={atlasPosture} compact />
         <div className="mixer-deck">
         {passport?.effective && <details className="channel-disclosure operating-context">
           <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS CHANNEL IS IN ITS CURRENT MODE</em><i>▾</i></summary>
@@ -161,6 +163,9 @@ export function ChannelInspector({ strategist, summary, passport, write, control
             <ChannelDryPowderCurve curve={dryPowder} defaultContracts={rootPolicy?.quantity ?? 2} compact />
             <ChannelManagerEvidencePanel evidence={managerEvidence} currentManagerLabel={managerLabel} currentConfigurationEpochId={controlPlane?.view?.configurationEpochId} compact /></div>
         </details>
+        <details className="channel-disclosure settings-context" open={draft.active || undefined}>
+          <summary><span><small>{draft.active ? "EDITING" : "SETTINGS"}</small><b>{setupLabel}</b></span><em>{setupDetail}</em><i>▾</i></summary>
+          <div className="channel-settings-body">
         <section className="mix-bank mix-bank--entry"><header>{draft.active ? "LOCAL DRAFT · ENTRY CONFIG" : receiptSettingsActive ? "ACTIVE RUNTIME · ENTRY CONFIG" : rootPolicy ? "SEALED RUNTIME · ENTRY CONFIG" : "DATABASE ENTRY CONFIG · FUTURE EPOCH"}</header><div className="mix-bank-body">
           <div className="ctl"><span className="cl">entry dte</span>{seg(dte, [{ v: 0, label: "0DTE" }, { v: 1, label: "1DTE" }], (v) => setCfg({ entry_dte: v }))}</div>
           <div className="ctl"><span className="cl">strike offset</span><span className="ival" title="effective configured strike offset">{strikeLabel(config.strike_offset ?? 0)}</span></div>
@@ -190,19 +195,19 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           <span><small>{passport?.database.differsFromRuntime ? "SAVED DATABASE" : "DATABASE"}</small><b>{databaseStateLabel}</b></span>
           <span><small>POLICY</small><b>{passport?.rootPolicy?.familyId ?? "NO-FILL EVIDENCE"}</b></span>
         </div>
-        <section className={`mix-bank mix-bank--runtime lane-${passport?.lifecycle ?? "unverified"}${passportOpen ? " open" : " collapsed"}`}>
+        <section className={`mix-bank mix-bank--runtime lane-${authority.posture}${passportOpen ? " open" : " collapsed"}`}>
           <button
             type="button"
             className="desktop-passport-toggle"
             aria-expanded={passportOpen}
             onClick={() => setPassportOpen((open) => !open)}
           >
-            <span>RUNTIME PASSPORT · BASELINE, NOT LEARNED</span>
-            <b>{passport?.lifecycleLabel ?? "UNVERIFIED"}</b>
+            <span>AUTHORITY + SAVED CONTEXT</span>
+            <b>{liveModeLabel}</b>
             <i aria-hidden="true">{passportOpen ? "▾" : "▸"}</i>
           </button>
           {passportOpen && <div className="runtime-bank">
-            <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
+            <p>{authority.fact}</p>
             {passport?.rootPolicy ? <>
               <span><small>FAMILY</small><b>{passport.rootPolicy.familyId}</b></span>
               <span><small>SIZE</small><b>{passport.rootPolicy.quantity} contracts</b></span>
@@ -216,6 +221,8 @@ export function ChannelInspector({ strategist, summary, passport, write, control
               : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}
           </div>}
         </section>
+          </div>
+        </details>
         <details className="channel-disclosure change-control">
           <summary><span><small>CHANGE</small><b>GOVERNED DRAFT</b></span><em>REVIEW BEFORE APPLY</em><i>▾</i></summary><div>
           <ChannelRosterActivationConsole selectedSlug={slug} controlPlane={controlPlane} />
@@ -241,7 +248,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         <button type="button" className="life" disabled={!canPersist || busy} onClick={doDuplicate}>{busy ? "…" : "DUPLICATE"}</button>
         {!confirmDel ? <button type="button" className="life del" disabled={!canPersist} onClick={() => setConfirmDel(true)}>DELETE</button> : <><button type="button" className="life del" onClick={doDelete}>CONFIRM</button><button type="button" className="life" onClick={() => setConfirmDel(false)}>CANCEL</button></>}
       </div>
-      {sealed && <div className="insp-note sealed">RECEIPT-BOUND RUNTIME · DIRECT WRITES FENCED · FORK A GOVERNED DRAFT FOR REVIEW</div>}
+      {sealed && <div className="insp-note sealed">LIVE SETTINGS PROTECTED · OPEN GOVERNED DRAFT TO PROPOSE A CHANGE</div>}
       {(msg || err) && <div className={`insp-note${err ? " err" : ""}`}>{err ?? msg}</div>}
     </aside>
   );
