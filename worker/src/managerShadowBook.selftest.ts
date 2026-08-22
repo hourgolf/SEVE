@@ -85,6 +85,7 @@ check("one-lot bank is explicitly fractional", managerEconomicMode(managerAlloca
 check("pb2 five-contract split is quantity-aware", managerAllocation(5, "PB2-BANK15/HALF-GIVEBACK"), { kind: "bank_runner", totalQty: 5, exitQty: 0, bankQty: 2, runnerQty: 3 });
 check("grind current shadow keeps exact two-lot economics", managerAllocation(4, "GRIND-B25/CURRENT-A13"), { kind: "bank_runner", totalQty: 4, exitQty: 0, bankQty: 2, runnerQty: 2 });
 check("VB MACD displaced manager remains all-out", managerAllocation(4, "VB-MACD-CURRENT-LOCK18"), { kind: "all_out", totalQty: 4, exitQty: 4, bankQty: 0, runnerQty: 0 });
+check("VB level displaced manager remains all-out", managerAllocation(2, "VB-LEVEL-CURRENT-LOCK25"), { kind: "all_out", totalQty: 2, exitQty: 2, bankQty: 0, runnerQty: 0 });
 check("momo-shape-2 displaced manager remains all-out", managerAllocation(6, "MOMO2-CURRENT-LOCK27"), { kind: "all_out", totalQty: 6, exitQty: 6, bankQty: 0, runnerQty: 0 });
 check("manager-specific minimums accept whole-lot two-contract economics", [minimumModeledQty("LOCK20/30"), minimumModeledQty("PB2-BANK15/HALF-GIVEBACK"), MIN_MODELED_SOURCE_QTY, MIN_STAGED_SOURCE_QTY], [2, 2, 2, 2]);
 check("bad quantity has no allocation", managerAllocation(0, "BANK20/RUN50"), null);

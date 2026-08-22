@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+const source = readFileSync(resolve("scripts/activate-next-week-roster-2026-08-24.ts"), "utf8");
+assert.match(source, /create_research_channel_registration|prepareResearchChannelRegistrationWrite/);
+assert.match(source, /activate_channel_roster_bundle/);
+assert.match(source, /safeBoundaryProof\.globalFlat/);
+assert.match(source, /expected-worker-commit/);
+assert.match(source, /brokerWrites: 0/);
+assert.doesNotMatch(source, /placeOrder|closePosition|cancelOrder/);
+console.log("activate-next-week-roster-2026-08-24-selftest: 6/6 PASS");

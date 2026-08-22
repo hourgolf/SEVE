@@ -21,6 +21,10 @@ check("VB MACD displaced manager preserves the current +18 target",
   advanceManager("VB-MACD-CURRENT-LOCK18", {}, 18, false).exit?.reason, "target");
 check("VB MACD displaced manager preserves the current -30 stop",
   advanceManager("VB-MACD-CURRENT-LOCK18", {}, -30, false).exit?.reason, "stop");
+check("VB level displaced manager preserves the current +25 target",
+  advanceManager("VB-LEVEL-CURRENT-LOCK25", {}, 25, false).exit?.reason, "target");
+check("VB level displaced manager preserves the current -30 stop",
+  advanceManager("VB-LEVEL-CURRENT-LOCK25", {}, -30, false).exit?.reason, "stop");
 check("momo-shape-2 displaced manager preserves the current +27 target",
   advanceManager("MOMO2-CURRENT-LOCK27", {}, 27, false).exit?.reason, "target");
 check("momo-shape-2 displaced manager preserves the current -40 stop",
@@ -47,13 +51,22 @@ check("grind current manager is channel scoped",
 check("grind current restart recovers bank and peak",
   recoverManagerState("GRIND-B25/CURRENT-A13", 60),
   { bankReturnPct: 25, armedPeakPct: 60, recovered: true });
-check("VB MACD native +18 is not duplicated in its shadow book",
-  [managerIdsForChannel("vb-macd-state").at(-1), managerIdsForChannel("vb-squeeze-break").length],
-  ["BELL/no-stop", 8]);
+check("VB MACD next-week default swaps native WIDE for displaced +18",
+  [managerIdsForChannel("vb-macd-state").at(-1),
+    managerIdsForChannel("vb-macd-state").includes("WIDE20/50"),
+    managerIdsForChannel("vb-squeeze-break").length],
+  ["VB-MACD-CURRENT-LOCK18", false, 8]);
 check("VB MACD pre-change exact sessions retain the historical +18 shadow arm",
   [managerIdsForChannel("vb-macd-state", "2026-08-19").at(-1),
-    managerIdsForChannel("vb-macd-state", "2026-08-20").length],
-  ["VB-MACD-CURRENT-LOCK18", 8]);
+    managerIdsForChannel("vb-macd-state", "2026-08-20").length,
+    managerIdsForChannel("vb-macd-state", "2026-08-24").at(-1),
+    managerIdsForChannel("vb-macd-state", "2026-08-24").includes("WIDE20/50")],
+  ["VB-MACD-CURRENT-LOCK18", 8, "VB-MACD-CURRENT-LOCK18", false]);
+check("VB level next-week native lock50 keeps +25 as its displaced control",
+  [managerIdsForChannel("vb-level-break", "2026-08-23").includes("LOCK50/30"),
+    managerIdsForChannel("vb-level-break", "2026-08-24").includes("LOCK50/30"),
+    managerIdsForChannel("vb-level-break", "2026-08-24").at(-1)],
+  [true, false, "VB-LEVEL-CURRENT-LOCK25"]);
 check("momo-shape-2 swaps the native bank/runner arm for its displaced +27 control",
   [managerIdsForChannel("momo-shape-2", "2026-08-20").includes("BANK20/RUN50"),
     managerIdsForChannel("momo-shape-2", "2026-08-21").includes("BANK20/RUN50"),
