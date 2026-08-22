@@ -37,6 +37,10 @@ const scenario = arg("scenario", "current-candidate");
 const momoExitCandidate = arg("momo-exit", "TP-50");
 const includeQqqTrial = arg("include-qqq", "true") !== "false";
 const qqqExitCandidate = arg("qqq-exit", "BANK20-BE-R50-K67");
+const exactChannel = arg("exact-channel", "");
+const exactExitCandidate = arg("exact-exit", "");
+const exactOverrides = arg("exact-overrides", "");
+const exactEraMode = arg("exact-era-mode", "selected");
 const startSession = arg("start", "2026-08-17");
 const endExclusive = arg("end-exclusive", "2026-08-22");
 const pathResultsFile = resolve(arg(
@@ -50,7 +54,7 @@ const trailFrontierFile = resolve(arg(
 for (const file of [snapshotFile, packetFile, weekReviewFile]) {
   if (!existsSync(file)) throw new Error(`required replay input missing: ${file}`);
 }
-if (scenario === "profit-conversion") {
+if (scenario !== "current-candidate") {
   for (const file of [pathResultsFile, trailFrontierFile]) {
     if (!existsSync(file)) throw new Error(`required exact-exit replay input missing: ${file}`);
   }
@@ -204,14 +208,14 @@ function policiesWithPriorityFirst(
 }
 
 function markdown(report: any): string {
-  const sameFillLines = report.scenario === "profit-conversion" ? [
+  const sameFillLines = report.scenario !== "current-candidate" ? [
     "The same-fill subtotal contains unchanged roots only. Proposed channels are evaluated with exact quote-replayed exits in the chronological scenario below.",
   ] : [
     `The exact same fills, resized and re-exited where a paired manager path exists, would have produced **${money(report.sameFill.resultUsd)}** instead of **${money(report.actualDeskPnlUsd)}**.`,
     `That is a **${money(report.sameFill.differenceUsd)}** improvement. It uses ${report.sameFill.retainedTrades} retained actual trades and ${report.sameFill.managerMatchedTrades} paired manager outcomes.`,
   ];
   return [
-    `# ${report.scenario === "profit-conversion" ? "Profit-conversion proposal" : "Current Monday roster"} · replay of ${report.window.start} through ${report.window.endExclusive}`,
+    `# ${report.scenario === "profit-conversion" ? "Profit-conversion proposal" : report.scenario === "exit-override" ? "Entry/exit hybrid" : "Current Monday roster"} · replay of ${report.window.start} through ${report.window.endExclusive}`,
     "",
     "**READ-ONLY COUNTERFACTUAL · PAPER RESEARCH · NOT A FORECAST**",
     "",
@@ -272,9 +276,9 @@ function main(): void {
   const snapshotText = readFileSync(snapshotFile, "utf8");
   const packetText = readFileSync(packetFile, "utf8");
   const weekReviewText = readFileSync(weekReviewFile, "utf8");
-  const pathResultsText = scenario === "profit-conversion" && existsSync(pathResultsFile)
+  const pathResultsText = scenario !== "current-candidate" && existsSync(pathResultsFile)
     ? readFileSync(pathResultsFile, "utf8") : null;
-  const trailFrontierText = scenario === "profit-conversion" && existsSync(trailFrontierFile)
+  const trailFrontierText = scenario !== "current-candidate" && existsSync(trailFrontierFile)
     ? readFileSync(trailFrontierFile, "utf8") : null;
   const snapshot = JSON.parse(snapshotText) as Snapshot;
   const packetBase = JSON.parse(packetText) as Packet;
@@ -295,10 +299,34 @@ function main(): void {
   const managerByPositionAndId = new Map(snapshot.managerRuns
     .filter((row) => row.status === "terminal" && row.terminal_at && row.terminal_pnl != null)
     .map((row) => [`${row.position_id}|${row.manager_id}`, row]));
+  const parsedExactOverrides = Object.fromEntries(exactOverrides.split(",")
+    .map((item) => item.trim()).filter(Boolean).map((item) => {
+      const separator = item.indexOf("=");
+      if (separator <= 0 || separator === item.length - 1) throw new Error(`invalid exact override: ${item}`);
+      return [item.slice(0, separator), item.slice(separator + 1)];
+    }));
   const exactCandidateBySlug: Record<string, string> = scenario === "profit-conversion" ? {
     "momo-shape": momoExitCandidate,
     ...(includeQqqTrial ? { "qqq-thrust-trail": qqqExitCandidate } : {}),
+  } : scenario === "exit-override" ? {
+    ...parsedExactOverrides,
+    ...(exactChannel && exactExitCandidate ? { [exactChannel]: exactExitCandidate } : {}),
   } : {};
+  if (scenario === "exit-override" && !Object.keys(exactCandidateBySlug).length) {
+    throw new Error("exit-override requires --exact-overrides or --exact-channel with --exact-exit");
+  }
+  if (exactEraMode === "all") {
+    for (const slug of Object.keys(exactCandidateBySlug)) {
+      const versions = new Set(snapshot.signals.filter((signal) => {
+        const session = signal.created_at.slice(0, 10);
+        return slugByStrategist.get(signal.strategist_id) === slug
+          && session >= startSession && session < endExclusive;
+      }).map((signal) => String(signal.rationale?.channel_version ?? "unstamped")));
+      if (versions.size !== 1 || versions.has("unstamped")) {
+        throw new Error(`cannot pool ${slug} across eras: expected one stamped entry version, found ${[...versions].join(", ") || "none"}`);
+      }
+    }
+  }
   const exactPathByOpportunityAndCandidate = new Map<string, ExactTrailPath>();
   const selectedEraBySlug = new Map<string, string>();
   if (trailFrontierText) {
@@ -313,7 +341,7 @@ function main(): void {
   if (pathResultsText) {
     const artifact = JSON.parse(pathResultsText) as { paths: ExactTrailPath[] };
     for (const row of artifact.paths) {
-      const selectedEra = selectedEraBySlug.get(row.channel);
+      const selectedEra = exactEraMode === "selected" ? selectedEraBySlug.get(row.channel) : null;
       if (selectedEra && row.configurationEra !== selectedEra) continue;
       exactPathByOpportunityAndCandidate.set(`${row.logicalOpportunityId}|${row.candidateId}`, row);
     }
@@ -478,12 +506,17 @@ function main(): void {
       momoExitCandidate,
       includeQqqTrial,
       qqqExitCandidate: includeQqqTrial ? qqqExitCandidate : null,
+    } : scenario === "exit-override" ? {
+      exactChannel,
+      exactExitCandidate,
+      exactOverrides: exactCandidateBySlug,
+      exactEraMode,
     } : null,
     generatedAt: new Date().toISOString(),
     window: { start: startSession, endExclusive },
     actualDeskPnlUsd,
     sameFill: {
-      scope: scenario === "profit-conversion" ? "unchanged_roots_only" : "retained_current_roster_fills",
+      scope: scenario === "current-candidate" ? "retained_current_roster_fills" : "unchanged_roots_only",
       resultUsd: sameFillResult,
       differenceUsd: round(sameFillResult - actualDeskPnlUsd),
       retainedTrades: sameFillRows.length,
@@ -522,9 +555,13 @@ function main(): void {
       "chronological scenario mixes actual execution and virtual mid-basis evidence",
       "unexecuted paths for changed managers are excluded without an exact paired outcome",
       "no slippage or fill is invented",
-      ...(scenario === "profit-conversion" ? [
-        "proposed channels use exact quote-replayed exits only within the selected compatible configuration era",
-        "signals outside the selected era or without a complete exact quote path are excluded rather than silently substituted",
+      ...(scenario !== "current-candidate" ? [
+        exactEraMode === "selected"
+          ? "proposed channels use exact quote-replayed exits only within the selected compatible configuration era"
+          : "the exact exit is pooled across configuration eras only after entry-version compatibility is independently established",
+        exactEraMode === "selected"
+          ? "signals outside the selected era or without a complete exact quote path are excluded rather than silently substituted"
+          : "signals without a complete exact quote path are excluded rather than silently substituted",
       ] : []),
     ],
     authority: { productionWrites: 0, brokerWrites: 0, orderAuthority: false },

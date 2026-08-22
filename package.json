@@ -334,6 +334,7 @@
     "prepare-next-week-roster-2026-08-24": "tsx scripts/prepare-next-week-roster-2026-08-24.ts",
     "prepare-next-week-roster-2026-08-24-selftest": "tsx lib/channels/nextWeekRoster20260824.selftest.ts",
     "replay-next-week-roster-2026-08-24": "tsx scripts/replay-next-week-roster-2026-08-24.ts",
+    "entry-exit-recombination-scan": "tsx scripts/entry-exit-recombination-scan-2026-08-22.ts",
     "weekend-optimization-packet": "tsx scripts/weekend-optimization-packet.ts",
     "weekend-optimization-packet-selftest": "tsx scripts/weekend-optimization-packet.ts --selftest",
     "activate-next-week-manager-swaps-2026-08-24": "tsx scripts/activate-next-week-manager-swaps-2026-08-24.ts",
