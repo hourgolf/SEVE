@@ -41,6 +41,10 @@ const exactChannel = arg("exact-channel", "");
 const exactExitCandidate = arg("exact-exit", "");
 const exactOverrides = arg("exact-overrides", "");
 const exactEraMode = arg("exact-era-mode", "selected");
+const rosterOverride = arg("roster", "");
+const specClonesOverride = arg("spec-clones", "");
+const priorityOrderOverride = arg("priority-order", "");
+const entryCapsOverride = arg("entry-caps", "");
 const startSession = arg("start", "2026-08-17");
 const endExclusive = arg("end-exclusive", "2026-08-22");
 const pathResultsFile = resolve(arg(
@@ -207,6 +211,68 @@ function policiesWithPriorityFirst(
   });
 }
 
+function packetWithSpecClones(packet: Packet, encoded: string): Packet {
+  if (!encoded) return structuredClone(packet);
+  const next = structuredClone(packet);
+  for (const item of encoded.split(",").map((value) => value.trim()).filter(Boolean)) {
+    const separator = item.indexOf("=");
+    if (separator <= 0 || separator === item.length - 1) {
+      throw new Error(`spec-clones entry must be new-slug=route-template[@family-template]: ${item}`);
+    }
+    const slug = item.slice(0, separator);
+    const templates = item.slice(separator + 1).split("@");
+    const routeTemplateSlug = templates[0];
+    const familyTemplateSlug = templates[1] || routeTemplateSlug;
+    if (next.candidate.channelSpecs.some((spec) => spec.slug === slug)) {
+      throw new Error(`spec-clones cannot replace an existing packet spec: ${slug}`);
+    }
+    const routeTemplate = next.candidate.channelSpecs.find((spec) => spec.slug === routeTemplateSlug);
+    const familyTemplate = next.candidate.channelSpecs.find((spec) => spec.slug === familyTemplateSlug);
+    if (!routeTemplate || !familyTemplate) {
+      throw new Error(`spec-clones template missing for ${slug}: route=${routeTemplateSlug}, family=${familyTemplateSlug}`);
+    }
+    next.candidate.channelSpecs.push({
+      ...structuredClone(routeTemplate),
+      slug,
+      familyId: familyTemplate.familyId,
+    });
+    const routePolicy = next.candidate.manifest.admissionPolicies
+      .find((policy) => policy.id === routeTemplate.collisionDomain);
+    if (!routePolicy) throw new Error(`spec-clones policy missing for ${routeTemplate.collisionDomain}`);
+    routePolicy.priorityBySlug[slug] = routePolicy.priorityBySlug[routeTemplateSlug]
+      ?? Math.max(0, ...Object.values(routePolicy.priorityBySlug)) + 1;
+  }
+  return next;
+}
+
+function policiesWithPriorityOrder(
+  policies: readonly DeskReplayPolicy[], encoded: string,
+): DeskReplayPolicy[] {
+  if (!encoded) return structuredClone(policies);
+  const separator = encoded.indexOf(":");
+  if (separator <= 0 || separator === encoded.length - 1) {
+    throw new Error("priority-order must be DOMAIN:slug,slug,...");
+  }
+  const domainId = encoded.slice(0, separator);
+  const order = encoded.slice(separator + 1).split(",").map((slug) => slug.trim()).filter(Boolean);
+  if (!order.length || new Set(order).size !== order.length) throw new Error("priority-order contains no slugs or duplicates");
+  let found = false;
+  const next = structuredClone(policies).map((policy) => {
+    if (policy.id !== domainId) return policy;
+    found = true;
+    const known = new Set(Object.keys(policy.priorityBySlug));
+    const unknown = order.filter((slug) => !known.has(slug));
+    if (unknown.length) throw new Error(`priority-order contains unknown ${domainId} slugs: ${unknown.join(", ")}`);
+    const remainder = Object.entries(policy.priorityBySlug)
+      .sort((left, right) => left[1] - right[1] || left[0].localeCompare(right[0]))
+      .map(([slug]) => slug).filter((slug) => !order.includes(slug));
+    policy.priorityBySlug = Object.fromEntries([...order, ...remainder].map((slug, index) => [slug, index + 1]));
+    return policy;
+  });
+  if (!found) throw new Error(`priority-order domain not found: ${domainId}`);
+  return next;
+}
+
 function markdown(report: any): string {
   const sameFillLines = report.scenario !== "current-candidate" ? [
     "The same-fill subtotal contains unchanged roots only. Proposed channels are evaluated with exact quote-replayed exits in the chronological scenario below.",
@@ -281,16 +347,40 @@ function main(): void {
   const trailFrontierText = scenario !== "current-candidate" && existsSync(trailFrontierFile)
     ? readFileSync(trailFrontierFile, "utf8") : null;
   const snapshot = JSON.parse(snapshotText) as Snapshot;
-  const packetBase = JSON.parse(packetText) as Packet;
+  const packetBase = packetWithSpecClones(JSON.parse(packetText) as Packet, specClonesOverride);
   const packet = scenario === "profit-conversion" ? profitConversionVariant(packetBase) : packetBase;
+  const scenarioPolicies = policiesWithPriorityOrder(
+    packet.candidate.manifest.admissionPolicies,
+    priorityOrderOverride,
+  );
   JSON.parse(weekReviewText);
   const actualDeskPnlUsd = round(snapshot.ledger.logicalTrades
     .filter((row) => row.openedAt >= startSession && row.openedAt < endExclusive
       && row.closedAt && row.realizedPnlUsd != null)
     .reduce((sum, row) => sum + row.realizedPnlUsd!, 0));
+  const rosterSlugs = new Set(rosterOverride.split(",").map((slug) => slug.trim()).filter(Boolean));
+  if (rosterSlugs.size) {
+    const known = new Set(packet.candidate.channelSpecs.map((spec) => spec.slug));
+    const unknown = [...rosterSlugs].filter((slug) => !known.has(slug));
+    if (unknown.length) throw new Error(`roster override contains unknown packet specs: ${unknown.join(", ")}`);
+  }
   const specBySlug = new Map(packet.candidate.channelSpecs
-    .filter((spec) => packet.decisions.some((row) => row.channel === spec.slug))
-    .map((spec) => [spec.slug, spec]));
+    .filter((spec) => rosterSlugs.size ? rosterSlugs.has(spec.slug) : packet.decisions.some((row) => row.channel === spec.slug))
+    .map((spec) => [spec.slug, structuredClone(spec)]));
+  const parsedEntryCaps = Object.fromEntries(entryCapsOverride.split(",")
+    .map((item) => item.trim()).filter(Boolean).map((item) => {
+      const separator = item.indexOf("=");
+      const value = Number(item.slice(separator + 1));
+      if (separator <= 0 || !Number.isInteger(value) || value < 1 || value > 6) {
+        throw new Error(`invalid entry cap override: ${item}`);
+      }
+      return [item.slice(0, separator), value];
+    }));
+  for (const [slug, cap] of Object.entries(parsedEntryCaps)) {
+    const spec = specBySlug.get(slug);
+    if (!spec) throw new Error(`entry cap override is not in the selected roster: ${slug}`);
+    spec.entryParameters = { ...spec.entryParameters, maxEntriesPerSession: cap };
+  }
   const slugByStrategist = new Map(snapshot.strategists.map((row) => [row.id, row.slug]));
   const virtualBySignal = new Map(snapshot.virtualTrades.map((row) => [row.signal_id, row]));
   const logicalByOpportunity = new Map(snapshot.ledger.logicalTrades
@@ -371,6 +461,7 @@ function main(): void {
   const sameFillResult = round(sameFillRows.reduce((sum, row) => sum + row.resultUsd, 0));
 
   const candidates: DeskReplayCandidate[] = [];
+  const pairedNativeCandidates: DeskReplayCandidate[] = [];
   const exactExitCandidateIds = new Set<string>();
   const exclusions: Array<{ signalId: string; slug: string; reason: string }> = [];
   for (const signal of snapshot.signals) {
@@ -394,7 +485,15 @@ function main(): void {
       ? exactPathByOpportunityAndCandidate.get(`signal:${signal.id}|${exactCandidateId}`) : null;
     if (exactCandidateId) {
       if (!exactPath || exactPath.state !== "scored" || !exactPath.exitAt || exactPath.modeledPnlUsd == null) {
-        exclusions.push({ signalId: signal.id, slug, reason: `missing_exact_trail:${exactCandidateId}` });
+        const nativePathAvailable = Boolean(
+          (actual?.closedAt && actual.realizedPnlUsd != null)
+          || (virtual?.exit_at && virtual.pnl_per_contract != null),
+        );
+        exclusions.push({
+          signalId: signal.id,
+          slug,
+          reason: `missing_exact_trail_${nativePathAvailable ? "with" : "without"}_native:${exactCandidateId}`,
+        });
         continue;
       }
       exitAt = exactPath.exitAt;
@@ -411,7 +510,12 @@ function main(): void {
       pnlUsd = round(sourcePnl! * spec.quantity / actual.quantity);
       basis = "actual-executed";
     } else if (managerId) {
-      exclusions.push({ signalId: signal.id, slug, reason: `unexecuted_path_not_paired_to:${managerId}` });
+      const nativePathAvailable = Boolean(virtual?.exit_at && virtual.pnl_per_contract != null);
+      exclusions.push({
+        signalId: signal.id,
+        slug,
+        reason: `unexecuted_path_${nativePathAvailable ? "with" : "without"}_native_not_paired_to:${managerId}`,
+      });
       continue;
     } else if (virtual?.exit_at && virtual.pnl_per_contract != null) {
       exitAt = virtual.exit_at;
@@ -422,7 +526,24 @@ function main(): void {
       exclusions.push({ signalId: signal.id, slug, reason: "incomplete_path" });
       continue;
     }
-    candidates.push({
+    let nativeExitAt = exitAt;
+    let nativePnlUsd = pnlUsd;
+    let nativeBasis = basis;
+    if (exactCandidateId) {
+      if (actual?.closedAt && actual.realizedPnlUsd != null) {
+        nativeExitAt = actual.closedAt;
+        nativePnlUsd = round(actual.realizedPnlUsd * spec.quantity / actual.quantity);
+        nativeBasis = "actual-executed";
+      } else if (virtual?.exit_at && virtual.pnl_per_contract != null) {
+        nativeExitAt = virtual.exit_at;
+        nativePnlUsd = round(virtual.pnl_per_contract * spec.quantity);
+        nativeBasis = "virtual-mid-basis";
+      } else {
+        exclusions.push({ signalId: signal.id, slug, reason: `exact_trail_without_native:${exactCandidateId}` });
+        continue;
+      }
+    }
+    const candidate: DeskReplayCandidate = {
       id: signal.id,
       session: signal.created_at.slice(0, 10),
       atMs: Date.parse(signal.created_at),
@@ -439,7 +560,14 @@ function main(): void {
       pnlUsd,
       basis,
       originalActed: signal.acted_on,
-    });
+    };
+    candidates.push(candidate);
+    pairedNativeCandidates.push(exactCandidateId ? {
+      ...candidate,
+      exitAtMs: Date.parse(nativeExitAt),
+      pnlUsd: nativePnlUsd,
+      basis: nativeBasis,
+    } : candidate);
   }
   const chronological = replayDeskSameClockCapacity({
     candidates,
@@ -447,7 +575,16 @@ function main(): void {
       id: "proposed-next-week-roster",
       label: "Proposed next-week roster",
       distinctOccAtSameClock: false,
-      policies: packet.candidate.manifest.admissionPolicies,
+      policies: scenarioPolicies,
+    },
+  });
+  const pairedNativeCoverage = replayDeskSameClockCapacity({
+    candidates: pairedNativeCandidates,
+    variant: {
+      id: "paired-native-same-coverage",
+      label: "Native exits on the exact same covered opportunities",
+      distinctOccAtSameClock: false,
+      policies: scenarioPolicies,
     },
   });
   const liveSpecs = [...specBySlug.values()].sort((left, right) =>
@@ -459,7 +596,7 @@ function main(): void {
         id: `without-${spec.slug}`,
         label: `Without ${spec.slug}`,
         distinctOccAtSameClock: false,
-        policies: packet.candidate.manifest.admissionPolicies,
+        policies: scenarioPolicies,
       },
     });
     return {
@@ -479,7 +616,7 @@ function main(): void {
         label: `${spec.slug} first`,
         distinctOccAtSameClock: false,
         policies: policiesWithPriorityFirst(
-          packet.candidate.manifest.admissionPolicies,
+          scenarioPolicies,
           spec.collisionDomain,
           spec.slug,
         ),
@@ -511,6 +648,9 @@ function main(): void {
       exactExitCandidate,
       exactOverrides: exactCandidateBySlug,
       exactEraMode,
+      roster: [...specBySlug.keys()].sort(),
+      priorityOrder: priorityOrderOverride || null,
+      entryCaps: parsedEntryCaps,
     } : null,
     generatedAt: new Date().toISOString(),
     window: { start: startSession, endExclusive },
@@ -537,6 +677,12 @@ function main(): void {
         return [slug, { admitted: rows.length, modeledPnlUsd: round(rows.reduce((sum, row) => sum + row.pnlUsd, 0)), actualPaths: rows.filter((row) => row.basis === "actual-executed").length, virtualPaths: rows.filter((row) => row.basis === "virtual-mid-basis").length }];
       })),
       exactExitPaths: chronological.admitted.filter((row) => exactExitCandidateIds.has(row.id)).length,
+    },
+    pairedNativeCoverage: {
+      modeledPnlUsd: pairedNativeCoverage.modeledPnlUsd,
+      admitted: pairedNativeCoverage.admitted.length,
+      proposedDeltaUsd: round(chronological.modeledPnlUsd - pairedNativeCoverage.modeledPnlUsd),
+      note: "Native exits replayed on the same exact-exit-covered signal universe; differing exit duration can change later admission.",
     },
     tournament: {
       baselineUsd: chronological.modeledPnlUsd,
