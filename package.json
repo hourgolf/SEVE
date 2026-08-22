@@ -79,6 +79,8 @@
     "channel-trail-frontier": "tsx scripts/channel-trail-frontier.ts",
     "profit-conversion-program": "tsx scripts/profit-conversion-program-2026-08-22.ts",
     "profit-conversion-program-selftest": "tsx scripts/profit-conversion-program-2026-08-22.selftest.ts",
+    "channel-phenotype-selftest": "tsx lib/research/channelPhenotype.selftest.ts",
+    "channel-phenotype-study": "tsx scripts/channel-phenotype-study-2026-08-22.ts",
     "manager-pattern-scan": "tsx scripts/manager-pattern-scan.ts",
     "manager-pattern-scan-selftest": "tsx scripts/manager-pattern-scan.ts --selftest",
     "entry-atlas": "tsx scripts/entry-atlas.ts",
