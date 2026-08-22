@@ -34,6 +34,9 @@ const outputDir = resolve(arg(
   "data/next-week-roster/2026-08-24/replay",
 ));
 const scenario = arg("scenario", "current-candidate");
+const momoExitCandidate = arg("momo-exit", "TP-50");
+const includeQqqTrial = arg("include-qqq", "true") !== "false";
+const qqqExitCandidate = arg("qqq-exit", "BANK20-BE-R50-K67");
 const startSession = arg("start", "2026-08-17");
 const endExclusive = arg("end-exclusive", "2026-08-22");
 const pathResultsFile = resolve(arg(
@@ -129,30 +132,37 @@ function profitConversionVariant(packet: Packet): Packet {
   const qqqWide = next.candidate.channelSpecs.find((spec) => spec.slug === "qqq-thrust-trail-wd");
   if (!momo2 || !qqqWide) throw new Error("profit-conversion replay requires momo-shape-2 and qqq-thrust-trail-wd base specs");
   next.candidate.channelSpecs = next.candidate.channelSpecs
-    .filter((spec) => spec.slug !== "momo-shape-2" && spec.slug !== "qqq-thrust-trail-wd");
+    .filter((spec) => spec.slug !== "momo-shape-2"
+      && (!includeQqqTrial || spec.slug !== "qqq-thrust-trail-wd"));
   next.candidate.channelSpecs.push({
     ...momo2,
     slug: "momo-shape",
     familyId: "SPY-MOMO",
     quantity: 2,
-  }, {
+  });
+  if (includeQqqTrial) next.candidate.channelSpecs.push({
     ...qqqWide,
     slug: "qqq-thrust-trail",
     familyId: "QQQ-THRUST",
     quantity: 2,
   });
   next.decisions = next.decisions
-    .filter((row) => row.channel !== "momo-shape-2" && row.channel !== "qqq-thrust-trail-wd");
-  next.decisions.push(
-    { channel: "momo-shape", action: "exact quote replay with proposed LOCK50/30 exit" },
-    { channel: "qqq-thrust-trail", action: "exact quote replay with proposed BANK20/BE/R50 exit" },
-  );
+    .filter((row) => row.channel !== "momo-shape-2"
+      && (!includeQqqTrial || row.channel !== "qqq-thrust-trail-wd"));
+  next.decisions.push({
+    channel: "momo-shape",
+    action: `exact quote replay with ${momoExitCandidate} exit`,
+  });
+  if (includeQqqTrial) next.decisions.push({
+    channel: "qqq-thrust-trail",
+    action: `exact quote replay with ${qqqExitCandidate} exit`,
+  });
   next.candidate.manifest.admissionPolicies = structuredClone(next.candidate.manifest.admissionPolicies)
     .map((policy) => ({
       ...policy,
       priorityBySlug: Object.fromEntries(Object.entries(policy.priorityBySlug).map(([slug, priority]) => [
         slug === "momo-shape-2" ? "momo-shape"
-          : slug === "qqq-thrust-trail-wd" ? "qqq-thrust-trail" : slug,
+          : includeQqqTrial && slug === "qqq-thrust-trail-wd" ? "qqq-thrust-trail" : slug,
         priority,
       ])),
     }));
@@ -195,7 +205,7 @@ function policiesWithPriorityFirst(
 
 function markdown(report: any): string {
   const sameFillLines = report.scenario === "profit-conversion" ? [
-    "The same-fill subtotal contains unchanged roots only. The two proposed channels are evaluated with exact quote-replayed exits in the chronological scenario below.",
+    "The same-fill subtotal contains unchanged roots only. Proposed channels are evaluated with exact quote-replayed exits in the chronological scenario below.",
   ] : [
     `The exact same fills, resized and re-exited where a paired manager path exists, would have produced **${money(report.sameFill.resultUsd)}** instead of **${money(report.actualDeskPnlUsd)}**.`,
     `That is a **${money(report.sameFill.differenceUsd)}** improvement. It uses ${report.sameFill.retainedTrades} retained actual trades and ${report.sameFill.managerMatchedTrades} paired manager outcomes.`,
@@ -286,8 +296,8 @@ function main(): void {
     .filter((row) => row.status === "terminal" && row.terminal_at && row.terminal_pnl != null)
     .map((row) => [`${row.position_id}|${row.manager_id}`, row]));
   const exactCandidateBySlug: Record<string, string> = scenario === "profit-conversion" ? {
-    "momo-shape": "TP-50",
-    "qqq-thrust-trail": "BANK20-BE-R50-K67",
+    "momo-shape": momoExitCandidate,
+    ...(includeQqqTrial ? { "qqq-thrust-trail": qqqExitCandidate } : {}),
   } : {};
   const exactPathByOpportunityAndCandidate = new Map<string, ExactTrailPath>();
   const selectedEraBySlug = new Map<string, string>();
@@ -464,6 +474,11 @@ function main(): void {
     schemaVersion: 1,
     version: "next-week-roster-replay-2026-08-24-v2",
     scenario,
+    scenarioParameters: scenario === "profit-conversion" ? {
+      momoExitCandidate,
+      includeQqqTrial,
+      qqqExitCandidate: includeQqqTrial ? qqqExitCandidate : null,
+    } : null,
     generatedAt: new Date().toISOString(),
     window: { start: startSession, endExclusive },
     actualDeskPnlUsd,
@@ -508,7 +523,7 @@ function main(): void {
       "unexecuted paths for changed managers are excluded without an exact paired outcome",
       "no slippage or fill is invented",
       ...(scenario === "profit-conversion" ? [
-        "momo-shape and qqq-thrust-trail use exact quote-replayed proposed exits only within the selected compatible configuration era",
+        "proposed channels use exact quote-replayed exits only within the selected compatible configuration era",
         "signals outside the selected era or without a complete exact quote path are excluded rather than silently substituted",
       ] : []),
     ],
