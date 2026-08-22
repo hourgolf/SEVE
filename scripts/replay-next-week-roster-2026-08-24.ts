@@ -33,6 +33,7 @@ const outputDir = resolve(arg(
   "output-dir",
   "data/next-week-roster/2026-08-24/replay",
 ));
+const scenario = arg("scenario", "current-candidate");
 for (const file of [snapshotFile, packetFile, weekReviewFile]) {
   if (!existsSync(file)) throw new Error(`required replay input missing: ${file}`);
 }
@@ -87,6 +88,42 @@ interface Packet {
     channelSpecs: CandidateSpec[];
   };
   decisions: Array<{ channel: string; action: string }>;
+}
+
+function profitConversionVariant(packet: Packet): Packet {
+  const next = structuredClone(packet);
+  const momo2 = next.candidate.channelSpecs.find((spec) => spec.slug === "momo-shape-2");
+  const qqqWide = next.candidate.channelSpecs.find((spec) => spec.slug === "qqq-thrust-trail-wd");
+  if (!momo2 || !qqqWide) throw new Error("profit-conversion replay requires momo-shape-2 and qqq-thrust-trail-wd base specs");
+  next.candidate.channelSpecs = next.candidate.channelSpecs
+    .filter((spec) => spec.slug !== "momo-shape-2" && spec.slug !== "qqq-thrust-trail-wd");
+  next.candidate.channelSpecs.push({
+    ...momo2,
+    slug: "momo-shape",
+    familyId: "SPY-MOMO",
+    quantity: 2,
+  }, {
+    ...qqqWide,
+    slug: "qqq-thrust-trail",
+    familyId: "QQQ-THRUST",
+    quantity: 2,
+  });
+  next.decisions = next.decisions
+    .filter((row) => row.channel !== "momo-shape-2" && row.channel !== "qqq-thrust-trail-wd");
+  next.decisions.push(
+    { channel: "momo-shape", action: "capacity-only replay; proposed LOCK50/30 result remains separately paired" },
+    { channel: "qqq-thrust-trail", action: "capacity-only replay; proposed BANK20/BE/R50 result remains separately paired" },
+  );
+  next.candidate.manifest.admissionPolicies = structuredClone(next.candidate.manifest.admissionPolicies)
+    .map((policy) => ({
+      ...policy,
+      priorityBySlug: Object.fromEntries(Object.entries(policy.priorityBySlug).map(([slug, priority]) => [
+        slug === "momo-shape-2" ? "momo-shape"
+          : slug === "qqq-thrust-trail-wd" ? "qqq-thrust-trail" : slug,
+        priority,
+      ])),
+    }));
+  return next;
 }
 
 const START = "2026-08-17";
@@ -190,7 +227,8 @@ function main(): void {
   const packetText = readFileSync(packetFile, "utf8");
   const weekReviewText = readFileSync(weekReviewFile, "utf8");
   const snapshot = JSON.parse(snapshotText) as Snapshot;
-  const packet = JSON.parse(packetText) as Packet;
+  const packetBase = JSON.parse(packetText) as Packet;
+  const packet = scenario === "profit-conversion" ? profitConversionVariant(packetBase) : packetBase;
   const weekReview = JSON.parse(weekReviewText) as { totalPnl?: number; summary?: { totalPnl?: number }; channels: Array<{ actualPnl: number }> };
   const actualDeskPnlUsd = round(weekReview.channels.reduce((sum, row) => sum + row.actualPnl, 0));
   const specBySlug = new Map(packet.candidate.channelSpecs
@@ -344,7 +382,8 @@ function main(): void {
   }));
   const report = {
     schemaVersion: 1,
-    version: "next-week-roster-replay-2026-08-24-v1",
+    version: "next-week-roster-replay-2026-08-24-v2",
+    scenario,
     generatedAt: new Date().toISOString(),
     window: { start: START, end: "2026-08-21" },
     actualDeskPnlUsd,
@@ -386,6 +425,10 @@ function main(): void {
       "chronological scenario mixes actual execution and virtual mid-basis evidence",
       "unexecuted paths for changed managers are excluded without an exact paired outcome",
       "no slippage or fill is invented",
+      ...(scenario === "profit-conversion" ? [
+        "momo-shape and qqq-thrust-trail use their observed native virtual duration and result only to test roster admission and displacement",
+        "their proposed exit-manager economics remain separate paired analyses and are not silently substituted into this capacity replay",
+      ] : []),
     ],
     authority: { productionWrites: 0, brokerWrites: 0, orderAuthority: false },
     inputs: {

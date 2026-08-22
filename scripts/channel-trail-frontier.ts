@@ -39,6 +39,7 @@ const snapshotFile = resolve(arg("snapshot-file", resolve(dirname(atlasFile), "s
 const quotesDir = resolve(arg("quotes-dir", "data/quotes-archive")!);
 const outputDir = resolve(arg("out-dir", "data/decision-atlas/latest/trails")!);
 const fromSession = arg("from");
+const minimumAnalysisQuantity = Math.max(1, Math.floor(Number(arg("minimum-analysis-quantity", "1")) || 1));
 const envFile = arg("env-file") ?? process.env.SEVE_ENV_FILE ?? null;
 if (envFile && existsSync(resolve(envFile))) process.loadEnvFile(resolve(envFile));
 else if (existsSync(resolve(".env.local"))) process.loadEnvFile(resolve(".env.local"));
@@ -195,6 +196,10 @@ function renderMarkdown(book: ChannelTrailFrontierBook): string {
     `# Channel Trail Frontier — through ${book.throughSession}`,
     "",
     "Read-only paired executable-bid research. Entry, size, route, roster, and production managers remain unchanged.",
+    ...(minimumAnalysisQuantity > 1 ? [
+      "",
+      `Manager-shape lab: staged exits are normalized to at least ${minimumAnalysisQuantity} contracts so one-contract source paths can test bank/runner behavior. Capacity and executable sizing remain separate decisions.`,
+    ] : []),
     "",
     "| Channel | Era | Decision | Leading exit | Typical lift | Beat rate | Evidence |",
     "|---|---|---|---|---:|---:|---:|",
@@ -309,13 +314,20 @@ function renderRunnerHandoffMarkdown(book: RunnerHandoffFrontierBook): string {
 }
 
 async function main(): Promise<void> {
-  for (const file of [ledgerFile, atlasFile, snapshotFile]) if (!existsSync(file)) throw new Error(`required frozen artifact not found: ${file}`);
-  const ledgerText = readFileSync(ledgerFile, "utf8");
+  for (const file of [atlasFile, snapshotFile]) if (!existsSync(file)) throw new Error(`required frozen artifact not found: ${file}`);
   const atlasText = readFileSync(atlasFile, "utf8");
   const snapshotText = readFileSync(snapshotFile, "utf8");
-  const ledger = (JSON.parse(ledgerText) as LedgerArtifact).ledger;
   const atlas = JSON.parse(atlasText) as DecisionAtlas;
   const snapshot = JSON.parse(snapshotText) as DecisionAtlasSourceSnapshot;
+  const ledgerSourceText = existsSync(ledgerFile)
+    ? readFileSync(ledgerFile, "utf8")
+    : JSON.stringify(snapshot.ledger);
+  const ledger = existsSync(ledgerFile)
+    ? (JSON.parse(ledgerSourceText) as LedgerArtifact).ledger
+    : snapshot.ledger;
+  if (!ledger?.logicalTrades?.length) {
+    throw new Error(`canonical profitability ledger missing from ${ledgerFile} and frozen snapshot`);
+  }
   const trades = ledger.logicalTrades.filter((trade) => trade.status === "closed" && trade.closedAt
     && trade.quantity > 0 && trade.entryDebitUsd != null && trade.entryDebitUsd > 0
     && trade.realizedReturnPct != null && trade.occSymbol && trade.openedAt
@@ -390,6 +402,7 @@ async function main(): Promise<void> {
   let r2Sessions = 0;
   let remoteSessions = 0;
   let missingSessions = 0;
+  const missingSessionDates: string[] = [];
   for (const [session, sessionSeeds] of [...bySession].sort(([left], [right]) => left.localeCompare(right))) {
     let quoteBook = localSessionQuotes(session);
     let source: TrailOpportunity["source"] = "frozen_option_archive";
@@ -403,7 +416,10 @@ async function main(): Promise<void> {
       quoteBook = await remoteSessionQuotes(session, [...new Set(sessionSeeds.map((seed) => seed.occSymbol))]);
       source = "live_option_quotes";
       if (quoteBook.size) remoteSessions += 1;
-      else missingSessions += 1;
+      else {
+        missingSessions += 1;
+        missingSessionDates.push(session);
+      }
     }
     const cutoff = flattenAtMs(session);
     for (const seed of sessionSeeds) {
@@ -429,17 +445,20 @@ async function main(): Promise<void> {
   }
   const currentConfigurationEras = Object.fromEntries(Object.values(atlas.channels)
     .map((dossier) => [dossier.channel, dossier.decisionCohort.configurationEra]));
+  const analysisOpportunities = minimumAnalysisQuantity > 1
+    ? opportunities.map((row) => ({ ...row, quantity: Math.max(row.quantity, minimumAnalysisQuantity) }))
+    : opportunities;
   const book = buildChannelTrailFrontier({
     generatedAt: atlas.generatedAt,
     throughSession: atlas.throughSession,
-    opportunities,
+    opportunities: analysisOpportunities,
     currentConfigurationEras,
     currentVirtualConfigurationEras,
   });
   const handoffBook = buildRunnerHandoffFrontier({
     generatedAt: atlas.generatedAt,
     throughSession: atlas.throughSession,
-    opportunities,
+    opportunities: analysisOpportunities,
     profiles: runnerHandoffProfiles(snapshot),
   });
   const json = `${JSON.stringify(book, null, 2)}\n`;
@@ -457,8 +476,10 @@ async function main(): Promise<void> {
     executedLogicalOpportunities: book.executedSourceOpportunities,
     virtualLogicalOpportunities: book.virtualSourceOpportunities,
     virtualCensors: { missingSignal: virtualMissingSignal, missingConfigurationStamp: virtualMissingConfigurationStamp },
-    pathSources: { localArchiveSessions: archiveSessions, verifiedR2Sessions: r2Sessions, remoteSelectSessions: remoteSessions, missingSessions },
-    inputs: { ledgerSha256: sha256(ledgerText), atlasSha256: sha256(atlasText), snapshotSha256: sha256(snapshotText) },
+    pathSources: { localArchiveSessions: archiveSessions, verifiedR2Sessions: r2Sessions, remoteSelectSessions: remoteSessions,
+      missingSessions, missingSessionDates },
+    analysisQuantityFloor: minimumAnalysisQuantity,
+    inputs: { ledgerSha256: sha256(ledgerSourceText), atlasSha256: sha256(atlasText), snapshotSha256: sha256(snapshotText) },
     runnerHandoff: { profiles: handoffBook.profiles.length, eras: handoffBook.eras.length,
       channelSpecRollups: handoffBook.channelSpecRollups.length },
     outputs: { frontierSha256: sha256(json), markdownSha256: sha256(markdown),
