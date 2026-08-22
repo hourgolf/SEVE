@@ -4,10 +4,6 @@ import {
   rc54ManagerStampPresent,
 } from "./rc54ManagerPolicy.js";
 import {
-  RC54_CONTROL_ADMISSION_POLICY,
-  RC54_LAB_ADMISSION_POLICY,
-  RC54_MORGUE_ACCOUNT_ID,
-  RC54_MORGUE_ADMISSION_POLICY,
   RC54_ROOTS,
   type Rc54AdmissionCandidateIdentity,
   type Rc54AdmissionRoot,
@@ -33,8 +29,6 @@ import type { ChannelConfig, PositionRow } from "./store.js";
 export const TEMPORARY_RC54_RUNTIME_ADAPTER_VERSION =
   "temporary-rc54-runtime-adapter-v6" as const;
 
-const RC54_LAB_BOUNDED_IWM_ROOT = "vb-ribbon-cross-iwm" as const;
-
 const SHA256 = /^sha256:([0-9a-f]{64})$/i;
 
 function uniqueSorted(values: readonly string[]): string[] {
@@ -44,11 +38,10 @@ function uniqueSorted(values: readonly string[]): string[] {
 /**
  * RC5.4 remains the temporary execution-mechanics and admission adapter. The
  * immutable manifest may change roster membership and bounded per-root
- * economics/posture. Existing RC5.4 roots may not silently change topology or
- * route. Priority is receipt-bound admission policy, so a reviewed immutable
- * manifest may reorder roots when root and policy projections agree. Every new
- * research root must fit the sealed paper domains and supported symbol/entry
- * envelope. Scaling or concurrency changes still require a reviewed adapter.
+ * economics/posture. Strategy identity and supported instruments remain
+ * sealed, while account routing, admission domains, family, priority, and
+ * entry envelopes come from the immutable activation receipt. Scaling and
+ * concurrency remain bounded by the validation below.
  */
 export function validateReceiptBoundRc54Topology(
   runtime: Readonly<ReceiptBoundRuntimeConfiguration>,
@@ -57,6 +50,13 @@ export function validateReceiptBoundRc54Topology(
   const expectedBySlug = new Map<string, (typeof RC54_ROOTS)[number]>(
     RC54_ROOTS.map((root) => [root.slug, root] as const),
   );
+  const configuredAccountIds = new Set(RC54_ROOTS.map((root) => root.accountId));
+  const policyById = new Map(runtime.admissionPolicies.map((policy) =>
+    [policy.id, policy] as const));
+  if (policyById.size !== runtime.admissionPolicies.length
+      || runtime.admissionPolicies.some((policy) => !policy.id.trim())) {
+    errors.push("temporary_rc54_adapter:admission_policy_duplicate");
+  }
   const observedBySlug = new Map<string, Readonly<ReceiptBoundRuntimeRoot>>();
   for (const root of runtime.roots) {
     if (observedBySlug.has(root.slug)) {
@@ -72,63 +72,40 @@ export function validateReceiptBoundRc54Topology(
     const expected = expectedBySlug.get(root.slug);
     if (expected) {
       const topology: Array<[string, unknown, unknown]> = [
-        ["cohort", root.cohort, expected.cohort],
-        ["family", root.familyId, expected.familyId],
         ["underlying", root.underlying, expected.underlying],
-        ["entry_dte", root.entryDte, expected.entryDte],
-        ["strike_offset", root.strikeOffset, expected.strikeOffset],
         ["strategist", root.strategistId, expected.strategistId],
-        ["account", root.accountId, expected.accountId],
       ];
       for (const [field, actual, sealed] of topology) {
         if (actual !== sealed) {
           errors.push(`temporary_rc54_adapter:${expected.slug}:${field}`);
         }
       }
-      const allowedDomains = expected.accountId === RC54_MORGUE_ACCOUNT_ID
-        ? [expected.domainId, RC54_MORGUE_ADMISSION_POLICY.id]
-        : [expected.domainId];
-      if (!allowedDomains.includes(root.domainId)) {
-        errors.push(`temporary_rc54_adapter:${expected.slug}:domain`);
-      }
-    } else {
-      if (![RC54_CONTROL_ADMISSION_POLICY.id, RC54_LAB_ADMISSION_POLICY.id,
-        RC54_MORGUE_ADMISSION_POLICY.id]
-        .includes(root.domainId)) {
-        errors.push(`temporary_rc54_adapter:${root.slug}:domain`);
-      }
-      if (!root.familyId.trim()) {
-        errors.push(`temporary_rc54_adapter:${root.slug}:family`);
-      }
-      if (!["SPY", "QQQ", "IWM"].includes(root.underlying)) {
-        errors.push(`temporary_rc54_adapter:${root.slug}:underlying`);
-      }
-      if (!Number.isInteger(root.entryDte)
-          || root.entryDte < 0 || root.entryDte > 1) {
-        errors.push(`temporary_rc54_adapter:${root.slug}:entry_dte`);
-      }
-      if (!Number.isInteger(root.strikeOffset)
-          || Math.abs(root.strikeOffset) > 20) {
-        errors.push(`temporary_rc54_adapter:${root.slug}:strike_offset`);
-      }
-      if (!root.strategistId.trim()) {
-        errors.push(`temporary_rc54_adapter:${root.slug}:strategist`);
-      }
-      if (!root.accountId.trim()) {
-        errors.push(`temporary_rc54_adapter:${root.slug}:account`);
-      }
+    }
+    if (!policyById.has(root.domainId)) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:domain`);
+    }
+    if (!configuredAccountIds.has(root.accountId)) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:account`);
+    }
+    if (!root.familyId.trim()) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:family`);
+    }
+    if (!["SPY", "QQQ", "IWM"].includes(root.underlying)) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:underlying`);
+    }
+    if (!Number.isInteger(root.entryDte)
+        || root.entryDte < 0 || root.entryDte > 1) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:entry_dte`);
+    }
+    if (!Number.isInteger(root.strikeOffset)
+        || Math.abs(root.strikeOffset) > 20) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:strike_offset`);
+    }
+    if (!root.strategistId.trim()) {
+      errors.push(`temporary_rc54_adapter:${root.slug}:strategist`);
     }
     if (!Number.isInteger(root.priority) || root.priority < 1) {
       errors.push(`temporary_rc54_adapter:${root.slug}:priority`);
-    }
-    const validDomainCohort = root.domainId === RC54_CONTROL_ADMISSION_POLICY.id
-      ? root.cohort === "control"
-      : root.domainId === RC54_LAB_ADMISSION_POLICY.id
-        ? root.cohort === "lab"
-        : root.domainId === RC54_MORGUE_ADMISSION_POLICY.id
-          && root.accountId === RC54_MORGUE_ACCOUNT_ID;
-    if (!validDomainCohort) {
-      errors.push(`temporary_rc54_adapter:${root.slug}:domain_cohort`);
     }
     if (strategistIds.has(root.strategistId)) {
       errors.push(`temporary_rc54_adapter:duplicate_strategist:${root.strategistId}`);
@@ -163,6 +140,44 @@ export function validateReceiptBoundRc54Topology(
     if (root.scalePolicy.adds !== 0
         || root.scalePolicy.pyramiding !== "disabled") {
       errors.push(`temporary_rc54_adapter:${root.slug}:scaling`);
+    }
+  }
+  const supportedUnderlying = new Set(["SPY", "QQQ", "IWM"]);
+  const validCaps = (caps: Readonly<Record<string, number>>, ceiling: number): boolean =>
+    Object.keys(caps).every((symbol) => supportedUnderlying.has(symbol))
+      && Object.values(caps).every((cap) => Number.isInteger(cap)
+        && cap >= 0 && cap <= ceiling);
+  for (const policy of runtime.admissionPolicies) {
+    const roots = runtime.roots.filter((root) => root.domainId === policy.id);
+    if (!Number.isInteger(policy.maxOpenGlobal) || policy.maxOpenGlobal < 1
+        || policy.maxOpenGlobal > 6 || policy.maxOpenPerFamily !== 1
+        || policy.sameOccOpenMax !== 1
+        || policy.crossDomainSameOcc !== "allow-with-receipt"
+        || !validCaps(policy.maxOpenByUnderlying, policy.maxOpenGlobal)
+        || !validCaps(policy.sameClockMaxByUnderlying, policy.maxOpenGlobal)
+        || Object.entries(policy.sameClockMaxByUnderlying).some(([symbol, cap]) =>
+          cap > (policy.maxOpenByUnderlying[symbol] ?? 0))) {
+      errors.push(`temporary_rc54_adapter:${policy.id}:admission_envelope`);
+    }
+    if (roots.some((root) => root.executionPosture === "paper")
+        && !policy.enabledForNewEntries) {
+      errors.push(`temporary_rc54_adapter:${policy.id}:admission_disabled`);
+    }
+    const boundedRootPresent = roots.some((root) => root.reentryPolicy === "bounded");
+    if ((policy.reentry === "bounded") !== boundedRootPresent) {
+      errors.push(`temporary_rc54_adapter:${policy.id}:admission_reentry`);
+    }
+    const overflow = policy.overflowCapacity;
+    if (overflow && (!Number.isInteger(overflow.maxOpenGlobal)
+        || overflow.maxOpenGlobal < policy.maxOpenGlobal
+        || overflow.maxOpenGlobal > 6 || !overflow.eligibleSlugs.length
+        || new Set(overflow.eligibleSlugs).size !== overflow.eligibleSlugs.length
+        || overflow.eligibleSlugs.some((slug) => !roots.some((root) => root.slug === slug))
+        || !validCaps(overflow.maxOpenByUnderlying, overflow.maxOpenGlobal)
+        || !validCaps(overflow.sameClockMaxByUnderlying, overflow.maxOpenGlobal)
+        || Object.entries(overflow.sameClockMaxByUnderlying).some(([symbol, cap]) =>
+          cap > (overflow.maxOpenByUnderlying[symbol] ?? 0)))) {
+      errors.push(`temporary_rc54_adapter:${policy.id}:admission_overflow`);
     }
   }
   return uniqueSorted(errors);
@@ -268,60 +283,8 @@ export function buildReceiptBoundRc54AdmissionPolicies(
 ): readonly Readonly<AdmissionDomainPolicy>[] {
   const topologyErrors = validateReceiptBoundRc54Topology(runtime);
   if (topologyErrors.length) throw new Error(topologyErrors.join(";"));
-  const sealedById = new Map<string, Readonly<AdmissionDomainPolicy>>([
-    [RC54_CONTROL_ADMISSION_POLICY.id, RC54_CONTROL_ADMISSION_POLICY],
-    [RC54_LAB_ADMISSION_POLICY.id, RC54_LAB_ADMISSION_POLICY],
-  ]);
-  if (runtime.roots.some((root) =>
-    root.domainId === RC54_MORGUE_ADMISSION_POLICY.id)
-      || runtime.admissionPolicies.some((policy) =>
-        policy.id === RC54_MORGUE_ADMISSION_POLICY.id)) {
-    sealedById.set(
-      RC54_MORGUE_ADMISSION_POLICY.id,
-      RC54_MORGUE_ADMISSION_POLICY,
-    );
-  }
   const errors: string[] = [];
   const policies = runtime.admissionPolicies.map((observed) => {
-    const sealed = sealedById.get(observed.id);
-    if (!sealed) {
-      errors.push(`temporary_rc54_adapter:admission_policy_unexpected:${observed.id}`);
-      return null;
-    }
-    for (const [field, actual, expected] of [
-      ["enabled", observed.enabledForNewEntries, sealed.enabledForNewEntries],
-      ["family", observed.maxOpenPerFamily, sealed.maxOpenPerFamily],
-      ["global", observed.maxOpenGlobal, sealed.maxOpenGlobal],
-      ["same_occ", observed.sameOccOpenMax, sealed.sameOccOpenMax],
-      ["cross_domain_occ", observed.crossDomainSameOcc, sealed.crossDomainSameOcc],
-    ] as const) {
-      if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-        errors.push(`temporary_rc54_adapter:${observed.id}:admission_${field}`);
-      }
-    }
-    const boundedLabIwm = observed.id === RC54_LAB_ADMISSION_POLICY.id
-      && runtime.roots.some((root) =>
-        root.slug === RC54_LAB_BOUNDED_IWM_ROOT
-        && root.domainId === observed.id
-        && root.underlying === "IWM");
-    const expectedUnderlying = boundedLabIwm
-      ? { ...sealed.maxOpenByUnderlying, IWM: 1 }
-      : sealed.maxOpenByUnderlying;
-    const expectedClock = boundedLabIwm
-      ? { ...sealed.sameClockMaxByUnderlying, IWM: 1 }
-      : sealed.sameClockMaxByUnderlying;
-    for (const [field, actual, expected] of [
-      ["underlying", observed.maxOpenByUnderlying, expectedUnderlying],
-      ["clock", observed.sameClockMaxByUnderlying, expectedClock],
-    ] as const) {
-      if (JSON.stringify(
-        Object.fromEntries(Object.entries(actual).sort()),
-      ) !== JSON.stringify(
-        Object.fromEntries(Object.entries(expected).sort()),
-      )) {
-        errors.push(`temporary_rc54_adapter:${observed.id}:admission_${field}`);
-      }
-    }
     const expectedPriorities = Object.fromEntries(runtime.roots
       .filter((root) => root.domainId === observed.id)
       .map((root): [string, number] => [root.slug, root.priority])
@@ -335,22 +298,7 @@ export function buildReceiptBoundRc54AdmissionPolicies(
       ...observed,
       reentry: observed.reentry === "bounded" ? "allowed" : "disabled",
     }) as Readonly<AdmissionDomainPolicy>;
-  }).filter((policy): policy is Readonly<AdmissionDomainPolicy> => policy !== null);
-  if (policies.length !== sealedById.size) {
-    errors.push(`temporary_rc54_adapter:admission_policy_count:${policies.length}:${sealedById.size}`);
-  }
-  for (const id of sealedById.keys()) {
-    if (!policies.some((policy) => policy.id === id)) {
-      errors.push(`temporary_rc54_adapter:admission_policy_missing:${id}`);
-    }
-  }
-  for (const policy of policies) {
-    const boundedRootPresent = runtime.roots.some((root) =>
-      root.domainId === policy.id && root.reentryPolicy === "bounded");
-    if ((policy.reentry === "allowed") !== boundedRootPresent) {
-      errors.push(`temporary_rc54_adapter:${policy.id}:admission_reentry`);
-    }
-  }
+  });
   if (errors.length) throw new Error(uniqueSorted(errors).join(";"));
   return Object.freeze(policies);
 }

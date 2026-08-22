@@ -320,15 +320,25 @@ check("a sealed MORGUE domain isolates one paper account without breaking legacy
       ?.priorityBySlug,
     RC54_MORGUE_ADMISSION_POLICY.priorityBySlug,
   );
-  const wrongAccount = {
+  const reviewedRoute = {
     ...expanded,
     roots: expanded.roots.map((root) => root.slug === morgueRoot.slug
-      ? { ...root, accountId: source.accountId }
+      ? { ...root, accountId: source.accountId,
+        configuration: { ...root.configuration, accountId: source.accountId } }
+      : root),
+  } as Readonly<ReceiptBoundRuntimeConfiguration>;
+  assert.deepEqual(validateReceiptBoundRc54Topology(reviewedRoute), []);
+  const unknownAccount = {
+    ...reviewedRoute,
+    roots: reviewedRoute.roots.map((root) => root.slug === morgueRoot.slug
+      ? { ...root, accountId: "11111111-1111-4111-8111-111111111111",
+        configuration: { ...root.configuration,
+          accountId: "11111111-1111-4111-8111-111111111111" } }
       : root),
   } as Readonly<ReceiptBoundRuntimeConfiguration>;
   assert.ok(
-    validateReceiptBoundRc54Topology(wrongAccount)
-      .includes(`temporary_rc54_adapter:${morgueRoot.slug}:domain_cohort`),
+    validateReceiptBoundRc54Topology(unknownAccount)
+      .includes(`temporary_rc54_adapter:${morgueRoot.slug}:account`),
   );
 });
 
@@ -548,17 +558,17 @@ check("approved Account 2 IWM root receives one bounded slot only", () => {
       policy.id === added.domainId
         ? {
           ...policy,
-          maxOpenByUnderlying: { ...policy.maxOpenByUnderlying, IWM: 2 },
+          maxOpenByUnderlying: { ...policy.maxOpenByUnderlying, IWM: 7 },
         }
         : policy),
   } as Readonly<ReceiptBoundRuntimeConfiguration>;
   assert.throws(
     () => buildReceiptBoundRc54AdmissionPolicies(overbroad),
-    /admission_underlying/,
+    /admission_envelope/,
   );
 });
 
-check("route or topology changes are rejected by the temporary adapter", () => {
+check("unconfigured account routes are rejected by the temporary adapter", () => {
   const root = runtime.roots[0];
   assert.ok(root);
   const changed = {
