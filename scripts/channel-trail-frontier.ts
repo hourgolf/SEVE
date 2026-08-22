@@ -13,6 +13,7 @@ import { etDateOf, type LogicalTrade, type ProfitabilityLedger } from "../lib/pr
 import { etSessionCloseUtc, etWallMinuteUtc } from "../lib/research/afterCloseResearch";
 import {
   buildChannelTrailFrontier,
+  replayTrailOpportunity,
   type ChannelTrailFrontierBook,
   type TrailOpportunity,
   type TrailQuote,
@@ -465,6 +466,26 @@ async function main(): Promise<void> {
   const markdown = `${renderMarkdown(book)}\n`;
   const handoffJson = `${JSON.stringify(handoffBook, null, 2)}\n`;
   const handoffMarkdown = `${renderRunnerHandoffMarkdown(handoffBook)}\n`;
+  const replayPolicies = book.candidates.filter((policy) => policy.origin === "preset");
+  const pathRows = analysisOpportunities.flatMap((opportunity) => replayPolicies.map((policy) => {
+    const result = replayTrailOpportunity(opportunity, policy);
+    return {
+      channel: opportunity.channel,
+      evidenceLayer: opportunity.evidenceLayer,
+      configurationEra: opportunity.configurationEra,
+      entryAt: opportunity.entryAt,
+      entryPrice: opportunity.entryPrice,
+      quantity: opportunity.quantity,
+      source: opportunity.source,
+      ...result,
+      modeledPnlUsd: result.candidateReturnPct == null ? null
+        : Math.round(result.candidateReturnPct * opportunity.entryPrice * opportunity.quantity * 100) / 100,
+    };
+  }));
+  const pathJson = `${JSON.stringify({ schemaVersion: 1, frontierVersion: book.frontierVersion,
+    generatedAt: book.generatedAt, throughSession: book.throughSession,
+    candidateIds: replayPolicies.map((policy) => policy.id), paths: pathRows,
+    productionWrites: 0, orderAuthority: false }, null, 2)}\n`;
   const receipt = {
     schemaVersion: 1,
     generatedAt: book.generatedAt,
@@ -483,6 +504,7 @@ async function main(): Promise<void> {
     runnerHandoff: { profiles: handoffBook.profiles.length, eras: handoffBook.eras.length,
       channelSpecRollups: handoffBook.channelSpecRollups.length },
     outputs: { frontierSha256: sha256(json), markdownSha256: sha256(markdown),
+      pathResultsSha256: sha256(pathJson),
       runnerHandoffSha256: sha256(handoffJson), runnerHandoffMarkdownSha256: sha256(handoffMarkdown) },
     productionReads: [
       ...(receipts.size ? ["quote_archive_receipts:SELECT", "r2_quote_archive:GET"] : []),
@@ -497,6 +519,7 @@ async function main(): Promise<void> {
   mkdirSync(resolve(outputDir, "runner-handoffs", "channels"), { recursive: true });
   writeFileSync(resolve(outputDir, "frontier.json"), json);
   writeFileSync(resolve(outputDir, "frontier.md"), markdown);
+  writeFileSync(resolve(outputDir, "path-results.json"), pathJson);
   writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   writeFileSync(resolve(outputDir, "runner-handoffs", "frontier.json"), handoffJson);
   writeFileSync(resolve(outputDir, "runner-handoffs", "frontier.md"), handoffMarkdown);

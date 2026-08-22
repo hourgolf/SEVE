@@ -68,6 +68,8 @@ const targetPolicy = targetBook.candidates.find((candidate) => candidate.id === 
 assert.equal(targetPolicy.origin, "channel_adaptive");
 assert.equal(targetPolicy.takeProfitPct, 22);
 assert.match(targetPolicy.parameterSource, /channel-era/);
+assert.ok(targetBook.candidates.some((candidate) => candidate.id === "TP-50"),
+  "LOCK50/30 must remain an explicit fixed benchmark rather than depend on adaptive quantiles");
 
 const qqqFrozen = buildChannelTrailFrontier({
   generatedAt: book.generatedAt, throughSession: book.throughSession,
@@ -154,6 +156,7 @@ assert.match(runner, /manifest_sha256/);
 assert.match(runner, /snapshot-file/);
 assert.match(runner, /snapshot\.ledger/);
 assert.match(runner, /minimum-analysis-quantity/);
+assert.match(runner, /path-results\.json/);
 assert.match(runner, /evidenceLayer: "virtual"/);
 assert.match(runner, /buildRunnerHandoffFrontier/);
 assert.match(runner, /runner-handoffs/);

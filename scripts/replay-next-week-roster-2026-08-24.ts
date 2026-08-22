@@ -34,8 +34,23 @@ const outputDir = resolve(arg(
   "data/next-week-roster/2026-08-24/replay",
 ));
 const scenario = arg("scenario", "current-candidate");
+const startSession = arg("start", "2026-08-17");
+const endExclusive = arg("end-exclusive", "2026-08-22");
+const pathResultsFile = resolve(arg(
+  "path-results-file",
+  "data/weekend-optimization/2026-08-22/profit-conversion-two-contract/path-results.json",
+));
+const trailFrontierFile = resolve(arg(
+  "trail-frontier-file",
+  "data/weekend-optimization/2026-08-22/profit-conversion-two-contract/frontier.json",
+));
 for (const file of [snapshotFile, packetFile, weekReviewFile]) {
   if (!existsSync(file)) throw new Error(`required replay input missing: ${file}`);
+}
+if (scenario === "profit-conversion") {
+  for (const file of [pathResultsFile, trailFrontierFile]) {
+    if (!existsSync(file)) throw new Error(`required exact-exit replay input missing: ${file}`);
+  }
 }
 
 interface SignalRow {
@@ -90,6 +105,24 @@ interface Packet {
   decisions: Array<{ channel: string; action: string }>;
 }
 
+interface ExactTrailPath {
+  logicalOpportunityId: string;
+  channel: string;
+  candidateId: string;
+  state: "scored" | "censored";
+  exitAt: string | null;
+  modeledPnlUsd: number | null;
+  quantity: number;
+  configurationEra: string;
+}
+
+interface TrailFrontierArtifact {
+  channels: Record<string, {
+    selectedVirtualConfigurationEra: string | null;
+    selectedConfigurationEra: string | null;
+  }>;
+}
+
 function profitConversionVariant(packet: Packet): Packet {
   const next = structuredClone(packet);
   const momo2 = next.candidate.channelSpecs.find((spec) => spec.slug === "momo-shape-2");
@@ -111,8 +144,8 @@ function profitConversionVariant(packet: Packet): Packet {
   next.decisions = next.decisions
     .filter((row) => row.channel !== "momo-shape-2" && row.channel !== "qqq-thrust-trail-wd");
   next.decisions.push(
-    { channel: "momo-shape", action: "capacity-only replay; proposed LOCK50/30 result remains separately paired" },
-    { channel: "qqq-thrust-trail", action: "capacity-only replay; proposed BANK20/BE/R50 result remains separately paired" },
+    { channel: "momo-shape", action: "exact quote replay with proposed LOCK50/30 exit" },
+    { channel: "qqq-thrust-trail", action: "exact quote replay with proposed BANK20/BE/R50 exit" },
   );
   next.candidate.manifest.admissionPolicies = structuredClone(next.candidate.manifest.admissionPolicies)
     .map((policy) => ({
@@ -126,8 +159,6 @@ function profitConversionVariant(packet: Packet): Packet {
   return next;
 }
 
-const START = "2026-08-17";
-const END_EXCLUSIVE = "2026-08-22";
 const managerBySlug: Record<string, string> = {
   "vb-macd-state": "WIDE20/50",
   "vb-level-break": "LOCK50/30",
@@ -163,15 +194,20 @@ function policiesWithPriorityFirst(
 }
 
 function markdown(report: any): string {
+  const sameFillLines = report.scenario === "profit-conversion" ? [
+    "The same-fill subtotal contains unchanged roots only. The two proposed channels are evaluated with exact quote-replayed exits in the chronological scenario below.",
+  ] : [
+    `The exact same fills, resized and re-exited where a paired manager path exists, would have produced **${money(report.sameFill.resultUsd)}** instead of **${money(report.actualDeskPnlUsd)}**.`,
+    `That is a **${money(report.sameFill.differenceUsd)}** improvement. It uses ${report.sameFill.retainedTrades} retained actual trades and ${report.sameFill.managerMatchedTrades} paired manager outcomes.`,
+  ];
   return [
-    "# Proposed next-week roster · replay of 2026-08-17 through 2026-08-21",
+    `# ${report.scenario === "profit-conversion" ? "Profit-conversion proposal" : "Current Monday roster"} · replay of ${report.window.start} through ${report.window.endExclusive}`,
     "",
     "**READ-ONLY COUNTERFACTUAL · PAPER RESEARCH · NOT A FORECAST**",
     "",
     "## Best broker-comparable answer",
     "",
-    `The exact same fills, resized and re-exited where a paired manager path exists, would have produced **${money(report.sameFill.resultUsd)}** instead of **${money(report.actualDeskPnlUsd)}**.`,
-    `That is a **${money(report.sameFill.differenceUsd)}** improvement. It uses ${report.sameFill.retainedTrades} retained actual trades, ${report.sameFill.managerMatchedTrades} paired manager outcomes, and gives the two new trials no credit.`,
+    ...sameFillLines,
     "",
     "## Chronological opportunity scenario",
     "",
@@ -226,26 +262,57 @@ function main(): void {
   const snapshotText = readFileSync(snapshotFile, "utf8");
   const packetText = readFileSync(packetFile, "utf8");
   const weekReviewText = readFileSync(weekReviewFile, "utf8");
+  const pathResultsText = scenario === "profit-conversion" && existsSync(pathResultsFile)
+    ? readFileSync(pathResultsFile, "utf8") : null;
+  const trailFrontierText = scenario === "profit-conversion" && existsSync(trailFrontierFile)
+    ? readFileSync(trailFrontierFile, "utf8") : null;
   const snapshot = JSON.parse(snapshotText) as Snapshot;
   const packetBase = JSON.parse(packetText) as Packet;
   const packet = scenario === "profit-conversion" ? profitConversionVariant(packetBase) : packetBase;
-  const weekReview = JSON.parse(weekReviewText) as { totalPnl?: number; summary?: { totalPnl?: number }; channels: Array<{ actualPnl: number }> };
-  const actualDeskPnlUsd = round(weekReview.channels.reduce((sum, row) => sum + row.actualPnl, 0));
+  JSON.parse(weekReviewText);
+  const actualDeskPnlUsd = round(snapshot.ledger.logicalTrades
+    .filter((row) => row.openedAt >= startSession && row.openedAt < endExclusive
+      && row.closedAt && row.realizedPnlUsd != null)
+    .reduce((sum, row) => sum + row.realizedPnlUsd!, 0));
   const specBySlug = new Map(packet.candidate.channelSpecs
     .filter((spec) => packet.decisions.some((row) => row.channel === spec.slug))
     .map((spec) => [spec.slug, spec]));
   const slugByStrategist = new Map(snapshot.strategists.map((row) => [row.id, row.slug]));
   const virtualBySignal = new Map(snapshot.virtualTrades.map((row) => [row.signal_id, row]));
   const logicalByOpportunity = new Map(snapshot.ledger.logicalTrades
-    .filter((row) => row.opportunityId && row.openedAt >= START && row.openedAt < END_EXCLUSIVE)
+    .filter((row) => row.opportunityId && row.openedAt >= startSession && row.openedAt < endExclusive)
     .map((row) => [row.opportunityId!, row]));
   const managerByPositionAndId = new Map(snapshot.managerRuns
     .filter((row) => row.status === "terminal" && row.terminal_at && row.terminal_pnl != null)
     .map((row) => [`${row.position_id}|${row.manager_id}`, row]));
+  const exactCandidateBySlug: Record<string, string> = scenario === "profit-conversion" ? {
+    "momo-shape": "TP-50",
+    "qqq-thrust-trail": "BANK20-BE-R50-K67",
+  } : {};
+  const exactPathByOpportunityAndCandidate = new Map<string, ExactTrailPath>();
+  const selectedEraBySlug = new Map<string, string>();
+  if (trailFrontierText) {
+    const frontier = JSON.parse(trailFrontierText) as TrailFrontierArtifact;
+    for (const slug of Object.keys(exactCandidateBySlug)) {
+      const channel = frontier.channels[slug];
+      const selectedEra = channel?.selectedVirtualConfigurationEra ?? channel?.selectedConfigurationEra;
+      if (!selectedEra) throw new Error(`no selected compatible configuration era for ${slug}`);
+      selectedEraBySlug.set(slug, selectedEra);
+    }
+  }
+  if (pathResultsText) {
+    const artifact = JSON.parse(pathResultsText) as { paths: ExactTrailPath[] };
+    for (const row of artifact.paths) {
+      const selectedEra = selectedEraBySlug.get(row.channel);
+      if (selectedEra && row.configurationEra !== selectedEra) continue;
+      exactPathByOpportunityAndCandidate.set(`${row.logicalOpportunityId}|${row.candidateId}`, row);
+    }
+  }
 
   const actualRetained = snapshot.ledger.logicalTrades.filter((trade) =>
-    trade.openedAt >= START && trade.openedAt < END_EXCLUSIVE
-    && trade.closedAt && trade.realizedPnlUsd != null && specBySlug.has(trade.channelSlug));
+    trade.openedAt >= startSession && trade.openedAt < endExclusive
+    && trade.closedAt && trade.realizedPnlUsd != null && specBySlug.has(trade.channelSlug)
+    && !exactCandidateBySlug[trade.channelSlug]);
   let managerMatchedTrades = 0;
   const sameFillRows = actualRetained.map((trade) => {
     const spec = specBySlug.get(trade.channelSlug)!;
@@ -266,9 +333,10 @@ function main(): void {
   const sameFillResult = round(sameFillRows.reduce((sum, row) => sum + row.resultUsd, 0));
 
   const candidates: DeskReplayCandidate[] = [];
+  const exactExitCandidateIds = new Set<string>();
   const exclusions: Array<{ signalId: string; slug: string; reason: string }> = [];
   for (const signal of snapshot.signals) {
-    if (signal.created_at < START || signal.created_at >= END_EXCLUSIVE) continue;
+    if (signal.created_at < startSession || signal.created_at >= endExclusive) continue;
     const slug = slugByStrategist.get(signal.strategist_id);
     const spec = slug ? specBySlug.get(slug) : null;
     if (!slug || !spec) continue;
@@ -283,7 +351,19 @@ function main(): void {
     let exitAt: string | null = null;
     let pnlUsd: number | null = null;
     let basis: DeskReplayCandidate["basis"] = "virtual-mid-basis";
-    if (actual?.closedAt && actual.realizedPnlUsd != null) {
+    const exactCandidateId = exactCandidateBySlug[slug];
+    const exactPath = exactCandidateId
+      ? exactPathByOpportunityAndCandidate.get(`signal:${signal.id}|${exactCandidateId}`) : null;
+    if (exactCandidateId) {
+      if (!exactPath || exactPath.state !== "scored" || !exactPath.exitAt || exactPath.modeledPnlUsd == null) {
+        exclusions.push({ signalId: signal.id, slug, reason: `missing_exact_trail:${exactCandidateId}` });
+        continue;
+      }
+      exitAt = exactPath.exitAt;
+      pnlUsd = round(exactPath.modeledPnlUsd * spec.quantity / exactPath.quantity);
+      basis = "virtual-mid-basis";
+      exactExitCandidateIds.add(signal.id);
+    } else if (actual?.closedAt && actual.realizedPnlUsd != null) {
       if (managerId && !manager) {
         exclusions.push({ signalId: signal.id, slug, reason: `missing_exact_manager:${managerId}` });
         continue;
@@ -385,9 +465,10 @@ function main(): void {
     version: "next-week-roster-replay-2026-08-24-v2",
     scenario,
     generatedAt: new Date().toISOString(),
-    window: { start: START, end: "2026-08-21" },
+    window: { start: startSession, endExclusive },
     actualDeskPnlUsd,
     sameFill: {
+      scope: scenario === "profit-conversion" ? "unchanged_roots_only" : "retained_current_roster_fills",
       resultUsd: sameFillResult,
       differenceUsd: round(sameFillResult - actualDeskPnlUsd),
       retainedTrades: sameFillRows.length,
@@ -407,6 +488,7 @@ function main(): void {
         const rows = chronological.admitted.filter((row) => row.slug === slug);
         return [slug, { admitted: rows.length, modeledPnlUsd: round(rows.reduce((sum, row) => sum + row.pnlUsd, 0)), actualPaths: rows.filter((row) => row.basis === "actual-executed").length, virtualPaths: rows.filter((row) => row.basis === "virtual-mid-basis").length }];
       })),
+      exactExitPaths: chronological.admitted.filter((row) => exactExitCandidateIds.has(row.id)).length,
     },
     tournament: {
       baselineUsd: chronological.modeledPnlUsd,
@@ -426,8 +508,8 @@ function main(): void {
       "unexecuted paths for changed managers are excluded without an exact paired outcome",
       "no slippage or fill is invented",
       ...(scenario === "profit-conversion" ? [
-        "momo-shape and qqq-thrust-trail use their observed native virtual duration and result only to test roster admission and displacement",
-        "their proposed exit-manager economics remain separate paired analyses and are not silently substituted into this capacity replay",
+        "momo-shape and qqq-thrust-trail use exact quote-replayed proposed exits only within the selected compatible configuration era",
+        "signals outside the selected era or without a complete exact quote path are excluded rather than silently substituted",
       ] : []),
     ],
     authority: { productionWrites: 0, brokerWrites: 0, orderAuthority: false },
@@ -435,6 +517,8 @@ function main(): void {
       snapshotSha256: createHash("sha256").update(snapshotText).digest("hex"),
       packetSha256: createHash("sha256").update(packetText).digest("hex"),
       weekReviewSha256: createHash("sha256").update(weekReviewText).digest("hex"),
+      pathResultsSha256: pathResultsText ? createHash("sha256").update(pathResultsText).digest("hex") : null,
+      trailFrontierSha256: trailFrontierText ? createHash("sha256").update(trailFrontierText).digest("hex") : null,
     },
   };
   const body = `${JSON.stringify(report, null, 2)}\n`;
