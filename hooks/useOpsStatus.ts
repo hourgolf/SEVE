@@ -9,7 +9,8 @@
 //   · STREAM — worker_heartbeat('stream').beat_at (RTH-gated dead-man)
 //   · CRON   — desk-total equity_snapshots.captured_at (cron writes one per RTH run)
 //   · SPLIT  — armed channels per engine
-// 15s anon-read poll; all three have anon SELECT policies. No new subscription layer.
+// 15s operator-authenticated read poll. Private operational tables are queried
+// through a compact server route; the browser never needs direct table access.
 
 import { useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
@@ -33,20 +34,39 @@ const OPS_METADATA_POLL_MS = 45_000;
 const settled = <T,>(p: PromiseSettledResult<T>): Settled<T> =>
   p.status === "fulfilled" ? { status: "fulfilled", value: p.value } : { status: "rejected", reason: p.reason };
 
+type RuntimeScope = "heartbeat" | "cron" | "assignment";
+
+async function readRuntimeTelemetry(scope: RuntimeScope): Promise<{ data: unknown; error: unknown }> {
+  try {
+    const { data: { session }, error: sessionError } = await getSupabase().auth.getSession();
+    if (sessionError) throw sessionError;
+    if (!session?.access_token) throw new Error("operator sign-in required");
+    const response = await fetch(`/api/ops-runtime-telemetry?scope=${scope}`, {
+      headers: { authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = await response.json().catch(() => ({})) as { ok?: boolean; data?: unknown; error?: string };
+    if (!response.ok || !body.ok) return { data: null, error: new Error(body.error ?? `${scope} telemetry failed (${response.status})`) };
+    return { data: body.data ?? null, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
 export function useOpsStatus(pollMs = 15_000): OpsStatus {
   const reads = useRef({ heartbeat: initRead<{ note: string | null }>(), cron: initRead<Record<string, never>>(), assignment: initRead<{ streamArmed: number; cronArmed: number }>() });
   const lastArmed = useRef({ streamArmed: 0, cronArmed: 0 });
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    const sb = getSupabase();
     let alive = true;
     const commit = () => { if (alive) setTick((n) => n + 1); };
 
     async function pollHeartbeat() {
       const now = Date.now();
       const [hb] = await Promise.allSettled([
-        sb.from("worker_heartbeat").select("beat_at,note").eq("id", "stream").maybeSingle(),
+        readRuntimeTelemetry("heartbeat"),
       ]);
       if (!alive) return;
       reads.current.heartbeat = applyOpsRead(reads.current.heartbeat, settled(hb) as Settled<{ data: unknown; error: unknown }>, (d) => {
@@ -59,7 +79,7 @@ export function useOpsStatus(pollMs = 15_000): OpsStatus {
     async function pollCron() {
       const now = Date.now();
       const [snap] = await Promise.allSettled([
-        sb.from("equity_snapshots").select("captured_at").is("strategist_id", null).is("account_id", null).order("captured_at", { ascending: false }).limit(1).maybeSingle(),
+        readRuntimeTelemetry("cron"),
       ]);
       if (!alive) return;
       reads.current.cron = applyOpsRead(reads.current.cron, settled(snap) as Settled<{ data: unknown; error: unknown }>, (d) => {
@@ -72,18 +92,17 @@ export function useOpsStatus(pollMs = 15_000): OpsStatus {
     async function pollAssignment() {
       const now = Date.now();
       const [strat] = await Promise.allSettled([
-        sb.from("strategists").select("executor,status"),
+        readRuntimeTelemetry("assignment"),
       ]);
       if (!alive) return;
-      // strat.data is an ARRAY (empty = valid empty roster, 'ok' with zero armed). A rejected/errored read
-      // → 'error' and the last-known counts are held below — NEVER fabricate zeros from a failure.
+      // The server returns compact armed counts. A rejected/errored read becomes
+      // 'error' and the last-known counts are held below — NEVER fabricate zeros from a failure.
       reads.current.assignment = applyOpsRead(reads.current.assignment, settled(strat) as Settled<{ data: unknown; error: unknown }>, (d) => {
-        let s = 0, c = 0;
-        for (const r of d as Array<{ executor?: string; status?: string }>) {
-          if ((r.status ?? "armed") !== "armed") continue;
-          if (r.executor === "stream") s++; else c++;
-        }
-        return { value: { streamArmed: s, cronArmed: c }, atMs: now };
+        const counts = d as { streamArmed?: number; cronArmed?: number };
+        return { value: {
+          streamArmed: Number(counts.streamArmed ?? 0),
+          cronArmed: Number(counts.cronArmed ?? 0),
+        }, atMs: now };
       }, now);
       if (reads.current.assignment.state === "ok" && reads.current.assignment.value) lastArmed.current = reads.current.assignment.value;
       commit();
