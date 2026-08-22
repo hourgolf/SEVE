@@ -35,8 +35,8 @@ assert.match(sentinel, /giveback/);
 assert.match(sentinel, /PLAN STATUS/);
 assert.match(sentinel, /OLDER PLAN/);
 assert.match(sentinel, /EXCEPTIONS/);
-assert.match(sentinel, /NO OTHER CHANGES/);
-assert.match(sentinel, /NEW SETTINGS · COLLECT CLEAN SESSION/);
+assert.match(sentinel, /ACTIVE PAPER PLAN/);
+assert.match(sentinel, /New paper settings are active\. Hold them fixed for the next session and collect clean evidence/);
 assert.match(desktopInspector, /ACTIVE RUNTIME · EXIT SHAPE/);
 assert.match(mobileInspector, /ACTIVE RUNTIME · EXIT SHAPE/);
 

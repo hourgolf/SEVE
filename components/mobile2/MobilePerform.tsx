@@ -19,6 +19,7 @@ import { MarketOpenRisk, MarketReadStrip } from "@/components/perform/PerformMar
 import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 import { buildFleetDecisionSummary } from "@/lib/research/channelDecisionSummary";
 import { decisionAtlasFreshnessShortLabel } from "@/lib/research/decisionAtlasFreshness";
+import { summarizeChannelRuntimeRoster } from "@/lib/studio/channelRuntimeAuthority";
 
 // =============================================================================
 // MOBILE · PERFORM (S5) — the watch surface as ONE vertical scroll (the gallery
@@ -143,7 +144,13 @@ export function MobilePerform({
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   const fleet = buildFleetDecisionSummary(props.decisionAtlas.bySlug, props.decisionAtlas.throughSession);
   const atlasLabel = decisionAtlasFreshnessShortLabel({ freshness: props.decisionAtlas.freshness, reportThroughSession: props.decisionAtlas.throughSession });
-  const ready = props.incident.severity === "normal" && props.opsReadiness.summary.tone !== "red";
+  const atlasStale = props.decisionAtlas.state === "ready" && props.decisionAtlas.freshness === "stale";
+  const roster = summarizeChannelRuntimeRoster(props.channelControlPlane.view, props.channelWorkspace.release.rootSlugs);
+  const ready = props.incident.severity === "normal"
+    && props.opsReadiness.summary.tone === "green"
+    && data.status !== "err"
+    && props.decisionAtlas.state === "ready"
+    && !atlasStale;
   const changeSymbol = (next: string) => {
     setSelected(null);
     setSymbol(next);
@@ -154,8 +161,8 @@ export function MobilePerform({
       <div className="m2-scroll">
         <section className={`m2-decision-home ${ready ? "ready" : "attention"}`} aria-label="Decision Home summary">
           <header><span><small>DECISION HOME</small><b>{ready ? "READY FOR THE NEXT SESSION" : "CHECK BEFORE THE NEXT SESSION"}</b></span><em>{signedUsd(props.liveFund.dayPnl)} TODAY</em></header>
-          <p>{fleet.lead ? `Next review: ${fleet.lead.channel} · ${fleet.lead.disposition.toLowerCase()}.` : "No urgent channel action. Continue collecting evidence."}</p>
-          <div><span><small>TRADING</small><b>{props.opsReadiness.summary.tone === "red" ? "REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{data.status === "err" ? "REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{props.decisionAtlas.state === "ready" ? atlasLabel : "CHECKING"}</b></span></div>
+          <p><b>PAPER PLAN</b> {roster.paper} trading{roster.accounts != null ? ` · ${roster.accounts} accounts` : ""}. {fleet.lead ? `Next review: ${fleet.lead.channel} · ${fleet.lead.disposition.toLowerCase()}.` : "No urgent channel action."}</p>
+          <div><span><small>TRADING</small><b>{props.opsReadiness.summary.tone === "green" ? "READY" : "REVIEW"}</b></span><span><small>DATA</small><b>{data.status === "err" ? "REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{props.decisionAtlas.state === "ready" ? atlasLabel : "CHECKING"}</b></span></div>
         </section>
         <nav className="m2-market-switch" aria-label="Markets workspace">
           <button type="button" className={marketView === "chart" ? "on" : ""} onClick={() => onMarketViewChange("chart")} aria-pressed={marketView === "chart"}>CHART</button>

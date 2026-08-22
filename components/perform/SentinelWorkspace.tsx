@@ -4,6 +4,8 @@ import type { useSentinelDigest, ScanRow } from "@/hooks/useSentinelDigest";
 import { deriveSentinelReceiptStatus } from "@/lib/sentinel/receipt";
 import { deriveSentinelConfigurationFreshness } from "@/lib/sentinel/operatorPacket";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
+import type { ChannelControlPlaneOperatorView } from "@/lib/channels/channelControlPlaneOperatorView";
+import { summarizeChannelRuntimeRoster } from "@/lib/studio/channelRuntimeAuthority";
 
 type SentinelDigest = ReturnType<typeof useSentinelDigest>;
 
@@ -45,7 +47,7 @@ export function SentinelReceiptStrip({ sentinel, compact = false }: { sentinel: 
   </div>;
 }
 
-export function SentinelWorkspace({ sentinel, symbol, activeConfigurationHash }: { sentinel: SentinelDigest; symbol: string; activeConfigurationHash?: string | null }) {
+export function SentinelWorkspace({ sentinel, symbol, activeConfigurationHash, activeControlPlane, fallbackRootSlugs = [] }: { sentinel: SentinelDigest; symbol: string; activeConfigurationHash?: string | null; activeControlPlane?: ChannelControlPlaneOperatorView | null; fallbackRootSlugs?: readonly string[] }) {
   const { brief, scan, judge, operatorPacket, state, err } = sentinel;
   const deterministic = sentinel.interpretiveProvider === "none" || operatorPacket != null;
   const terrain = brief?.sentLevels?.[symbol];
@@ -57,6 +59,7 @@ export function SentinelWorkspace({ sentinel, symbol, activeConfigurationHash }:
     operatorPacket?.release.configurationSha256,
     activeConfigurationHash,
   );
+  const activePlan = summarizeChannelRuntimeRoster(activeControlPlane, fallbackRootSlugs);
   const packetSuperseded = configurationFreshness.state === "superseded";
   const nextAction = packetSuperseded
     ? "New paper settings are active. Hold them fixed for the next session and collect clean evidence; the older replay remains queued separately."
@@ -74,7 +77,7 @@ export function SentinelWorkspace({ sentinel, symbol, activeConfigurationHash }:
     <div className="sntw-simple-grid">
       <section><small>PLAN STATUS</small><b>{packetSuperseded ? "OLDER PLAN" : configurationFreshness.state === "current" ? "CURRENT" : receipt.tone === "green" ? "CURRENT" : "PARTIAL"}</b><p>{packetSuperseded ? "A newer receipt-bound configuration is active. This packet is retained as historical evidence." : operatorPacket ? `${operatorPacket.liveBook.closed} closed trades reconciled; ${operatorPacket.liveBook.open} remain open.` : receipt.detail}</p></section>
       <section><small>EXCEPTIONS</small><b>{findings.length || judge?.drift.length || 0} TO REVIEW</b><ul>{findings.slice(0, 3).map((finding) => <li key={finding.code}>{finding.title} · {plainFinding(finding.action)}</li>)}{!findings.length && judge?.drift.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul></section>
-      <section><small>{packetSuperseded ? "ACTIVE PLAN" : "NO OTHER CHANGES"}</small><b>{packetSuperseded ? "NEW SETTINGS · COLLECT CLEAN SESSION" : "KEEP ENTRY · EXIT · MANAGER · SIZE · ROSTER FIXED"}</b></section>
+      <section><small>ACTIVE PAPER PLAN</small><b>{activePlan.paper} TRADING · {activePlan.observing} RESEARCH ONLY</b><p>{activePlan.accounts != null ? `${activePlan.accounts} paper accounts` : "account routing checking"}{activePlan.shortHash ? ` · roster ${activePlan.shortHash}` : ""}</p></section>
     </div>
     <details className="sntw-technical"><summary><span><small>SUPPORTING EVIDENCE</small><b>Receipts, paths, levels, and deterministic scan</b></span><em>OPEN FOR DETAIL</em><i>▾</i></summary><div>
     <SentinelReceiptStrip sentinel={sentinel} />

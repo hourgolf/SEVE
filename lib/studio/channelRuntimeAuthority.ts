@@ -12,6 +12,40 @@ export interface ChannelRuntimeAuthority {
   fact: string;
 }
 
+export interface ChannelRuntimeRosterSummary {
+  state: "receipt-bound" | "fallback";
+  paper: number;
+  observing: number;
+  accounts: number | null;
+  shortHash: string | null;
+  paperSlugs: string[];
+}
+
+export function summarizeChannelRuntimeRoster(
+  view: ChannelControlPlaneOperatorView | null | undefined,
+  fallbackRootSlugs: readonly string[] = [],
+): ChannelRuntimeRosterSummary {
+  if (view?.state === "receipt-bound") {
+    const paperSpecs = view.specs.filter((spec) => spec.executionPosture === "paper");
+    return {
+      state: "receipt-bound",
+      paper: paperSpecs.length,
+      observing: view.specs.length - paperSpecs.length,
+      accounts: new Set(paperSpecs.map((spec) => spec.accountId)).size,
+      shortHash: view.manifestContentHash?.replace(/^sha256:/, "").slice(0, 8) ?? null,
+      paperSlugs: paperSpecs.map((spec) => spec.slug),
+    };
+  }
+  return {
+    state: "fallback",
+    paper: fallbackRootSlugs.length,
+    observing: 0,
+    accounts: null,
+    shortHash: null,
+    paperSlugs: [...fallbackRootSlugs],
+  };
+}
+
 /** The current receipt-bound manifest owns execution labels whenever it is available. */
 export function resolveChannelRuntimeAuthority(
   slug: string,
