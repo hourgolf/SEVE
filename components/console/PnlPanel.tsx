@@ -12,8 +12,8 @@ import { performanceCoverageCopy, summarizePerformanceIssue } from "@/lib/perfor
 
 const WINDOWS: { id: PnlWindow; label: string }[] = [
   { id: "today", label: "Today" },
-  { id: "week", label: "Week" },
-  { id: "month", label: "Month" },
+  { id: "week", label: "7D" },
+  { id: "month", label: "30D" },
   { id: "all", label: "All" },
 ];
 

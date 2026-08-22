@@ -31,7 +31,8 @@ assert(mobileChannel.indexOf("<DecisionAtlasPreviewCard") < mobileChannel.indexO
 assert(research.indexOf("<DecisionAtlasPreviewCard") < research.indexOf("<CurrentEvidenceCard"), "Research detail must lead with the decision");
 assert(research.indexOf("<CurrentEvidenceCard") > research.indexOf("<details className=\"srw-channel-analysis\""), "raw current evidence belongs behind disclosure");
 
-for (const surface of [dashboard, positions, review, ops, mobile]) assert.match(surface, /DecisionAtlasFleetPulse/);
+for (const surface of [dashboard, positions, ops, mobile]) assert.match(surface, /DecisionAtlasFleetPulse/);
+assert.doesNotMatch(review, /DecisionAtlasFleetPulse/, "actual session Review must not lead with a nightly research banner");
 assert.match(pulse, /purpose === "operations"/);
 assert.match(pulse, /purpose === "positions"/);
 for (const label of ["NIGHTLY RESEARCH · READ ONLY", "TESTS TO REVIEW", "ROSTER CALLS", "STILL COLLECTING"]) assert.match(pulse, new RegExp(label));

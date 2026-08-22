@@ -33,6 +33,8 @@ for (const presenter of ["EventTapeWorkspace", "AutopsyPanel", "PnlPanel", "Fore
 assert.doesNotMatch(component, /sectionScope|ALL PAPER ACCOUNTS/);
 assert.doesNotMatch(component, /READ ONLY · ZERO ORDER AUTHORITY/);
 assert.match(component, /Would-have paths cannot alter configuration, readiness, risk, lifecycle, or orders/);
+assert.doesNotMatch(component, /<DecisionAtlasFleetPulse/);
+assert.match(component, /trailing 7 days/);
 
 for (const hook of [
   "useDailyReports",
@@ -65,6 +67,8 @@ assert.match(pnlHook, /logical trade .* spans immutable account routes/);
 assert.match(pnlHook, /withheldPositionRows/);
 assert.doesNotMatch(pnlHook, /strategists!inner|strategists\.account_id/);
 assert.match(pnlPanel, /No fallback routing was used/);
+assert.match(pnlPanel, /id: "week", label: "7D"/);
+assert.match(pnlPanel, /id: "month", label: "30D"/);
 assert.match(performanceEvidence, /ACCOUNT TOTAL IS COMPLETE · CHANNEL BREAKDOWN IS PARTIAL/);
 assert.match(performanceEvidence, /older rows are omitted rather than guessed/);
 assert.match(pnlPanel, /summarizePerformanceIssue/);
@@ -82,6 +86,7 @@ assert.match(page, /activeRoom === "ops" \|\| activeRoom === "tape"/);
 assert.match(component, /todayAttribution=\{feed\.positionAttribution\}/);
 assert.match(mobileReview, /MOBILE_PERIODS/);
 assert.match(mobileReview, /reviewEvidence\.setPnlWindow/);
+assert.doesNotMatch(mobileReview, /purpose="review"/);
 assert.match(mobileReview, /ALL PAPER ACCOUNTS/);
 assert.match(shadowWorkspace, /scope=\{`all paper · \$\{lane === "vb"/);
 assert.match(shadowWorkspace, /DECISION ATLAS/);

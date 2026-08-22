@@ -44,7 +44,8 @@ check("mobile session exposes selected-account history without a second subscrip
   assert.match(source, /MOBILE_PERIODS/);
   assert.match(source, /reviewEvidence\.setPnlWindow/);
   assert.match(source, /reviewEvidence\.windowedPnl/);
-  assert.match(source, /rows withheld to keep trades whole/);
+  assert.match(source, /No fallback routing was used/);
+  assert.doesNotMatch(source, /purpose="review"/);
 });
 check("mobile gives Atlas a first-class label", () => assert.deepEqual(MOBILE_REVIEW_MODES.find((mode) => mode.id === "shadow"), { id: "shadow", label: "ATLAS", sub: "decisions" }));
 check("mobile Sentinel labels its all-paper-account scope", () => {
