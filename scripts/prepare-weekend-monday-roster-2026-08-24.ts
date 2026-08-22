@@ -242,7 +242,11 @@ function candidateSpec(input: {
       maxRiskUsd: Math.round(maxDebitUsd * 0.3) },
     executionPosture: "paper", validFrom: GENERATED_AT, validUntil: null,
     createdBy: `operator:${input.operatorId}`, createdAt: GENERATED_AT,
-    parentVersionId: null, status: "draft",
+    // New paper members must point at the exact paper-eligible research spec
+    // that qualifies their admission. The roster persistence boundary verifies
+    // this link against the current registry before it will store the bundle.
+    parentVersionId: `spec:research:${input.source.slug}:weekend-monday-v1`,
+    status: "draft",
   };
 }
 

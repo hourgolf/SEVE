@@ -83,6 +83,7 @@
     "channel-phenotype-study": "tsx scripts/channel-phenotype-study-2026-08-22.ts",
     "monday-roster-tournament": "tsx scripts/monday-roster-reconciliation-tournament-2026-08-22.ts",
     "prepare-weekend-monday-roster": "tsx scripts/prepare-weekend-monday-roster-2026-08-24.ts",
+    "activate-weekend-monday-roster": "tsx scripts/activate-weekend-monday-roster-2026-08-24.ts",
     "manager-pattern-scan": "tsx scripts/manager-pattern-scan.ts",
     "manager-pattern-scan-selftest": "tsx scripts/manager-pattern-scan.ts --selftest",
     "entry-atlas": "tsx scripts/entry-atlas.ts",
