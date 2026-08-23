@@ -50,7 +50,7 @@ export function validateReceiptBoundRc54Topology(
   const expectedBySlug = new Map<string, (typeof RC54_ROOTS)[number]>(
     RC54_ROOTS.map((root) => [root.slug, root] as const),
   );
-  const configuredAccountIds = new Set(RC54_ROOTS.map((root) => root.accountId));
+  const configuredAccountIds = new Set<string>(RC54_ROOTS.map((root) => root.accountId));
   const policyById = new Map(runtime.admissionPolicies.map((policy) =>
     [policy.id, policy] as const));
   if (policyById.size !== runtime.admissionPolicies.length
