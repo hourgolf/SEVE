@@ -18,7 +18,7 @@ export function ReviewSessionScorecard({ evidence }: { evidence: ReturnType<type
       <em>{model.scope.replaceAll("_", " ")}</em>
     </header>
     <div className="rvw-session-metrics">
-      <span><small>ACTUAL RESULT</small><b className={model.resultUsd != null && model.resultUsd >= 0 ? "pos" : "neg"}>{model.resultUsd == null ? "—" : signedUsd(model.resultUsd)}</b><em>{model.observations} {model.evidenceLabel} · {model.channelsTraded} channels</em></span>
+      <span><small>{model.resultLabel}</small><b className={model.resultUsd != null && model.resultUsd >= 0 ? "pos" : "neg"}>{model.resultUsd == null ? "—" : signedUsd(model.resultUsd)}</b><em>{model.observations} {model.evidenceLabel} · {model.channelsTraded} channels · excludes unstamped broker adjustments</em></span>
       <span><small>PROFITABLE OUTCOMES</small><b>{model.profitable} of {model.observations}</b><em>{model.observations ? `${Math.round((100 * model.profitable) / model.observations)}% finished positive` : "no closed outcomes"}</em></span>
       <span><small>OPPORTUNITY FOUND</small><b>{model.averageBestMovePct == null ? "—" : `+${model.averageBestMovePct}%`}</b><em>average best move while open</em></span>
       <span><small>EXIT CAPTURE</small><b className={model.retainedPct != null && model.retainedPct >= 50 ? "pos" : "neg"}>{model.retainedPct == null ? "—" : `${model.retainedPct}% kept`}</b><em>{model.retainedPct == null ? "no comparable peak evidence" : `${100 - model.retainedPct}% of the available move was given back`}</em></span>

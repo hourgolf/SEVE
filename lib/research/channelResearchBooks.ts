@@ -118,6 +118,12 @@ const EXPECTED_SHADOW = Object.freeze([
   "vb-macd-state",
   "vb-ribbon-cross-iwm",
   "vb-ribbon-cross-qqq",
+  "orb-trend-rider",
+  "vb-curl-reversal-iwm",
+  "vb-curl-reversal-qqq",
+  "vb-gap-drift-qqq",
+  "vb-or-fail-iwm",
+  "vb-rsi-revert-iwm",
   "vb-vwap-revert-qqq",
 ] as const);
 const ARCHIVE = Object.freeze([
@@ -322,7 +328,7 @@ export function buildChannelResearchBooks(input: {
     archiveChannels: [...books.archive],
     classificationComplete: missingExpectedRoots.length === 0 && unexpectedSealedRoots.length === 0 && duplicates.length === 0,
     auditMessage: missingExpectedRoots.length || unexpectedSealedRoots.length || duplicates.length
-      ? `${missingExpectedRoots.length} expected root(s) missing · ${unexpectedSealedRoots.length} unexpected root(s) · ${duplicates.length} duplicate assignment(s)`
+      ? `${missingExpectedRoots.length} inactive research registration(s) · ${unexpectedSealedRoots.length} active root(s) without research registration · ${duplicates.length} duplicate assignment(s)`
       : "All sealed roots are assigned exactly once.",
   };
   for (const [index, decision] of inbox.entries()) {

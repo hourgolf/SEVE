@@ -3,7 +3,7 @@
 import "@/app/decision-atlas.css";
 import type { ChannelLineupStory } from "@/lib/research/channelLineup";
 
-export type ChannelPosture = "trading" | "observing" | "retired";
+export type ChannelPosture = "trading" | "observing" | "shadowing" | "researching" | "paused" | "retired" | "unverified";
 
 export function EntryFinishMap({ stories, selectedSlug, postureBySlug = {}, scopeLabel = "COMPARABLE EVIDENCE", emptyMessage = "No mature best-move and finish pairs are available yet.", onSelect }: {
   stories: readonly ChannelLineupStory[];
@@ -35,7 +35,9 @@ export function EntryFinishMap({ stories, selectedSlug, postureBySlug = {}, scop
         const mature = story.maturity === "DECISION READY";
         const radius = 4 + Math.min(10, Math.sqrt(story.sessions) * 1.6);
         const posture = postureBySlug[story.channel] ?? "observing";
-        const postureLabel = posture === "trading" ? "active" : posture === "observing" ? "shadowing" : "retired";
+        const postureLabel = posture === "trading" ? "trading"
+          : posture === "observing" ? "observing"
+            : posture;
         const selected = selectedSlug === story.channel;
         return <g key={story.channel} className={`map-point ${posture}${selectedSlug === story.channel ? " selected" : ""}${mature ? " mature" : " early"}`}
           role="button" tabIndex={0} aria-label={`${story.channel}: ${postureLabel}; ${story.group}; ${story.sessions} sessions`}
@@ -46,6 +48,6 @@ export function EntryFinishMap({ stories, selectedSlug, postureBySlug = {}, scop
         </g>;
       })}
     </svg> : <div className="atlas-empty">{emptyMessage}</div>}
-    <footer><span><i className="trading" /> active</span><span><i className="observing" /> shadowing</span><span><i className="retired" /> retired</span><em>Bubble size = independent sessions · faded = below evidence floor</em></footer>
+    <footer><span><i className="trading" /> trading</span><span><i className="observing" /> observing</span><span><i className="unverified" /> unverified</span><em>Research book separately identifies shadowing, researching, and paused channels · bubble size = independent sessions</em></footer>
   </section>;
 }

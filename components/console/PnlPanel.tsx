@@ -9,6 +9,7 @@ import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
 import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
+import type { SessionNavReconciliation } from "@/lib/desk/sessionNavReconciliation";
 
 const WINDOWS: { id: PnlWindow; label: string }[] = [
   { id: "today", label: "Today" },
@@ -30,7 +31,7 @@ export function PnlPanel({
 }: {
   strategists: StrategistState[];
   pnlByStrategist: Record<string, ChannelPnl>;
-  fundPnl: { nav: number; dayPnl: number };
+  fundPnl: { nav: number; dayPnl: number; reconciliation?: SessionNavReconciliation | null };
   equityCurve: { ts: string; equity: number }[];
   /** Page-owned Review state and evidence. The panel renders without subscribing. */
   window: PnlWindow;
@@ -109,6 +110,22 @@ export function PnlPanel({
             ))}
           </div>
         </div>
+        {isToday && fundPnl.reconciliation?.state === "complete" && (
+          <div className="pnl-reconciliation" role="status">
+            <b>EXACT RECONCILIATION</b>
+            <span>broker NAV Δ {fundPnl.reconciliation.brokerNavDeltaExact! < 0 ? "−" : "+"}${Math.abs(fundPnl.reconciliation.brokerNavDeltaExact!).toFixed(2)}</span>
+            <span>gross logical-trade attribution {fundPnl.reconciliation.logicalTradeAttributionExact! < 0 ? "−" : "+"}${Math.abs(fundPnl.reconciliation.logicalTradeAttributionExact!).toFixed(2)}</span>
+            <span>unattributed broker adjustment {fundPnl.reconciliation.brokerAdjustmentExact! < 0 ? "−" : "+"}${Math.abs(fundPnl.reconciliation.brokerAdjustmentExact!).toFixed(2)}</span>
+            <small>Display rounding occurs only after the exact sources reconcile. The adjustment is not labeled as a fee without a broker activity receipt.</small>
+          </div>
+        )}
+        {isToday && fundPnl.reconciliation && fundPnl.reconciliation.state !== "complete" && (
+          <div className="review-evidence-blocked" role="alert">
+            <b>Exact NAV reconciliation pending</b>
+            {fundPnl.reconciliation.issues.map((issue) => <span key={issue}>{issue}</span>)}
+            <small>The session headline may use the latest broker snapshot, but no exact cross-layer residual is asserted.</small>
+          </div>
+        )}
         {(blocked || partial) && (
           <div className="review-evidence-blocked" role="alert">
             <b>{isToday

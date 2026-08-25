@@ -16,6 +16,7 @@ const report: DailyReport = {
 
 const model = buildSessionReviewModel(report);
 assert.equal(model.resultUsd, -518);
+assert.equal(model.resultLabel, "GROSS POSITION-ROW ATTRIBUTION");
 assert.equal(model.profitable, 3);
 assert.equal(model.evidenceLabel, "legacy position rows");
 assert.equal(model.averageBestMovePct, 27);
@@ -24,6 +25,12 @@ assert.equal(model.nextAction, "Compare one exit alternative on the same opportu
 assert.match(model.limitation ?? "", /predates logical-trade evidence/i);
 assert.equal(shouldAnchorHistoricalResults("2026-08-07", new Date("2026-08-08T17:00:00Z")), true);
 assert.equal(shouldAnchorHistoricalResults("2026-08-08", new Date("2026-08-08T17:00:00Z")), false);
+
+const logicalModel = buildSessionReviewModel({
+  ...report,
+  digest: { ...report.digest, evidence: { ...report.digest.evidence!, unit: "logical_trade", reconciliation: "logical_trade_v1" } },
+});
+assert.equal(logicalModel.resultLabel, "GROSS LOGICAL-TRADE ATTRIBUTION");
 
 const technicalAction = buildSessionReviewModel({
   ...report,

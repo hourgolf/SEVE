@@ -83,6 +83,7 @@ assert.match(mobileReview, /ALL PAPER ACCOUNTS/);
 assert.match(shadowWorkspace, /scope=\{`all paper · \$\{lane === "vb"/);
 assert.match(shadowWorkspace, /DECISION ATLAS/);
 assert.match(shadowWorkspace, /CHANNEL DECISIONS · VIRTUAL PATHS/);
+assert.doesNotMatch(shadowWorkspace, /lifecycle === "dark-evidence" \? "observing" : "retired"/);
 assert.match(sentinelWorkspace, /scope="all paper accounts"/);
 assert.match(sentinelWorkspace, /era="next-session packet"/);
 assert.match(sentinelHook, /packet \? operatorPacketToJudge\(packet\) :/);

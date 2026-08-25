@@ -9,7 +9,8 @@ const roots = [
   "breakout", "pb-ride-itm", "breakout-alt-v3-itm", "grind-v3", "momo-shape-2", "orb-ustop-ctl",
   "qqq-thrust-trail-wd", "breakout-alt-v3-iwm", "breakout-qqq", "grind-smart-entries", "grind-v3-2",
   "orb-qqq-trail", "pb-ride", "vb-gap-drift", "vb-level-break", "vb-macd-state", "vb-ribbon-cross-iwm",
-  "vb-ribbon-cross-qqq", "vb-vwap-revert-qqq",
+  "vb-ribbon-cross-qqq", "vb-vwap-revert-qqq", "orb-trend-rider", "vb-curl-reversal-iwm",
+  "vb-curl-reversal-qqq", "vb-gap-drift-qqq", "vb-or-fail-iwm", "vb-rsi-revert-iwm",
 ];
 const specs = roots.map((slug) => ({ slug, status: "active", executionPosture: ["pb-ride", "vb-ribbon-cross-qqq", "vb-vwap-revert-qqq"].includes(slug) ? "observe-only" : "paper" })) as ChannelSpecVersion[];
 const brief = (channel: string) => ({
@@ -39,13 +40,16 @@ const lifecycle = {
 const first = buildChannelResearchBooks({ briefs, experiments, lifecycle, activeChannelSpecs: specs });
 const second = buildChannelResearchBooks({ briefs, experiments, lifecycle, activeChannelSpecs: [...specs].reverse() });
 assert.deepEqual(first.summary, {
-  sealedRoots: 19, provisionalCore: 2, liveExperiments: 5, shadowInvestigations: 12,
+  sealedRoots: 25, provisionalCore: 2, liveExperiments: 5, shadowInvestigations: 18,
   archivedCollectors: 5, decisionsForOperator: 3,
 });
 assert.equal(first.audit.classificationComplete, true);
 assert.equal(first.channels["pb-ride"].runtimePosture, "observe-only");
 assert.equal(first.channels["power"].book, "archive");
 assert.equal(first.channels["orb-ustop-ctl"].book, "experiment");
+for (const slug of ["orb-trend-rider", "vb-curl-reversal-iwm", "vb-curl-reversal-qqq", "vb-gap-drift-qqq", "vb-or-fail-iwm", "vb-rsi-revert-iwm"]) {
+  assert.equal(first.channels[slug].book, "shadow", `${slug} must have an explicit non-authoritative research assignment`);
+}
 assert.ok(Object.values(first.channels).every((row) => row.metrics.length <= 4));
 assert.ok(Object.values(first.channels).every((row) => row.runtimeAuthority === false && row.proposalOnly));
 assert.equal(first.decisionInbox.length, 3);

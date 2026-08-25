@@ -104,6 +104,9 @@ const authorizedCatchupIds = loadAuthorizedCatchup();
 if (STAMP_PROVENANCE && (!SESSION || !VIRTUAL_TRADES_ONLY || authorizedCatchupIds)) {
   throw new Error("forward provenance requires a bounded session, --virtual-trades-only, and no historical catch-up manifest");
 }
+if (SESSION && VIRTUAL_TRADES_ONLY && !STAMP_PROVENANCE && !authorizedCatchupIds) {
+  throw new Error("bounded session rebuilds require --stamp-provenance; mutable current-policy lookup is not a historical audit");
+}
 
 interface ShadowRow {
   signalId: string; slug: string; occ: string; createdAt: string; blocked: string;
