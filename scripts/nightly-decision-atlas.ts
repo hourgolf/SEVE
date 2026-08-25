@@ -19,6 +19,7 @@ if (envFile && !existsSync(envFile)) throw new Error(`environment file not found
 const virtualCatchupFile = arg("virtual-catchup-file");
 const virtualCatchupManifest = arg("virtual-catchup-manifest");
 const shadowCatchupManifest = arg("shadow-catchup-manifest");
+const shadowVerificationFile = arg("shadow-verification-file");
 if (Boolean(virtualCatchupFile) !== Boolean(virtualCatchupManifest)) {
   throw new Error("--virtual-catchup-file and --virtual-catchup-manifest must be supplied together");
 }
@@ -63,5 +64,6 @@ run("scripts/nightly-channel-learning.ts", ["--atlas-file", resolve(atlasDir, "a
   "--snapshot-file", resolve(atlasDir, "snapshot.json"), "--briefs-file", resolve(briefsDir, "briefs.json"),
   "--trail-file", resolve(trailDir, "frontier.json"),
   "--out-dir", learningDir,
-  ...(shadowCatchupManifest ? ["--shadow-catchup-manifest", resolve(shadowCatchupManifest)] : [])]);
+  ...(shadowCatchupManifest ? ["--shadow-catchup-manifest", resolve(shadowCatchupManifest)] : []),
+  ...(shadowVerificationFile ? ["--shadow-verification-file", resolve(shadowVerificationFile)] : [])]);
 console.log(`nightly-decision-atlas: PASS · local artifacts only · ${outputRoot}`);

@@ -21,6 +21,7 @@ const throughSession = arg("through", "9999-12-31")!;
 interface LogicalTrade {
   id: string; rootPositionId: string; channelSlug: string; openedAt: string;
   quantity: number; realizedPnlUsd: number | null; occSymbol: string | null;
+  configuration?: { key?: string | null; channelSpecVersionId?: string | null };
 }
 interface ManagerPath {
   logicalTradeId: string; positionId: string; managerId: string; status: string;
@@ -31,7 +32,11 @@ interface PositionRow {
   occ_symbol: string | null;
 }
 interface LedgerArtifact { ledger: { logicalTrades: LogicalTrade[]; managerCounterfactualPaths: ManagerPath[] } }
-interface SnapshotArtifact { positions?: PositionRow[] }
+interface SnapshotArtifact {
+  positions?: PositionRow[];
+  activeChannelSpecs?: Array<{ id: string; slug: string }>;
+  activeChannelSpecDatabaseIdsByVersionKey?: Record<string, string>;
+}
 
 const MANAGERS = [
   "LOCK20/30", "LOCK30/30", "LOCK50/30", "BANK20/RUN50",
@@ -68,7 +73,12 @@ function etClock(iso: string): { session: string; minute: number } {
   return { session: `${get("year")}-${String(get("month")).padStart(2, "0")}-${String(get("day")).padStart(2, "0")}`, minute: get("hour") * 60 + get("minute") };
 }
 
-interface PairedRow { trade: LogicalTrade; session: string; manager: ManagerId; modeled: number; actual: number; delta: number; terminal: boolean }
+interface PairedRow { trade: LogicalTrade; session: string; configurationEra: string; manager: ManagerId; modeled: number; actual: number; delta: number; terminal: boolean }
+
+export const managerCohortEra = (trade: Pick<LogicalTrade, "configuration">): string =>
+  trade.configuration?.channelSpecVersionId
+    ? `channel-spec:${trade.configuration.channelSpecVersionId}`
+    : trade.configuration?.key ? `historical:${trade.configuration.key}` : "historical:unstamped";
 
 export function selectLogicalManagerPaths(trade: Pick<LogicalTrade, "rootPositionId">,
   paths: readonly ManagerPath[]): readonly ManagerPath[] {
@@ -153,6 +163,8 @@ function main(): void {
   const ledgerText = readFileSync(ledgerFile, "utf8"); const snapshotText = readFileSync(snapshotFile, "utf8");
   const ledger = (JSON.parse(ledgerText) as LedgerArtifact).ledger;
   const snapshot = JSON.parse(snapshotText) as SnapshotArtifact;
+  const currentEraByChannel = new Map((snapshot.activeChannelSpecs ?? []).map((spec) => [spec.slug,
+    `channel-spec:${snapshot.activeChannelSpecDatabaseIdsByVersionKey?.[spec.id] ?? spec.id}`]));
   const tradeById = new Map(ledger.logicalTrades.map((trade) => [trade.id, trade]));
   const rootById = indexRootPositions(snapshot);
   const grouped = new Map<string, ManagerPath[]>();
@@ -172,24 +184,41 @@ function main(): void {
     // adding the continuation observer would double-count the runner.
     const scoredPaths = selectLogicalManagerPaths(trade, paths);
     const modeled = sum(scoredPaths.map((row) => row.counterfactualPnlUsd ?? 0));
-    paired.push({ trade, session: etClock(trade.openedAt).session, manager: paths[0].managerId as ManagerId,
+    paired.push({ trade, session: etClock(trade.openedAt).session, configurationEra: managerCohortEra(trade),
+      manager: paths[0].managerId as ManagerId,
       modeled, actual: trade.realizedPnlUsd!, delta: round(modeled - trade.realizedPnlUsd!),
       terminal: scoredPaths.every((row) => row.status === "terminal" && !row.censorCode) });
   }
-  const managerScan = [...new Set(paired.map((row) => row.trade.channelSlug))].sort().flatMap((channel) =>
-    MANAGERS.map((manager) => {
-      const rows = paired.filter((row) => row.trade.channelSlug === channel && row.manager === manager);
-      return { channel, manager, ...managerSummary(rows) };
-    }).filter((row) => row.logicalTrades > 0));
+  const managerCohorts = [...new Set(paired.map((row) => `${row.trade.channelSlug}\u0000${row.configurationEra}`))].sort();
+  const managerScan = managerCohorts.flatMap((cohort) => {
+    const [channel, configurationEra] = cohort.split("\u0000");
+    return MANAGERS.map((manager) => {
+      const rows = paired.filter((row) => row.trade.channelSlug === channel
+        && row.configurationEra === configurationEra && row.manager === manager);
+      const posture = currentEraByChannel.get(channel) === configurationEra
+        ? "exact_current" as const : configurationEra === "historical:unstamped"
+          ? "historical_unstamped" as const : "versioned_historical" as const;
+      return { channel, configurationEra, posture, manager, ...managerSummary(rows) };
+    }).filter((row) => row.logicalTrades > 0);
+  });
   const recommendations = managerScan.filter((row) => row.pairedTrades >= 10 && row.sessions >= 5
+      && row.posture === "exact_current"
+      && (row.medianBenefitUsd ?? 0) > 0 && (row.improvementFrequency ?? 0) >= .6
+      && row.modeledPnlUsd > row.actualComparatorPnlUsd
+      && row.chronologicalStable === true && row.leaveSessionOutStable === true)
+    .sort((left, right) => (right.medianBenefitUsd ?? 0) - (left.medianBenefitUsd ?? 0));
+  const historicalLeads = managerScan.filter((row) => row.posture !== "exact_current"
+      && row.pairedTrades >= 10 && row.sessions >= 5
       && (row.medianBenefitUsd ?? 0) > 0 && (row.improvementFrequency ?? 0) >= .6
       && row.modeledPnlUsd > row.actualComparatorPnlUsd
       && row.chronologicalStable === true && row.leaveSessionOutStable === true)
     .sort((left, right) => (right.medianBenefitUsd ?? 0) - (left.medianBenefitUsd ?? 0));
 
-  const orbTrades = ledger.logicalTrades.filter((trade) => trade.channelSlug === "orb-ustop-ctl" && trade.realizedPnlUsd != null)
+  const orbTradesAll = ledger.logicalTrades.filter((trade) => trade.channelSlug === "orb-ustop-ctl" && trade.realizedPnlUsd != null)
     .filter((trade) => { const session = etClock(trade.openedAt).session; return session >= fromSession && session <= throughSession; })
     .sort((left, right) => left.openedAt.localeCompare(right.openedAt));
+  const currentOrbEra = currentEraByChannel.get("orb-ustop-ctl") ?? null;
+  const orbTrades = currentOrbEra ? orbTradesAll.filter((trade) => managerCohortEra(trade) === currentOrbEra) : [];
   const ordinals = new Map<string, number>();
   const orbRows = orbTrades.map((trade) => {
     const session = etClock(trade.openedAt).session; const ordinal = (ordinals.get(session) ?? 0) + 1; ordinals.set(session, ordinal);
@@ -219,7 +248,9 @@ function main(): void {
       bestObservedManager: managerResults[0] ?? null, managerResults };
   });
   const result = { schemaVersion: 1, generatedAt: new Date().toISOString(), fromSession, throughSession,
-    managers: MANAGERS, managerScan, recommendations,
+    managers: MANAGERS, managerScan, recommendations, historicalLeads,
+    cohortBoundary: { currentConfigurationOnlyForRecommendations: true,
+      currentOrbEra, historicalOrbTradesExcluded: orbTradesAll.length - orbTrades.length },
     orb: { logicalTrades: orbRows.length, sessions: new Set(orbRows.map((row) => row.session)).size, cohorts: orbCohorts },
     inputs: { ledgerSha256: sha256(ledgerText), snapshotSha256: sha256(snapshotText) },
     productionWrites: 0, orderAuthority: false, configurationAuthority: false };
@@ -236,6 +267,7 @@ function main(): void {
     "| Channel | Manager | Paths / sessions | Typical lift | Beat native | Modeled vs actual |",
     "|---|---|---:|---:|---:|---:|",
     ...recommendations.slice(0, 30).map((row) => `| ${row.channel} | ${row.manager} | ${row.pairedTrades} / ${row.sessions}s | $${row.medianBenefitUsd} | ${Math.round((row.improvementFrequency ?? 0) * 100)}% | $${row.modeledPnlUsd} vs $${row.actualComparatorPnlUsd} |`),
+    "", "Historical cross-era leads are retained in `scan.json` as hypotheses and cannot enter this recommendation table.",
     "", "Opportunity found means at least one preregistered fixed or bank/runner observer finished positive. It measures whether an entry offered monetizable movement, not whether any one manager is approved.", "",
     "Production writes: 0. No order or configuration authority.", "",
   ];
@@ -257,5 +289,8 @@ if (process.argv.includes("--selftest")) {
     { id: "root", runner_of: null, entry_features: { aware: "clean" }, occ_symbol: "SPY260817C00600000" },
     { id: "runner", runner_of: "root", entry_features: null, occ_symbol: "SPY260817C00600000" },
   ] }).size, 1);
+  assert.notEqual(managerCohortEra({ configuration: { channelSpecVersionId: "spec-a" } }),
+    managerCohortEra({ configuration: { channelSpecVersionId: "spec-b" } }),
+    "manager scans must not pool incompatible channel specifications");
   console.log("manager-pattern-scan-selftest: PASS");
 } else main();

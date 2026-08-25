@@ -429,7 +429,31 @@ export function adaptDecisionAtlasSnapshot(input: {
   generatedAt: string;
   throughSession: string;
 }): AtlasInput {
-  const { snapshot } = input;
+  const through = (at: string | null | undefined): boolean => !!at && etDateOf(at) <= input.throughSession;
+  const boundedCandidates = (input.snapshot.vbCandidateReceipts ?? [])
+    .filter((row) => row.session_date_et <= input.throughSession && through(row.source_bar_at));
+  const boundedCandidateIds = new Set(boundedCandidates.map((row) => row.id));
+  // Snapshot replays are allowed to contain later observations, but a declared
+  // through-session is an evidence boundary, not a label. Scope every dated
+  // source here as well as in live SELECTs so a historical rerun cannot look
+  // ahead merely because its input snapshot was collected later.
+  const snapshot: DecisionAtlasSourceSnapshot = {
+    ...input.snapshot,
+    ledger: { ...input.snapshot.ledger, logicalTrades: input.snapshot.ledger.logicalTrades
+      .filter((row) => through(row.openedAt)) },
+    positions: (input.snapshot.positions ?? []).filter((row) => through(row.opened_at)),
+    signals: input.snapshot.signals.filter((row) => through(row.created_at)),
+    executionObservations: input.snapshot.executionObservations.filter((row) => through(row.event_at)),
+    virtualTrades: input.snapshot.virtualTrades.filter((row) => through(row.signal_at)),
+    managerRuns: input.snapshot.managerRuns.filter((row) => through(row.entry_at)),
+    equitySnapshots: input.snapshot.equitySnapshots.filter((row) => through(row.captured_at)),
+    workerRuns: (input.snapshot.workerRuns ?? []).filter((row) => through(row.started_at)),
+    vbCandidateReceipts: boundedCandidates,
+    vbExactPathReceipts: (input.snapshot.vbExactPathReceipts ?? [])
+      .filter((row) => boundedCandidateIds.has(row.candidate_id)),
+    vbExactManagerPathReceipts: (input.snapshot.vbExactManagerPathReceipts ?? [])
+      .filter((row) => boundedCandidateIds.has(row.candidate_id)),
+  };
   const strategistById = new Map(snapshot.strategists.map((row) => [row.id, row]));
   const specBySlug = new Map(snapshot.activeChannelSpecs.map((spec) => [spec.slug, spec]));
   const currentChannelSpecIdBySlug = new Map(snapshot.activeChannelSpecs.flatMap((spec) => {
@@ -467,6 +491,11 @@ export function adaptDecisionAtlasSnapshot(input: {
         : signalId ? `signal:${signalId}` : `execution:${row.trace_id}`;
     if (signalId) logicalBySignal.set(signalId, logical);
     executionByLogical.set(logical, [...(executionByLogical.get(logical) ?? []), row]);
+  }
+  for (const signal of snapshot.signals) {
+    if (logicalBySignal.has(signal.id)) continue;
+    const opportunityId = text(object(signal.rationale)?.opportunity_id);
+    if (opportunityId) logicalBySignal.set(signal.id, `opportunity:${opportunityId}`);
   }
   const factsByLogical = new Map([...executionByLogical].map(([id, rows]) => [id, executionFacts(rows)]));
   const opportunities: AtlasOpportunity[] = [];

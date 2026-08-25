@@ -129,10 +129,15 @@ jobs:
       - name: Build nightly Decision Atlas
         shell: bash
         run: |
-          npm run nightly-decision-atlas -- \
+          args=( \
             --through "$SESSION_DATE_ET" \
             --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET" \
-            --shadow-catchup-manifest data/gate-shadow-catchup-manifest.json
+            --shadow-catchup-manifest data/gate-shadow-catchup-manifest.json \
+          )
+          if [[ -f data/gate-shadow-verification.json ]]; then
+            args+=(--shadow-verification-file data/gate-shadow-verification.json)
+          fi
+          npm run nightly-decision-atlas -- "${args[@]}"
       - name: Scan manager and entry patterns by logical trade
         shell: bash
         run: |
@@ -142,15 +147,6 @@ jobs:
             --from 2026-07-14 \
             --through "$SESSION_DATE_ET" \
             --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET/manager-patterns"
-      - name: Publish concise Atlas briefs for the dashboard
-        if: vars.DECISION_ATLAS_DASHBOARD_PUBLISH == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
-        shell: bash
-        run: |
-          npm run publish-channel-decision-briefs -- \
-            --publish \
-            --expected-through "$SESSION_DATE_ET" \
-            --briefs-file "data/decision-atlas/runs/$SESSION_DATE_ET/learning/dashboard-briefs.json" \
-            --receipt-file "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/publication-receipt.json"
       - name: Verify Priority A experiment baselines
         id: priority-a-readiness
         continue-on-error: true
@@ -160,19 +156,41 @@ jobs:
             --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET/priority-a-readiness"
       - name: Build deterministic Sentinel operator packet
         shell: bash
-        env:
-          DRY_RUN_INPUT: ${{ inputs.dry_run }}
-          EVENT_NAME: ${{ github.event_name }}
         run: |
-          args=(
-            --session "$SESSION_DATE_ET"
-            --freeze "data/dark-candidate-freezes/$SESSION_DATE_ET/freeze.json"
+          npm run deterministic-sentinel:hosted -- \
+            --session "$SESSION_DATE_ET" \
+            --freeze "data/dark-candidate-freezes/$SESSION_DATE_ET/freeze.json" \
             --out "data/sentinel-packets/$SESSION_DATE_ET.json"
-          )
-          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$DRY_RUN_INPUT" != "true" ]]; then
-            args+=(--publish)
+      - name: Verify current publication eligibility
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.shadow-rebuild.outcome }}" != "success" ]]; then
+            echo "Legacy shadow rebuild or independent verifier failed; current research publication is blocked." >&2
+            exit 1
           fi
-          npm run deterministic-sentinel:hosted -- "${args[@]}"
+          if [[ "${{ steps.exact-learning.outcome }}" != "success" ]]; then
+            echo "Exact T+1 learning failed; current research publication is blocked." >&2
+            exit 1
+          fi
+      - name: Publish concise Atlas briefs for the dashboard
+        if: vars.DECISION_ATLAS_DASHBOARD_PUBLISH == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
+        shell: bash
+        run: |
+          npm run publish-channel-decision-briefs -- \
+            --publish \
+            --expected-through "$SESSION_DATE_ET" \
+            --briefs-file "data/decision-atlas/runs/$SESSION_DATE_ET/learning/dashboard-briefs.json" \
+            --receipt-file "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/publication-receipt.json"
+      - name: Publish deterministic Sentinel operator packet
+        if: github.event_name != 'workflow_dispatch' || inputs.dry_run != true
+        shell: bash
+        run: |
+          npm run deterministic-sentinel:hosted -- \
+            --session "$SESSION_DATE_ET" \
+            --freeze "data/dark-candidate-freezes/$SESSION_DATE_ET/freeze.json" \
+            --out "data/sentinel-packets/$SESSION_DATE_ET.json" \
+            --publish
       - name: Freeze artifact checksums
         shell: bash
         run: |
@@ -239,15 +257,3 @@ jobs:
           # mismatch report survive for exact, manifest-bound recovery.
           if-no-files-found: warn
           retention-days: 30
-      - name: Enforce legacy shadow integrity after capture
-        if: always() && steps.shadow-rebuild.outcome != 'success'
-        shell: bash
-        run: |
-          echo "Legacy shadow rebuild or verifier failed; exact capture was allowed to continue and diagnostics were preserved." >&2
-          exit 1
-      - name: Enforce exact-learning integrity after Atlas publication
-        if: always() && steps.exact-learning.outcome != 'success'
-        shell: bash
-        run: |
-          echo "Exact T+1 learning failed; core Atlas, briefs, council, Sentinel, and diagnostics were still allowed to publish." >&2
-          exit 1

@@ -9,7 +9,8 @@ import type { ChannelDecisionBriefBundle } from "../lib/research/channelDecision
 import { buildChannelExperimentPacket, renderChannelExperimentPacket } from "../lib/research/channelExperimentLifecycle";
 import type { DecisionAtlas } from "../lib/research/decisionAtlas";
 import { adaptDecisionAtlasSnapshot, type DecisionAtlasSourceSnapshot } from "../lib/research/decisionAtlasAdapter";
-import { buildEvidenceReconciliation, renderEvidenceReconciliation } from "../lib/research/evidenceReconciliation";
+import { buildEvidenceReconciliation, renderEvidenceReconciliation,
+  type IndependentShadowVerification } from "../lib/research/evidenceReconciliation";
 import { buildExecutionCapacityReadiness, renderExecutionCapacityReadiness } from "../lib/research/executionCapacityReadiness";
 import { buildExecutionResilienceReport, renderExecutionResilienceReport } from "../lib/research/executionResilience";
 import { buildPortfolioCapacityDecisionPacket, renderPortfolioCapacityDecisionPacket } from "../lib/research/portfolioCapacityDecision";
@@ -30,6 +31,7 @@ const briefsFile = resolve(arg("briefs-file", "data/decision-atlas/latest/briefs
 const trailFile = resolve(arg("trail-file", "data/decision-atlas/latest/trails/frontier.json"));
 const outputDir = resolve(arg("out-dir", "data/decision-atlas/latest/learning"));
 const catchupManifestFile = arg("shadow-catchup-manifest", "");
+const shadowVerificationFile = arg("shadow-verification-file", "");
 for (const file of [atlasFile, snapshotFile, briefsFile, trailFile]) {
   if (!existsSync(file)) throw new Error(`required frozen artifact not found: ${file}`);
 }
@@ -44,12 +46,18 @@ const snapshot = JSON.parse(source.snapshot) as DecisionAtlasSourceSnapshot;
 const briefs = JSON.parse(source.briefs) as ChannelDecisionBriefBundle;
 const trails = JSON.parse(source.trails) as ChannelTrailFrontierBook;
 const catchupManifests = catchupManifestFile ? [JSON.parse(readFileSync(resolve(catchupManifestFile), "utf8")) as GateShadowCatchupManifest] : [];
+if (shadowVerificationFile && !existsSync(resolve(shadowVerificationFile))) {
+  throw new Error(`independent shadow verification not found: ${resolve(shadowVerificationFile)}`);
+}
+const independentShadowVerifications = shadowVerificationFile
+  ? [JSON.parse(readFileSync(resolve(shadowVerificationFile), "utf8")) as IndependentShadowVerification] : [];
 if (briefs.throughSession !== atlas.throughSession) {
   throw new Error(`briefs through ${briefs.throughSession} do not match Atlas through ${atlas.throughSession}`);
 }
 const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt: atlas.generatedAt,
   throughSession: atlas.throughSession });
-const evidence = buildEvidenceReconciliation({ atlas, snapshot, opportunities: normalized.opportunities, catchupManifests });
+const evidence = buildEvidenceReconciliation({ atlas, snapshot, opportunities: normalized.opportunities,
+  catchupManifests, independentShadowVerifications });
 const experiments = buildChannelExperimentPacket(briefs, normalized.opportunities,
   normalized.managerPaths);
 const nextSevenActions = buildNextSevenActionProgram({ briefs, experiments });
@@ -57,7 +65,8 @@ const executionCapacity = buildExecutionCapacityReadiness({ atlas, briefs, snaps
 const executionResilience = buildExecutionResilienceReport({ snapshot, generatedAt: atlas.generatedAt,
   throughSession: atlas.throughSession });
 const portfolioCapacity = buildPortfolioCapacityDecisionPacket({ atlas, briefs,
-  opportunities: normalized.opportunities, accountBudgets: normalized.accountBudgets });
+  opportunities: normalized.opportunities, accountBudgets: normalized.accountBudgets,
+  evidenceStates: Object.fromEntries(Object.entries(evidence.channels).map(([channel, row]) => [channel, row.state])) });
 const lifecycle = buildChannelLifecycleDecisionPacket({ atlas, briefs, experiments,
   capacity: portfolioCapacity, execution: executionResilience });
 const researchBooks = buildChannelResearchBooks({ briefs, experiments, lifecycle,
@@ -67,7 +76,7 @@ const operatorPacket = buildOperatorExperimentPacket({ briefs, experiments, life
 const hash = (value: unknown): string => `sha256:${createHash("sha256")
   .update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex")}`;
 const headline = evidence.state === "recovery_proposed"
-  ? `Repair ${evidence.summary.missingVirtualRows} missing virtual path${evidence.summary.missingVirtualRows === 1 ? "" : "s"} before scoring new decisions.`
+  ? `Repair ${evidence.summary.virtualRowsNeedingRepair} independently identified virtual path${evidence.summary.virtualRowsNeedingRepair === 1 ? "" : "s"} before scoring new decisions.`
   : executionResilience.state === "block" || executionCapacity.execution.state === "block"
     ? "Repair execution trace continuity before preparing sizing changes."
     : `${experiments.summary.preregistered} channel experiment${experiments.summary.preregistered === 1 ? " is" : "s are"} ready for operator review.`;
@@ -122,7 +131,9 @@ const receipt = {
   throughSession: atlas.throughSession,
   inputs: { atlasSha256: hash(source.atlas), snapshotSha256: hash(source.snapshot), briefsSha256: hash(source.briefs),
     trailsSha256: hash(source.trails),
-    shadowCatchupManifestSha256: catchupManifestFile ? hash(readFileSync(resolve(catchupManifestFile), "utf8")) : null },
+    shadowCatchupManifestSha256: catchupManifestFile ? hash(readFileSync(resolve(catchupManifestFile), "utf8")) : null,
+    shadowVerificationSha256: shadowVerificationFile
+      ? hash(readFileSync(resolve(shadowVerificationFile), "utf8")) : null },
   outputs: { packetSha256: hash(packet), evidenceSha256: evidence.receiptSha256,
     experimentsSha256: experiments.packetSha256, executionCapacitySha256: executionCapacity.receiptSha256,
     executionResilienceSha256: executionResilience.receiptSha256,
