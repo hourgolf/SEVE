@@ -49,20 +49,27 @@ check("hosted workflow builds deterministic Sentinel packet", workflow.includes(
 check("hosted workflow retains deterministic packet", workflow.includes("data/sentinel-packets/**"), true);
 check("hosted workflow retains rebuild receipt", workflow.includes("data/gate-shadow-receipt.json"), true);
 check("hosted workflow retains independent verification", workflow.includes("data/gate-shadow-verification.json"), true);
+check("hosted workflow feeds independent verification into nightly learning",
+  workflow.includes("--shadow-verification-file data/gate-shadow-verification.json"), true);
 check("hosted workflow has redundant after-hours pass", workflow.includes('cron: "30 23 * * 1-5"'), true);
 check("hosted workflow suppresses event writes", workflow.includes("--virtual-trades-only"), true);
 check("hosted workflow independently verifies publication", workflow.includes("verify-shadow-rebuild:hosted"), true);
+const publicationGate = workflow.indexOf("Verify current publication eligibility");
+const dashboardPublish = workflow.indexOf("Publish concise Atlas briefs for the dashboard");
+const sentinelPublish = workflow.indexOf("Publish deterministic Sentinel operator packet");
+check("current publication gate follows both independent lanes", publicationGate > workflow.indexOf("id: exact-learning")
+  && publicationGate > workflow.indexOf("id: shadow-rebuild"), true);
+check("dashboard current state advances only after publication eligibility", dashboardPublish > publicationGate, true);
+check("Sentinel current state advances only after publication eligibility", sentinelPublish > publicationGate, true);
 check("hosted workflow scans managers and entry cohorts by logical trade", workflow.includes("npm run manager-pattern-scan")
   && workflow.includes("manager-patterns/scan.json"), true);
 check("legacy verifier cannot starve exact capture", workflow.includes("id: shadow-rebuild")
   && workflow.includes("continue-on-error: true")
   && workflow.indexOf("Capture current and score prior exact candidates") > workflow.indexOf("id: shadow-rebuild"), true);
-check("legacy verifier failure remains a visible blocker", workflow.includes("Enforce legacy shadow integrity after capture")
-  && workflow.includes("steps.shadow-rebuild.outcome != 'success'"), true);
-check("exact learning cannot starve Atlas publication", workflow.includes("id: exact-learning")
-  && workflow.includes("Enforce exact-learning integrity after Atlas publication")
-  && workflow.indexOf("Build nightly Decision Atlas") > workflow.indexOf("id: exact-learning")
-  && workflow.indexOf("Enforce exact-learning integrity after Atlas publication") > workflow.indexOf("Publish concise Atlas briefs for the dashboard"), true);
+check("legacy verifier failure remains a visible blocker", workflow.includes("Legacy shadow rebuild or independent verifier failed")
+  && workflow.includes("steps.shadow-rebuild.outcome"), true);
+check("exact learning cannot starve local Atlas diagnostics", workflow.includes("id: exact-learning")
+  && workflow.indexOf("Build nightly Decision Atlas") > workflow.indexOf("id: exact-learning"), true);
 check("hosted workflow preserves fail-closed diagnostics", workflow.includes("if: always()")
   && workflow.includes("if-no-files-found: warn"), true);
 check("hosted workflow carries exact research credentials", /DATABENTO_API_KEY/.test(workflow)

@@ -1,0 +1,31 @@
+{
+  "session": "2026-08-24",
+  "mode": "unstamped-current-policy-reconstruction",
+  "observedCounts": { "local": 134, "remote": 134, "scopedRemote": 132 },
+  "observedHashes": {
+    "local": "sha256:27aedd736c4f3696f8154311e58e304ef72f5b1856afc9fcc4d44bcbf16bbf6b",
+    "remote": "sha256:754b84fa9eec22626c73661aaabac4a5f9a412d58da94f3fd65e71b7583dcdf1"
+  },
+  "missingRemoteIds": [
+    "fa7138ed-9475-4d10-9a16-a135b3cc0481",
+    "ffe618ec-4b91-40f2-a9ea-fb7a33b7b9a6"
+  ],
+  "unscopedRemoteIds": [
+    "6011a1b2-734c-4423-81be-1cfca456a608",
+    "f3eca6bd-82bf-46d8-ada1-aed793b35c14"
+  ],
+  "payloadMismatches": [
+    { "signalId": "122d356c-10df-44fd-8439-7f84f4a06830", "fields": ["tpPct"] },
+    { "signalId": "32676c84-a39b-497f-84cd-91f0eaabaaf6", "fields": ["exitPx", "exitAt", "pnlPerContract", "tpPct", "mfePct", "givebackPct"] },
+    { "signalId": "3e046dda-9530-44fb-88c3-f2754b238efe", "fields": ["exitReason", "exitPx", "exitAt", "pnlPerContract", "tpPct", "mfePct", "givebackPct"] },
+    { "signalId": "43159d0f-5389-43d8-87bb-af88cd611de2", "fields": ["exitPx", "exitAt", "pnlPerContract", "stopPct", "tpPct", "mfePct", "givebackPct"] },
+    { "signalId": "4c3ff255-da71-4e08-9eb4-382623c0714d", "fields": ["tpPct"] },
+    { "signalId": "552d8f3f-f8e7-41fb-8248-8c4698090d4f", "fields": ["tpPct"] },
+    { "signalId": "70d9a603-28b5-4b9b-9944-6791f51149e7", "fields": ["tpPct"] },
+    { "signalId": "aa2e459c-638d-4453-a8cd-cf482d6ec955", "fields": ["exitPx", "pnlPerContract", "tpPct", "givebackPct"] },
+    { "signalId": "c0e6a9f4-ef12-40c9-aaec-6e131636efe6", "fields": ["exitPx", "pnlPerContract", "stopPct", "tpPct", "givebackPct"] },
+    { "signalId": "da5c2c91-b951-4677-9a4f-346d086ae02e", "fields": ["exitPx", "exitAt", "pnlPerContract", "stopPct", "tpPct", "mfePct", "givebackPct"] },
+    { "signalId": "dcde2bb3-c48d-43f7-abb6-04c90ec8c111", "fields": ["tpPct"] },
+    { "signalId": "fa76eff6-615b-4b5b-b533-afefef90b007", "fields": ["exitPx", "exitAt", "pnlPerContract", "tpPct", "mfePct", "givebackPct"] }
+  ]
+}

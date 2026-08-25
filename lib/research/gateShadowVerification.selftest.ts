@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   compareGateShadowRows,
   gateShadowPayloadSha256,
@@ -28,5 +29,35 @@ assert.equal(gateShadowPayloadSha256(comparison.local), gateShadowPayloadSha256(
 
 const mismatch = compareGateShadowRows([local], [{ ...remote, tp_pct: 30 }]);
 assert.deepEqual(mismatch.payloadMismatches, [{ signalId: "expected", fields: ["tpPct"] }]);
+
+const aug24 = JSON.parse(readFileSync(new URL("./fixtures/aug24-gate-shadow-verifier-failure.json", import.meta.url), "utf8")) as {
+  missingRemoteIds: string[];
+  unscopedRemoteIds: string[];
+  payloadMismatches: Array<{ signalId: string; fields: string[] }>;
+};
+const localFor = (signalId: string): LocalGateShadowRow => ({ ...local, signalId });
+const remoteFor = (signalId: string): RemoteGateShadowRow => ({ ...remote, signal_id: signalId });
+const mutateRemote = (signalId: string, fields: string[]): RemoteGateShadowRow => {
+  const row = remoteFor(signalId);
+  for (const field of fields) {
+    if (field === "exitReason") row.exit_reason = "session_flatten";
+    else if (field === "exitPx") row.exit_px = 1.19;
+    else if (field === "exitAt") row.exit_at = "2026-08-14T14:02:00Z";
+    else if (field === "pnlPerContract") row.pnl_per_contract = 19;
+    else if (field === "stopPct") row.stop_pct = 30;
+    else if (field === "tpPct") row.tp_pct = 30;
+    else if (field === "mfePct") row.mfe_pct = 24;
+    else if (field === "givebackPct") row.giveback_pct = 21;
+    else throw new Error(`unsupported fixture field ${field}`);
+  }
+  return row;
+};
+const frozenComparison = compareGateShadowRows(
+  [...aug24.payloadMismatches.map((row) => localFor(row.signalId)), ...aug24.missingRemoteIds.map(localFor)],
+  [...aug24.payloadMismatches.map((row) => mutateRemote(row.signalId, row.fields)), ...aug24.unscopedRemoteIds.map(remoteFor)],
+);
+assert.deepEqual(frozenComparison.missingRemoteIds, aug24.missingRemoteIds);
+assert.deepEqual(frozenComparison.unscopedRemoteIds, aug24.unscopedRemoteIds);
+assert.deepEqual(frozenComparison.payloadMismatches, aug24.payloadMismatches);
 
 console.log("gate-shadow-verification-selftest: PASS");

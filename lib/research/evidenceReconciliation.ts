@@ -18,7 +18,7 @@ export interface EvidenceCoverage {
 }
 
 export interface EvidenceRecoveryProposal {
-  kind: "virtual_trades_only";
+  kind: "virtual_trades_only" | "virtual_trade_payload_repair";
   session: string;
   signalIds: string[];
   rowCount: number;
@@ -26,7 +26,28 @@ export interface EvidenceRecoveryProposal {
   eventInserts: 0;
   requiresExplicitWriteApproval: true;
   requiresIndependentReadback: true;
+  localPayloadSha256?: string;
+  remotePayloadSha256?: string;
   proposalSha256: string;
+}
+
+export interface IndependentShadowVerification {
+  version: "gate-shadow-independent-verification-v1";
+  session: string;
+  localRows: number;
+  remoteRows: number;
+  scopedRemoteRows: number;
+  localPayloadSha256: string;
+  remotePayloadSha256: string;
+  duplicateLocalIds: number;
+  duplicateRemoteIds: number;
+  missingRemoteIds: string[];
+  unscopedRemoteIds?: string[];
+  extraRemoteIds?: string[];
+  payloadMismatches: Array<{ signalId: string; fields?: string[] }>;
+  receiptIssues: string[];
+  passed: boolean;
+  guarantees: { remoteSelectOnly: boolean; productionWrites: number; orderAuthority: boolean };
 }
 
 export interface ChannelEvidenceReconciliation {
@@ -34,6 +55,7 @@ export interface ChannelEvidenceReconciliation {
   state: "ready" | "needs_recovery" | "limited";
   coverage: EvidenceCoverage[];
   missingVirtualSignalIds: string[];
+  independentVerifierIssues: string[];
   limitations: string[];
 }
 
@@ -50,6 +72,10 @@ export interface EvidenceReconciliation {
     channelsNeedingRecovery: number;
     limitedChannels: number;
     missingVirtualRows: number;
+    mismatchedVirtualRows: number;
+    unscopedVirtualRows: number;
+    virtualRowsNeedingRepair: number;
+    failedIndependentVerifications: number;
   };
   guarantees: {
     productionReads: 0;
@@ -84,6 +110,7 @@ export function buildEvidenceReconciliation(input: {
   snapshot: DecisionAtlasSourceSnapshot;
   opportunities: readonly AtlasOpportunity[];
   catchupManifests?: readonly GateShadowCatchupManifest[];
+  independentShadowVerifications?: readonly IndependentShadowVerification[];
 }): EvidenceReconciliation {
   const channelNames = [...new Set([
     ...Object.keys(input.atlas.channels),
@@ -92,6 +119,23 @@ export function buildEvidenceReconciliation(input: {
   ])].sort();
   const managerChannels = new Set(input.snapshot.managerRuns.map((row) => row.channel_slug));
   const sourceSignalById = new Map(input.snapshot.signals.map((row) => [row.id, row]));
+  const strategistById = new Map(input.snapshot.strategists.map((row) => [row.id, row.slug]));
+  const verifications = [...(input.independentShadowVerifications ?? [])];
+  for (const verification of verifications) {
+    if (verification.version !== "gate-shadow-independent-verification-v1"
+      || !/^\d{4}-\d{2}-\d{2}$/.test(verification.session)
+      || verification.session > input.atlas.throughSession
+      || verification.guarantees.remoteSelectOnly !== true
+      || verification.guarantees.productionWrites !== 0
+      || verification.guarantees.orderAuthority !== false) {
+      throw new Error("independent shadow verification failed evidence-boundary validation");
+    }
+  }
+  const failedVerifications = verifications.filter((row) => !row.passed);
+  const channelForSignal = (id: string): string | null => {
+    const source = sourceSignalById.get(id);
+    return source ? strategistById.get(source.strategist_id) ?? null : null;
+  };
   const channels = Object.fromEntries(channelNames.map((channel) => {
     const rows = input.opportunities.filter((row) => row.channel === channel);
     const logical = new Set(rows.map((row) => row.logicalOpportunityId));
@@ -115,6 +159,19 @@ export function buildEvidenceReconciliation(input: {
     const missingVirtualSignalIds = virtualExpected
       .filter((row) => !hasRef(row, "virtual_trades:"))
       .map(signalId).filter((value): value is string => !!value).sort();
+    const independentVerifierIssues = failedVerifications.flatMap((verification) => {
+      const missing = verification.missingRemoteIds.filter((id) => channelForSignal(id) === channel);
+      const mismatched = verification.payloadMismatches.map((row) => row.signalId)
+        .filter((id) => channelForSignal(id) === channel);
+      const unscoped = (verification.unscopedRemoteIds ?? verification.extraRemoteIds ?? [])
+        .filter((id) => channelForSignal(id) === channel);
+      return [
+        ...(missing.length ? [`${verification.session}: independent verifier found ${missing.length} missing payload(s).`] : []),
+        ...(mismatched.length ? [`${verification.session}: independent verifier found ${mismatched.length} mismatched payload(s).`] : []),
+        ...(unscoped.length ? [`${verification.session}: independent verifier found ${unscoped.length} unscoped payload(s).`] : []),
+        ...(verification.receiptIssues.length ? [`${verification.session}: verifier receipt issues: ${verification.receiptIssues.join(", ")}.`] : []),
+      ];
+    });
     const closed = input.snapshot.ledger.logicalTrades.filter((row) => row.channelSlug === channel && row.status === "closed");
     const firstStampedAt = closed.filter((row) => row.configuration.kind !== "legacy_unstamped")
       .map((row) => row.openedAt).sort()[0] ?? null;
@@ -140,7 +197,7 @@ export function buildEvidenceReconciliation(input: {
     ];
     const nonVirtualGap = rowsCoverage.some((row) => row.source !== "virtual native paths"
       && row.state !== "complete" && row.state !== "not_applicable");
-    const state: ChannelEvidenceReconciliation["state"] = missingVirtualSignalIds.length
+    const state: ChannelEvidenceReconciliation["state"] = missingVirtualSignalIds.length || independentVerifierIssues.length
       ? "needs_recovery" : nonVirtualGap ? "limited" : "ready";
     const limitations = [
       ...rowsCoverage.filter((row) => row.state === "partial" || row.state === "missing")
@@ -148,8 +205,10 @@ export function buildEvidenceReconciliation(input: {
       ...(sequentialCandidates.length ? [
         `${sequentialCandidates.length} sequential dark/collision/re-entry signal rows require the bounded gate-shadow preflight; they are not treated as one trade each.`,
       ] : []),
+      ...independentVerifierIssues,
     ];
-    return [channel, { channel, state, coverage: rowsCoverage, missingVirtualSignalIds, limitations }];
+    return [channel, { channel, state, coverage: rowsCoverage, missingVirtualSignalIds,
+      independentVerifierIssues, limitations }];
   }));
 
   const sessionBySignal = new Map(input.opportunities.flatMap((row) => {
@@ -178,21 +237,44 @@ export function buildEvidenceReconciliation(input: {
       bySession.set(manifest.session!, [...(bySession.get(manifest.session!) ?? []), ...manifest.missingSignalIds]);
     }
   }
-  const recoveryProposals = [...bySession].sort(([left], [right]) => left.localeCompare(right)).map(([session, ids]) => {
+  for (const verification of failedVerifications) {
+    if (verification.missingRemoteIds.length) {
+      bySession.set(verification.session, [...(bySession.get(verification.session) ?? []), ...verification.missingRemoteIds]);
+    }
+  }
+  const missingProposals = [...bySession].sort(([left], [right]) => left.localeCompare(right)).map(([session, ids]) => {
     const signalIds = [...new Set(ids)].sort();
     const body = { kind: "virtual_trades_only" as const, session, signalIds, rowCount: signalIds.length,
       allowedTables: ["virtual_trades"] as ["virtual_trades"], eventInserts: 0 as const };
     return { ...body, requiresExplicitWriteApproval: true as const, requiresIndependentReadback: true as const,
       proposalSha256: sha256(body) };
   });
+  const mismatchProposals = failedVerifications.filter((row) => row.payloadMismatches.length).map((verification) => {
+    const signalIds = [...new Set(verification.payloadMismatches.map((row) => row.signalId))].sort();
+    const body = { kind: "virtual_trade_payload_repair" as const, session: verification.session,
+      signalIds, rowCount: signalIds.length, allowedTables: ["virtual_trades"] as ["virtual_trades"],
+      eventInserts: 0 as const, localPayloadSha256: verification.localPayloadSha256,
+      remotePayloadSha256: verification.remotePayloadSha256 };
+    return { ...body, requiresExplicitWriteApproval: true as const, requiresIndependentReadback: true as const,
+      proposalSha256: sha256(body) };
+  });
+  const recoveryProposals = [...missingProposals, ...mismatchProposals]
+    .sort((left, right) => left.session.localeCompare(right.session) || left.kind.localeCompare(right.kind));
   const values = Object.values(channels);
+  const missingIds = new Set(missingProposals.flatMap((row) => row.signalIds));
+  const mismatchIds = new Set(mismatchProposals.flatMap((row) => row.signalIds));
+  const unscopedIds = new Set(failedVerifications.flatMap((row) => row.unscopedRemoteIds ?? row.extraRemoteIds ?? []));
   const summary = {
     readyChannels: values.filter((row) => row.state === "ready").length,
     channelsNeedingRecovery: values.filter((row) => row.state === "needs_recovery").length,
     limitedChannels: values.filter((row) => row.state === "limited").length,
-    missingVirtualRows: recoveryProposals.reduce((sum, row) => sum + row.rowCount, 0),
+    missingVirtualRows: missingIds.size,
+    mismatchedVirtualRows: mismatchIds.size,
+    unscopedVirtualRows: unscopedIds.size,
+    virtualRowsNeedingRepair: new Set([...missingIds, ...mismatchIds]).size,
+    failedIndependentVerifications: failedVerifications.length,
   };
-  const state: EvidenceReconciliation["state"] = recoveryProposals.length ? "recovery_proposed"
+  const state: EvidenceReconciliation["state"] = recoveryProposals.length || failedVerifications.length ? "recovery_proposed"
     : summary.limitedChannels ? "limited" : "ready";
   const receiptBody = { generatedAt: input.atlas.generatedAt, throughSession: input.atlas.throughSession,
     state, channels, recoveryProposals, summary };
@@ -212,7 +294,7 @@ export function renderEvidenceReconciliation(value: EvidenceReconciliation): str
     "",
     value.state === "ready" ? "All expected nightly evidence is linked."
       : value.state === "recovery_proposed"
-        ? `${value.summary.missingVirtualRows} missing virtual path${value.summary.missingVirtualRows === 1 ? "" : "s"} packaged for bounded recovery.`
+        ? `${value.summary.virtualRowsNeedingRepair} virtual path${value.summary.virtualRowsNeedingRepair === 1 ? "" : "s"} require bounded recovery after independent verification.`
         : "No recoverable virtual-path gap was found, but some evidence remains limited.",
     "",
     "| Channel | State | Execution | Virtual | Managers | Config |",

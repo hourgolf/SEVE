@@ -70,6 +70,7 @@ assert.match(script, /authorized-catchup-sha256/, "bounded publication must bind
 assert.match(script, /authorizedCatchupIds\.has\(base\.signalId\)/, "bounded publication must write only manifest-listed missing ids");
 assert.match(script, /pendingAuthorized/, "bounded publication must reconstruct the complete approved set before writing");
 assert.match(script, /manifest is stale/, "bounded publication must refuse rows that appeared after authorization");
+assert.match(script, /bounded session rebuilds require --stamp-provenance/, "bounded session rebuilds must refuse mutable current-policy lookup");
 const verifier = readFileSync(new URL("../../scripts/verify-shadow-rebuild.ts", import.meta.url), "utf8");
 assert.match(verifier, /remoteSelectOnly: true/, "independent verifier must declare its SELECT-only boundary");
 assert.match(verifier, /productionWrites: 0/, "independent verifier must declare zero production writes");

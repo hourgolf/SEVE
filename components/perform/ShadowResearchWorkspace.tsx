@@ -25,6 +25,7 @@ import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import { signedUsd } from "@/lib/format";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
 import { axisForDisposition, type WorkspaceDestination, type ResearchFilter } from "@/lib/shell/workspaceDestination";
+import { projectChannelLifecycle } from "@/lib/channels/channelLifecycleProjection";
 
 const percent = (wins: number, scored: number): string =>
   scored ? `${Math.round((1000 * wins) / scored) / 10}%` : "—";
@@ -219,7 +220,8 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   const lineupBySlug = Object.fromEntries(lineupStories.map((story) => [story.channel, story]));
   const postureBySlug = Object.fromEntries(rows.map((row): [string, ChannelPosture] => {
     const lifecycle = surface.channelWorkspace.bySlug[row.slug]?.lifecycle;
-    return [row.slug, lifecycle === "paper-root" ? "trading" : lifecycle === "dark-evidence" ? "observing" : "retired"];
+    const researchBook = surface.decisionAtlas.bySlug[row.slug]?.researchProgram?.book;
+    return [row.slug, projectChannelLifecycle({ runtimeLifecycle: lifecycle, researchBook }).execution];
   }));
   const filteredRows = windowMode === "cumulative"
     ? rows.filter((row) => !excluded[lane].includes(row.slug))

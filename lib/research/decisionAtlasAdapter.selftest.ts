@@ -4,6 +4,7 @@ import type { ChannelManagerRunRow } from "./channelManagerEvidence";
 import {
   buildVirtualEpisodeIds,
   buildLogicalManagerPaths,
+  adaptDecisionAtlasSnapshot,
   channelConfigurationEra,
   isExactCurrentChannelConfiguration,
 } from "./decisionAtlasAdapter";
@@ -103,5 +104,43 @@ assert.equal(logicalPaths[0]?.resultPerContractUsd, 10,
   "logical manager result per contract must use summed P&L and quantity");
 assert.equal(logicalPaths[0]?.returnPct, 7.5,
   "logical manager return must use summed P&L over summed entry debit");
+
+const bounded = adaptDecisionAtlasSnapshot({
+  generatedAt: "2026-08-24T20:00:00.000Z",
+  throughSession: "2026-08-24",
+  snapshot: {
+    ledger: { logicalTrades: [] },
+    strategists: [{ id: "strategist-vb", slug: "vb-vwap-revert-qqq", underlying: "QQQ" }],
+    positions: [],
+    signals: [
+      { id: "included", strategist_id: "strategist-vb", signal_type: "entry", underlying_price: 100,
+        direction: "call", rationale: { opportunity_id: "opp:included" }, acted_on: false, blocked_reason: "not_armed",
+        created_at: "2026-08-24T15:00:00.000Z", configuration_epoch_id: "epoch-a" },
+      { id: "future", strategist_id: "strategist-vb", signal_type: "entry", underlying_price: 100,
+        direction: "call", rationale: {}, acted_on: false, blocked_reason: "not_armed",
+        created_at: "2026-08-25T15:00:00.000Z", configuration_epoch_id: "epoch-a" },
+    ],
+    executionObservations: [{ id: "execution-included", trace_id: "trace-included", event_kind: "decision",
+      event_at: "2026-08-24T15:00:01.000Z", strategist_id: "strategist-vb", account_id: "paper-a",
+      channel_slug: "vb-vwap-revert-qqq", opportunity_id: "opp:included", position_id: null,
+      action: "block", reason: null, blocked_reason: "not_armed", underlying: "QQQ", occ_symbol: null,
+      option_side: "put", bid: null, ask: null, requested_qty: null, broker_status: null,
+      filled_qty: null, fill_price: null, payload: {}, configuration_epoch_id: "epoch-a" }],
+    virtualTrades: [
+      virtual("included", "2026-08-24T15:00:00.000Z", "2026-08-24T16:00:00.000Z"),
+      virtual("future", "2026-08-25T15:00:00.000Z", "2026-08-25T16:00:00.000Z"),
+    ],
+    managerRuns: [], equitySnapshots: [], workerRuns: [], vbCandidateReceipts: [],
+    vbExactPathReceipts: [], vbExactManagerPathReceipts: [], activeChannelSpecs: [],
+    activeChannelSpecDatabaseIdsByVersionKey: {}, currentConfigurationEpochId: "epoch-a",
+  } as never,
+});
+assert.equal(bounded.opportunities.some((row) => row.session > "2026-08-24"), false,
+  "a historical Atlas replay must not ingest evidence after its declared through-session");
+assert.equal(bounded.sourceNormalization?.rawSignalRows, 1,
+  "source counts must describe the bounded cohort rather than later rows in the snapshot");
+assert.equal(bounded.opportunities.find((row) => row.id === "prospective_virtual:included")?.sourceRefs
+  .includes("execution_observations:execution-included"), true,
+  "signal rationale opportunity_id must join the durable execution trail even when observation payloads omit signal_id");
 
 console.log("decision-atlas adapter selftest: PASS");

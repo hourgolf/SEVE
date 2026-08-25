@@ -34,4 +34,22 @@ const exact = buildEvidenceReconciliation({ atlas, snapshot,
     exactWriteRequired: true, allowedWriteTableIfSeparatelyAuthorized: "virtual_trades", productionWrites: 0,
   }] });
 assert.deepEqual(exact.recoveryProposals[0].signalIds, ["signal-1"]);
+const mismatched = buildEvidenceReconciliation({ atlas, snapshot,
+  opportunities: [{ ...row, sourceRefs: [...row.sourceRefs, "virtual_trades:signal-1"] }] as never[],
+  independentShadowVerifications: [{
+    version: "gate-shadow-independent-verification-v1", session: "2026-08-08",
+    localRows: 1, remoteRows: 1, scopedRemoteRows: 1,
+    localPayloadSha256: "sha256:local", remotePayloadSha256: "sha256:remote",
+    duplicateLocalIds: 0, duplicateRemoteIds: 0, missingRemoteIds: [], unscopedRemoteIds: [],
+    payloadMismatches: [{ signalId: "signal-1", fields: ["exitPx"] }],
+    receiptIssues: [], passed: false,
+    guarantees: { remoteSelectOnly: true, productionWrites: 0, orderAuthority: false },
+  }],
+});
+assert.equal(mismatched.state, "recovery_proposed",
+  "payload parity failures must block learning even when row-count coverage is complete");
+assert.equal(mismatched.channels.alpha.state, "needs_recovery");
+assert.equal(mismatched.summary.mismatchedVirtualRows, 1);
+assert.equal(mismatched.summary.failedIndependentVerifications, 1);
+assert.equal(mismatched.recoveryProposals[0].kind, "virtual_trade_payload_repair");
 console.log("evidence-reconciliation-selftest: PASS");

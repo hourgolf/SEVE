@@ -4,6 +4,7 @@ export interface SessionReviewModel {
   reportDate: string;
   scope: string;
   evidenceLabel: string;
+  resultLabel: "GROSS LOGICAL-TRADE ATTRIBUTION" | "GROSS POSITION-ROW ATTRIBUTION";
   resultUsd: number | null;
   observations: number;
   profitable: number;
@@ -49,6 +50,7 @@ export function buildSessionReviewModel(report: DailyReport): SessionReviewModel
     reportDate: report.report_date,
     scope: report.digest.evidence?.scope ?? "all paper accounts",
     evidenceLabel: logical ? "logical trades" : "legacy position rows",
+    resultLabel: logical ? "GROSS LOGICAL-TRADE ATTRIBUTION" : "GROSS POSITION-ROW ATTRIBUTION",
     resultUsd: fund?.dayRealized ?? null,
     observations,
     profitable: fund ? Math.round(fund.winRate * observations) : 0,

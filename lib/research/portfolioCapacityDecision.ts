@@ -16,6 +16,20 @@ export interface CapacityRouteScenario {
   marginalStopExposureUsd: number | null;
   additionalPeerDisplacements: number | null;
   additionalPositivePeerCounterfactualUsd: number | null;
+  compatiblePortfolioRows: number;
+  incompatiblePortfolioRowsExcluded: number;
+  robustness: {
+    sessions: number;
+    trainingSessions: string[];
+    holdoutSessions: string[];
+    improvementSessionRate: number | null;
+    trainingMarginalPortfolioUsd: number | null;
+    holdoutMarginalPortfolioUsd: number | null;
+    marginalWithoutLargestSessionUsd: number | null;
+    worstSessionMarginalPortfolioUsd: number | null;
+    chronologicalStable: boolean | null;
+    outlierStable: boolean | null;
+  };
 }
 
 export interface ChannelCapacityDecision {
@@ -66,8 +80,15 @@ function scenario(input: {
   budgets: readonly AtlasAccountBudget[];
 }): CapacityRouteScenario {
   const routedTarget = input.targetRows.map((row) => ({ ...row, accountId: input.accountId }));
+  const targetSessions = new Set(routedTarget.map((row) => row.session));
+  const targetPortfolioEraKeys = new Set(routedTarget.map((row) =>
+    `${row.session}\u0000${row.portfolioConfigurationEra ?? "portfolio:unstamped"}`));
+  const sameSessionPeers = input.portfolioRows.filter((row) => row.channel !== input.channel
+    && targetSessions.has(row.session));
+  const compatiblePeers = sameSessionPeers.filter((row) => targetPortfolioEraKeys.has(
+    `${row.session}\u0000${row.portfolioConfigurationEra ?? "portfolio:unstamped"}`));
   const replay = buildCapacityReplay({ targetChannel: input.channel, targetRows: routedTarget,
-    portfolioRows: [...input.portfolioRows.filter((row) => row.channel !== input.channel), ...routedTarget],
+    portfolioRows: [...compatiblePeers, ...routedTarget],
     accountBudgets: input.budgets });
   const current = replay.points.find((point) => point.contracts === input.currentContracts) ?? null;
   const next = replay.points.find((point) => point.contracts === input.currentContracts + 1) ?? null;
@@ -81,6 +102,39 @@ function scenario(input: {
     additionalPeerDisplacements += Math.max(0, after.opportunities - before.opportunities);
     additionalPositivePeerCounterfactualUsd += Math.max(0, after.counterfactualUsd - before.counterfactualUsd);
   }
+  const sessions = [...targetSessions].sort();
+  const sessionMarginals = sessions.flatMap((session) => {
+    const targetRows = routedTarget.filter((row) => row.session === session);
+    const portfolioRows = [...compatiblePeers.filter((row) => row.session === session), ...targetRows];
+    const sessionReplay = buildCapacityReplay({ targetChannel: input.channel, targetRows, portfolioRows,
+      accountBudgets: input.budgets });
+    const before = sessionReplay.points.find((point) => point.contracts === input.currentContracts) ?? null;
+    const after = sessionReplay.points.find((point) => point.contracts === input.currentContracts + 1) ?? null;
+    return before && after ? [{ session,
+      marginalPortfolioUsd: round(after.portfolioTotalResultUsd - before.portfolioTotalResultUsd) }] : [];
+  });
+  const holdoutCount = sessionMarginals.length >= 3 ? Math.max(2, Math.floor(sessionMarginals.length / 3)) : 0;
+  const training = holdoutCount ? sessionMarginals.slice(0, -holdoutCount) : [];
+  const holdout = holdoutCount ? sessionMarginals.slice(-holdoutCount) : [];
+  const sum = (rows: typeof sessionMarginals): number => round(rows.reduce((total, row) => total + row.marginalPortfolioUsd, 0));
+  const totalMarginal = sessionMarginals.length ? sum(sessionMarginals) : null;
+  const largest = sessionMarginals.length ? Math.max(...sessionMarginals.map((row) => row.marginalPortfolioUsd)) : null;
+  const robustness: CapacityRouteScenario["robustness"] = {
+    sessions: sessionMarginals.length,
+    trainingSessions: training.map((row) => row.session),
+    holdoutSessions: holdout.map((row) => row.session),
+    improvementSessionRate: sessionMarginals.length
+      ? round(sessionMarginals.filter((row) => row.marginalPortfolioUsd > 0).length / sessionMarginals.length) : null,
+    trainingMarginalPortfolioUsd: training.length ? sum(training) : null,
+    holdoutMarginalPortfolioUsd: holdout.length ? sum(holdout) : null,
+    marginalWithoutLargestSessionUsd: totalMarginal != null && largest != null
+      ? round(totalMarginal - largest) : null,
+    worstSessionMarginalPortfolioUsd: sessionMarginals.length
+      ? Math.min(...sessionMarginals.map((row) => row.marginalPortfolioUsd)) : null,
+    chronologicalStable: training.length && holdout.length ? sum(training) > 0 && sum(holdout) > 0 : null,
+    outlierStable: totalMarginal != null && largest != null && sessionMarginals.length >= 2
+      ? round(totalMarginal - largest) > 0 : null,
+  };
   return {
     accountId: input.accountId,
     current,
@@ -92,6 +146,9 @@ function scenario(input: {
     marginalStopExposureUsd: current && next ? round(next.peakStopExposureUsd - current.peakStopExposureUsd) : null,
     additionalPeerDisplacements,
     additionalPositivePeerCounterfactualUsd: round(additionalPositivePeerCounterfactualUsd),
+    compatiblePortfolioRows: compatiblePeers.length,
+    incompatiblePortfolioRowsExcluded: sameSessionPeers.length - compatiblePeers.length,
+    robustness,
   };
 }
 
@@ -100,6 +157,7 @@ export function buildPortfolioCapacityDecisionPacket(input: {
   briefs: ChannelDecisionBriefBundle;
   opportunities: readonly AtlasOpportunity[];
   accountBudgets: readonly AtlasAccountBudget[];
+  evidenceStates?: Readonly<Record<string, "ready" | "needs_recovery" | "limited">>;
 }): PortfolioCapacityDecisionPacket {
   const active = new Set(Object.values(input.briefs.channels).filter((brief) => brief.capacity.currentContracts != null)
     .map((brief) => brief.channel));
@@ -119,6 +177,9 @@ export function buildPortfolioCapacityDecisionPacket(input: {
       || (left.marginalDrawdownUsd ?? Infinity) - (right.marginalDrawdownUsd ?? Infinity)
       || left.accountId.localeCompare(right.accountId))[0] ?? null;
     const reasons: string[] = [];
+    const evidenceState = input.evidenceStates?.[brief.channel] ?? "ready";
+    if (evidenceState !== "ready")
+      reasons.push(`Independent evidence reconciliation is ${evidenceState.replaceAll("_", " ")}; capacity recommendations are blocked.`);
     if (currentContracts == null) reasons.push("This channel is not currently assigned a paper lot; use promotion replay instead of a size change.");
     if (currentContracts != null && proposedContracts == null) reasons.push("The bounded replay stops at six contracts.");
     if (brief.evidence.decisionSessions < 5 || brief.evidence.decisionOpportunities < 10)
@@ -137,7 +198,14 @@ export function buildPortfolioCapacityDecisionPacket(input: {
       reasons.push("The larger lot still has a non-positive typical result per logical opportunity.");
     if (preferred && (preferred.additionalPositivePeerCounterfactualUsd ?? 0) > Math.max(0, preferred.marginalPortfolioUsd ?? 0))
       reasons.push("Displaced positive peer opportunities outweigh the replayed portfolio increment.");
-    const needsEvidence = reasons.some((reason) => /Fewer than|No decision-cohort/.test(reason));
+    if (preferred?.robustness.chronologicalStable === false)
+      reasons.push("The later chronological holdout does not preserve the earlier marginal portfolio benefit.");
+    if (preferred?.robustness.outlierStable === false)
+      reasons.push("The marginal portfolio benefit does not survive removal of its best session.");
+    if ((preferred?.robustness.improvementSessionRate ?? 0) < 0.6)
+      reasons.push("Fewer than 60% of comparable sessions improve at the proposed size.");
+    const needsEvidence = evidenceState !== "ready"
+      || reasons.some((reason) => /Fewer than|No decision-cohort/.test(reason));
     const state: ChannelCapacityDecision["state"] = currentContracts == null ? "not_applicable"
       : needsEvidence ? "needs_evidence" : reasons.length ? "hold" : "ready_for_paper_review";
     const correlatedDownsidePeers = input.atlas.collisionGraph.filter((edge) => (edge.left === brief.channel || edge.right === brief.channel)

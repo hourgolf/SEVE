@@ -101,16 +101,16 @@ export function liveFundAdjust(
 }
 
 // Fund nav + day P&L re-marked to LIVE: account-truth base + the open-position live delta.
-export function liveFundPnl(
-  base: { nav: number; dayPnl: number },
+export function liveFundPnl<T extends { nav: number; dayPnl: number }>(
+  base: T,
   positions: Position[],
   liveMarks?: Record<string, number>,
   snapshotUnrealizedPnl?: number | null,
   snapshotCapturedAt?: string | null,
-): { nav: number; dayPnl: number } {
+): T {
   const adj = liveFundAdjust(positions, liveMarks, snapshotUnrealizedPnl, snapshotCapturedAt);
   if (!adj) return base;
-  return { nav: Math.round(base.nav + adj), dayPnl: Math.round(base.dayPnl + adj) };
+  return { ...base, nav: Math.round(base.nav + adj), dayPnl: Math.round(base.dayPnl + adj) };
 }
 
 const COLOR_OF: Record<string, PmColor> = {

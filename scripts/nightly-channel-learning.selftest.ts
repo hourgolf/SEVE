@@ -3,6 +3,12 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("./nightly-channel-learning.ts", import.meta.url), "utf8");
 assert.match(source, /buildEvidenceReconciliation/);
+assert.match(source, /independentShadowVerifications/,
+  "nightly learning must ingest the independent payload verifier, not infer parity from row counts");
+assert.match(source, /evidenceStates:/,
+  "portfolio recommendations must inherit channel evidence health");
+assert.match(source, /shadowVerificationSha256/,
+  "the learning receipt must bind the independent verifier bytes");
 assert.match(source, /buildChannelExperimentPacket/);
 assert.match(source, /buildExecutionCapacityReadiness/);
 assert.match(source, /buildExecutionResilienceReport/);

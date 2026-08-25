@@ -16,6 +16,10 @@ import {
   type PositionOutcomeOpportunityRoute,
 } from "@/lib/ops/brokerReconciliation";
 import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
+import {
+  reconcileSessionNav,
+  type SessionNavReconciliation,
+} from "@/lib/desk/sessionNavReconciliation";
 
 // Safety-net only — Realtime (positions/signals/equity) drives live updates, so
 // this can run slow and pause while hidden. The poll re-reads the full book
@@ -44,6 +48,9 @@ export interface DeskFeed {
   fundPnl: {
     nav: number;
     dayPnl: number;
+    navExact: number | null;
+    dayPnlExact: number | null;
+    reconciliation: SessionNavReconciliation | null;
     snapshotUnrealizedPnl: number | null;
     snapshotCapturedAt: string | null;
   };
@@ -421,19 +428,49 @@ export function useDeskFeed(
   const pnlByStrategist = useMemo(() => channelPnl(dayPositions), [dayPositions]);
   const fp = useMemo(() => {
     const base = fundPnl(dayPositions, totalCapital, latestNav); // nav + position-derived dayPnl
-    // Fund day P&L = account truth (current NAV − session-open NAV), so the headline
-    // Day-P&L LED + "Fund (today)" row agree with the equity curve. The summed
-    // position realized_pnl over-reports (worker books ~4×; see the autopsy booking
-    // note) — use it only as a fallback when there's no NAV curve yet.
-    const navDay =
-      latestNav != null && sessionOpenNav != null ? Math.round(latestNav - sessionOpenNav) : null;
+    // Fund day P&L = broker account truth (current NAV − session-open NAV). Gross
+    // logical-trade attribution remains a separate exact layer; the reconciliation
+    // preserves any fees, broker adjustments, or precision residue without guessing
+    // its type. Position attribution must be verified before the cross-layer result
+    // can claim completeness.
+    const reconciliation = acctId && curve.length && latestNav != null && sessionOpenNav != null
+      && (positionAttribution.state === "ok" || positionAttribution.state === "recovered")
+      ? reconcileSessionNav({
+        accounts: [{
+          accountId: acctId,
+          startingSnapshot: {
+            netLiquidation: sessionOpenNav,
+            unrealizedPnl: null,
+            capturedAt: curve[0].ts,
+          },
+          endingSnapshot: {
+            netLiquidation: latestNav,
+            unrealizedPnl: latestSnapshotUnrealizedPnl,
+            capturedAt: latestSnapshotCapturedAt ?? curve[curve.length - 1].ts,
+          },
+          positionRows: dayPositions.map((position) => ({
+            id: position.id,
+            rootPositionId: position.runner_of ?? position.id,
+            status: position.status === "closed" ? "closed" : "open",
+            realizedPnl: Number(position.realized_pnl ?? 0),
+            unrealizedPnl: Number(position.unrealized_pnl ?? 0),
+            openedAt: position.opened_at ?? null,
+            closedAt: position.closed_at ?? null,
+          })),
+        }],
+      })
+      : null;
+    const navDayExact = reconciliation?.brokerNavDeltaExact ?? null;
     return {
       nav: base.nav,
-      dayPnl: navDay ?? base.dayPnl,
+      dayPnl: navDayExact == null ? base.dayPnl : Math.round(navDayExact),
+      navExact: latestNav,
+      dayPnlExact: navDayExact,
+      reconciliation,
       snapshotUnrealizedPnl: latestSnapshotUnrealizedPnl,
       snapshotCapturedAt: latestSnapshotCapturedAt,
     };
-  }, [dayPositions, totalCapital, latestNav, latestSnapshotCapturedAt, latestSnapshotUnrealizedPnl, sessionOpenNav]);
+  }, [acctId, curve, dayPositions, totalCapital, latestNav, latestSnapshotCapturedAt, latestSnapshotUnrealizedPnl, positionAttribution.state, sessionOpenNav]);
   // Channel colors for the tape — same slug→color map the "Today's trades" dots
   // use, so a lit pad and its trade row always agree.
   const colorBySlug = useMemo(() => {
