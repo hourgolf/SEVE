@@ -1,4 +1,4 @@
-import { isTradingDay, sessionCloseMin } from "../../engine/market-calendar.js";
+import { isTradingDay, previousTradingDay, sessionCloseMin } from "../../engine/market-calendar.js";
 
 const ET_DATE = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/New_York",
@@ -84,6 +84,25 @@ export function assertAfterCloseSessionReady(
       `session ${dateET} is not ready for reconstruction until ${new Date(readyAtMs).toISOString()}`,
     );
   }
+}
+
+/** Latest trading session whose regular close and quote-settlement window have
+ * both elapsed. This is intentionally clock-relative: a delayed scheduled run
+ * shortly after ET midnight must keep targeting the prior completed session,
+ * not the new calendar date whose market has not opened yet. */
+export function latestReadyAfterCloseSession(
+  nowMs: number,
+  settleMinutes = AFTER_CLOSE_SETTLE_MINUTES,
+): string {
+  const todayET = etDateAt(nowMs);
+  if (isTradingDay(todayET) && nowMs >= afterCloseReadyAtMs(todayET, settleMinutes)) return todayET;
+  return previousTradingDay(todayET);
+}
+
+/** Previous maintained trading session for exact-learning T+1 work. */
+export function priorTradingSession(dateET: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateET)) throw new Error("session must be YYYY-MM-DD");
+  return previousTradingDay(dateET);
 }
 
 /** Exact [start, end) UTC bounds for one New York calendar date, including 23/25-hour DST days. */

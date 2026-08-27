@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       session:
-        description: "ET session date (YYYY-MM-DD); blank uses today's ET date"
+        description: "ET session date (YYYY-MM-DD); blank uses the latest fully settled trading session"
         required: false
         type: string
       dry_run:
@@ -51,16 +51,8 @@ jobs:
         env:
           SESSION_INPUT: ${{ inputs.session }}
         run: |
-          session="$SESSION_INPUT"
-          if [[ -z "$session" ]]; then session="$(TZ=America/New_York date +%F)"; fi
-          if [[ ! "$session" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-            echo "Invalid ET session date: $session" >&2
-            exit 1
-          fi
-          echo "SESSION_DATE_ET=$session" >> "$GITHUB_ENV"
-          prior="$(date -d "$session -1 day" +%F)"
-          while [[ "$(date -d "$prior" +%u)" -gt 5 ]]; do prior="$(date -d "$prior -1 day" +%F)"; done
-          echo "PRIOR_SESSION_DATE_ET=$prior" >> "$GITHUB_ENV"
+          ./node_modules/.bin/tsx scripts/resolve-after-close-session.ts \
+            --session "$SESSION_INPUT" >> "$GITHUB_ENV"
       - name: Verify research policy
         id: research-policy
         run: |
@@ -125,6 +117,14 @@ jobs:
             npm run nightly-dark-exact-learning -- "${exact_args[@]}"
           else
             echo "Exact T+1 learning skipped: provider/storage credentials or cost ceiling are unavailable."
+          fi
+      - name: Verify nightly diagnostic inputs
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -f data/gate-shadow-catchup-manifest.json ]]; then
+            echo "Gate-shadow did not produce its bounded manifest; downstream research is stopped." >&2
+            exit 1
           fi
       - name: Build nightly Decision Atlas
         shell: bash
