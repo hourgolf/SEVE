@@ -310,6 +310,7 @@
     "virtual-trade-provenance-model-selftest": "tsx lib/research/virtualTradeProvenanceModel.selftest.ts",
     "virtual-trade-forward-publisher-selftest": "tsx lib/research/virtualTradeForwardPublisher.selftest.ts",
     "virtual-path-policy-selftest": "tsx worker/src/virtualPathPolicy.selftest.ts",
+    "resolve-after-close-session": "tsx scripts/resolve-after-close-session.ts",
     "after-close-research-selftest": "tsx lib/research/afterCloseResearch.selftest.ts",
     "fixture-lane-selftest": "tsx lib/ui/fixtureLane.selftest.ts",
     "ui-control-contract-selftest": "tsx lib/ui/controlContract.selftest.ts",

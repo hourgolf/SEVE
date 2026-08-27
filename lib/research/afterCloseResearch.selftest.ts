@@ -6,6 +6,8 @@ import {
   etDayRangeUtc,
   etSessionCloseUtc,
   etWallMinuteUtc,
+  latestReadyAfterCloseSession,
+  priorTradingSession,
   resolveAfterCloseSession,
 } from "./afterCloseResearch";
 
@@ -30,6 +32,17 @@ check("early session close", etSessionCloseUtc("2026-11-27"), "2026-11-27T18:00:
 check("summer 15:25 wall minute", etWallMinuteUtc("2026-07-21", 15 * 60 + 25), "2026-07-21T19:25:00.000Z");
 check("summer archive ready", new Date(afterCloseReadyAtMs("2026-08-03")).toISOString(), "2026-08-03T20:15:00.000Z");
 check("early-close archive ready", new Date(afterCloseReadyAtMs("2026-11-27")).toISOString(), "2026-11-27T18:15:00.000Z");
+check("delayed run after ET midnight keeps prior settled session",
+  latestReadyAfterCloseSession(Date.parse("2026-08-27T04:36:37.000Z")), "2026-08-26");
+check("current session remains unavailable before settle",
+  latestReadyAfterCloseSession(Date.parse("2026-08-27T20:14:59.999Z")), "2026-08-26");
+check("current session becomes available at settle",
+  latestReadyAfterCloseSession(Date.parse("2026-08-27T20:15:00.000Z")), "2026-08-27");
+check("Monday pre-close resolves Friday",
+  latestReadyAfterCloseSession(Date.parse("2026-07-06T14:00:00.000Z")), "2026-07-02");
+check("early-close session becomes available at its settle boundary",
+  latestReadyAfterCloseSession(Date.parse("2026-11-27T18:15:00.000Z")), "2026-11-27");
+check("prior session skips holiday and weekend", priorTradingSession("2026-07-06"), "2026-07-02");
 
 let premature = false;
 try { assertAfterCloseSessionReady("2026-08-03", Date.parse("2026-08-03T20:14:59.999Z")); } catch { premature = true; }
@@ -44,6 +57,11 @@ check("closed date fails closed", closedDay, true);
 const workflow = readFileSync(new URL("../../.github/workflows/after-close-research.yml", import.meta.url), "utf8");
 check("hosted workflow freezes dark candidates", workflow.includes("npm run dark-candidate-freeze:hosted"), true);
 check("hosted workflow uses one resolved ET session", workflow.includes("SESSION_DATE_ET") && !workflow.includes('session="today-et"'), true);
+check("hosted workflow resolves the latest settled session before research",
+  workflow.includes("scripts/resolve-after-close-session.ts") && !workflow.includes("TZ=America/New_York date +%F"), true);
+check("hosted workflow stops downstream research without the bounded manifest",
+  workflow.includes("Verify nightly diagnostic inputs")
+    && workflow.includes("downstream research is stopped"), true);
 check("hosted workflow retains exact-contract manifest", workflow.includes("data/dark-candidate-freezes/**"), true);
 check("hosted workflow builds deterministic Sentinel packet", workflow.includes("npm run deterministic-sentinel:hosted"), true);
 check("hosted workflow retains deterministic packet", workflow.includes("data/sentinel-packets/**"), true);
