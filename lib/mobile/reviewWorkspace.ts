@@ -1,3 +1,5 @@
+import type { PmColor } from "../desk/types";
+
 export type MobileReviewMode = "session" | "council" | "shadow" | "evidence" | "sentinel";
 
 export type MobileReviewSection =
@@ -43,11 +45,11 @@ export const mobileReviewHas = (mode: MobileReviewMode, section: MobileReviewSec
  * display metadata only: moved/retired channels still belong in account history. */
 export function mobileAccountResultRows(
   stats: Readonly<Record<string, { pnl: number; trades: number; wins: number }>>,
-  labels: readonly { slug: string; color: string }[],
+  labels: readonly { slug: string; color: PmColor }[],
 ) {
   const colors = new Map(labels.map(channel => [channel.slug, channel.color]));
   return Object.entries(stats)
     .filter(([, result]) => result.trades > 0 || result.pnl !== 0)
-    .map(([slug, result]) => ({ slug, color: colors.get(slug) ?? "green", result }))
+    .map(([slug, result]) => ({ slug, color: colors.get(slug) ?? ("green" as const), result }))
     .sort((left, right) => Math.abs(right.result.pnl) - Math.abs(left.result.pnl) || left.slug.localeCompare(right.slug));
 }
