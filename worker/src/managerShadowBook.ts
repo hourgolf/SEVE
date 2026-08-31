@@ -252,6 +252,10 @@ async function enrollRecoveryPositions(
     const accountId = channel?.account_id ?? defaultAccount?.id;
     if (!channel || !managerEnrollmentEligible(channel.slug, row.qty) || !accountId || enrolledPositions.has(row.id)) continue;
     const input: ManagerEnrollmentInput = {
+      nativeManagerProfileId: typeof (row.entry_features?.configuration_identity as { managerProfileId?: unknown } | undefined)?.managerProfileId === "string"
+        ? (row.entry_features!.configuration_identity as { managerProfileId: string }).managerProfileId : null,
+      nativeManagerVersion: typeof (row.entry_features?.configuration_identity as { managerVersion?: unknown } | undefined)?.managerVersion === "string"
+        ? (row.entry_features!.configuration_identity as { managerVersion: string }).managerVersion : null,
       positionId: row.id, strategistId: row.strategist_id, accountId,
       channelSlug: channel.slug, occSymbol: row.occ_symbol, underlying: row.underlying,
       optionSide: row.opt_type, entryPrice: row.avg_entry_price, entryPriceBasis: "broker_fill",

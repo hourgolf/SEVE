@@ -29,6 +29,11 @@ export const MANAGER_IDS = [
   VB_MACD_CURRENT_MANAGER_ID,
   VB_LEVEL_CURRENT_MANAGER_ID,
   MOMO2_CURRENT_MANAGER_ID,
+  "GRIND-SMART-ALL-OUT-8",
+  "MOMO2-B20-BE-R50",
+  "FULL-R20-K50",
+  "FULL-R50-K67",
+  "ORB-TREND-SOURCE-30/35",
 ] as const;
 
 export type ManagerId = typeof MANAGER_IDS[number];
@@ -89,6 +94,35 @@ export function managerIdsForChannel(
   return BASE_MANAGER_IDS;
 }
 
+/** Forward enrollment uses the immutable entry-time native identity. Historical
+ * date-based inventories above remain unchanged; adding controls cannot claim
+ * that they were collected before deployment or rewrite hydrated run state. */
+export const FORWARD_CONTROL_NATIVE_VERSIONS: Readonly<Record<string, string>> = {
+  "grind-smart-entries": "sha256:362e1a492bdf91c9c967bd5dd020fc728878c5a1811e353790301ab56487af1b",
+  "momo-shape-2": "sha256:2785d9f2fe7bbf35545c85c561fa203aaf26144c49df3e9e0f84fcef977e2a1e",
+  "vb-level-break": "sha256:0934c22575f039e970c30641dc89b834b2423ae0826161f63905dee8d6cf1753",
+  "orb-trend-rider": "sha256:81f1e7da956e1252f178e6e37b54faea5865955f90b249e27d198ac23bc3ec57",
+};
+export function managerIdsForObservedConfiguration(slug: string, nativeManagerId?: string | null, nativeManagerVersion?: string | null): readonly ManagerId[] {
+  const prior = managerIdsForChannel(slug);
+  if (!nativeManagerVersion || nativeManagerVersion !== FORWARD_CONTROL_NATIVE_VERSIONS[slug]) return prior;
+  if (slug === "grind-smart-entries" && nativeManagerId === "FULL-R50-K75")
+    return [...prior, "GRIND-SMART-ALL-OUT-8"];
+  if (slug === "momo-shape-2" && nativeManagerId === "BANK30-R50-K67")
+    // FULL-R20-K50 is the named equivalent of ARM20/HALF-GIVEBACK. Do not
+    // enroll identical economics twice or present them as independent tests.
+    return [...prior.filter(id => id !== "ARM20/HALF-GIVEBACK"), "MOMO2-B20-BE-R50", "FULL-R20-K50", "FULL-R50-K67"];
+  if (slug === "vb-level-break" && nativeManagerId === "VB-LEVEL-ALL-OUT-30")
+    return [...prior.filter(id => id !== "LOCK30/30"), "LOCK50/30"];
+  if (slug === "orb-trend-rider" && nativeManagerId === "ORB-ALL-OUT-50")
+    return [...prior.filter(id => id !== "LOCK50/30"), "ORB-TREND-SOURCE-30/35"];
+  return prior;
+}
+
+export function isBankRunnerManager(managerId: ManagerId): boolean {
+  return ["BANK20/RUN50", "PB2-BANK15/HALF-GIVEBACK", "GRIND-B25/CURRENT-A13", "MOMO2-B20-BE-R50"].includes(managerId);
+}
+
 export interface ManagerExit {
   managerId: ManagerId;
   reason: string;
@@ -117,6 +151,32 @@ function lock(managerId: ManagerId, ret: number, target: number | null, stop: nu
 export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: number, isBell: boolean): ManagerAdvance {
   const state = { ...prior };
   switch (managerId) {
+    case "GRIND-SMART-ALL-OUT-8": return lock(managerId, ret, 8, 35, isBell, state);
+    case "ORB-TREND-SOURCE-30/35": return lock(managerId, ret, 30, 35, isBell, state);
+    case "FULL-R20-K50":
+    case "FULL-R50-K67": {
+      const arm = managerId === "FULL-R20-K50" ? 20 : 50;
+      const keep = managerId === "FULL-R20-K50" ? 0.5 : 2 / 3;
+      if (state.armedPeakPct == null && ret <= -30) return terminal(managerId, "prearm_stop", ret, state);
+      if (ret >= arm || state.armedPeakPct != null) state.armedPeakPct = Math.max(state.armedPeakPct ?? ret, ret);
+      if (state.armedPeakPct != null && ret <= state.armedPeakPct * keep)
+        return terminal(managerId, "giveback", ret, state);
+      if (isBell) return terminal(managerId, "bell", ret, state);
+      return { state, exit: null };
+    }
+    case "MOMO2-B20-BE-R50": {
+      if (state.bankReturnPct == null) {
+        if (ret <= -40) return terminal(managerId, "prebank_stop", ret, state);
+        if (ret >= 20) state.bankReturnPct = ret;
+      }
+      if (state.bankReturnPct != null) {
+        const blended = (state.bankReturnPct + ret) / 2;
+        if (ret >= 50) return terminal(managerId, "runner_target", blended, state);
+        if (ret <= 0) return terminal(managerId, "runner_floor", blended, state);
+        if (isBell) return terminal(managerId, "runner_bell", blended, state);
+      } else if (isBell) return terminal(managerId, "bell", ret, state);
+      return { state, exit: null };
+    }
     case "LOCK20/30": return lock(managerId, ret, 20, 30, isBell, state);
     case "LOCK30/30": return lock(managerId, ret, 30, 30, isBell, state);
     case "LOCK50/30": return lock(managerId, ret, 50, 30, isBell, state);
@@ -208,6 +268,10 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
 // peak_mark cannot reconstruct the first crossing's overshoot. Evidence carries
 // `recovered` so analysis never mistakes that approximation for an observed fill.
 export function recoverManagerState(managerId: ManagerId, peakReturnPct: number): ManagerState {
+  if (managerId === "MOMO2-B20-BE-R50" && peakReturnPct >= 20)
+    return { bankReturnPct: 20, recovered: true };
+  if ((managerId === "FULL-R20-K50" && peakReturnPct >= 20) || (managerId === "FULL-R50-K67" && peakReturnPct >= 50))
+    return { armedPeakPct: peakReturnPct, recovered: true };
   if (managerId === "BANK20/RUN50" && peakReturnPct >= 20)
     return { bankReturnPct: 20, recovered: true };
   if (managerId === "ARM20/HALF-GIVEBACK" && peakReturnPct >= 20)

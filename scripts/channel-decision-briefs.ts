@@ -13,6 +13,7 @@ import {
 import type { WeeklyReadout } from "../lib/research/weeklyReadout";
 import type { ChannelTrailFrontierBook } from "../lib/research/channelTrailFrontier";
 import type { EntryAtlas } from "../lib/research/entryAtlas";
+import { buildRosterTrialReviews } from "../lib/research/rosterTrialReview";
 
 const arg = (name: string, fallback?: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
@@ -62,6 +63,7 @@ const bundle = buildChannelDecisionBriefs({
   currentContractsByChannel: Object.fromEntries(snapshot.activeChannelSpecs.map((spec) => [spec.slug, spec.quantity])),
   trailFrontier,
   entryAtlas,
+  trialReviews: buildRosterTrialReviews(snapshot, atlas.throughSession),
 });
 const json = `${JSON.stringify(bundle, null, 2)}\n`;
 const markdown = `${renderChannelDecisionBriefs(bundle)}\n`;

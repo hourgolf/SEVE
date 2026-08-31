@@ -170,7 +170,8 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
   }, [focusAxis]);
   const model = buildChannelDecisionSummary(brief);
   const comparableStoryReady = Boolean(brief.decisionDistribution);
-  const story = summary ? deriveChannelLineupStory({
+  const trialAlert = brief.trialReview && ["threshold_reached", "review_required", "unavailable"].includes(brief.trialReview.state);
+  const story = summary && !trialAlert ? deriveChannelLineupStory({
     summary,
     brief: comparableStoryReady ? brief : undefined,
     referenceSession: brief.throughSession,
@@ -178,7 +179,7 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
   return <section className={`atlas-preview authoritative decision-first${compact ? " compact" : ""}`} aria-label="Decision Atlas paired channel report">
     <header>
       <span><small>SELECTED CHANNEL</small><strong>{brief.channel}</strong><b>{story?.group ?? model.disposition}</b></span>
-      <em>{comparableStoryReady ? `ATLAS · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · ${story ? `${story.freshness} · ${story.maturity}` : model.evidenceState}` : `CURRENT SAMPLE · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · BRIEF NEEDS REFRESH`}</em>
+      <em>{trialAlert ? `TRIAL REVIEW · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · REVIEW REQUIRED` : comparableStoryReady ? `ATLAS · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · ${story ? `${story.freshness} · ${story.maturity}` : model.evidenceState}` : `CURRENT SAMPLE · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · BRIEF NEEDS REFRESH`}</em>
     </header>
     <p className="atlas-diagnosis"><small>WHY</small>{story?.why ?? model.diagnosis}</p>
     {!comparableStoryReady && <p className="atlas-scope-warning"><b>CURRENT SAMPLE ONLY</b> This published brief does not contain the comparable session distribution. Refresh the nightly brief before treating this as a channel decision.</p>}
@@ -189,19 +190,23 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
       <span><small>TYPICAL MOVE KEPT</small><b>{pct(story.typicalCapture)}</b></span>
       <span><small>WEAK SESSION</small><b>{money(story.weakSession)}</b></span>
     </div> : <div className="atlas-preview-metrics">{model.metrics.map((metric) => <span key={metric.label} title={metric.fact}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div>}
-    <EvidenceScopeSummary brief={brief} summary={summary} />
+    {!trialAlert && <EvidenceScopeSummary brief={brief} summary={summary} />}
     {story && <div className="atlas-story-visuals"><ChannelEntryFinishMini story={story} /><SessionDistributionStrip story={story} compact /></div>}
     <div className="atlas-plan">
-      <span><small>NEXT</small><b>{!comparableStoryReady ? "REFRESH NIGHTLY BRIEF · DO NOT ACT ON THIS SAMPLE ALONE" : story ? `${story.next} · ${model.nextTest}` : model.nextTest}</b></span>
+      <span><small>NEXT</small><b>{trialAlert ? model.nextTest : !comparableStoryReady ? "REFRESH NIGHTLY BRIEF · DO NOT ACT ON THIS SAMPLE ALONE" : story ? `${story.next} · ${model.nextTest}` : model.nextTest}</b></span>
       <span><small>KEEP FIXED</small><b>{model.keepFixed.join(" · ")}</b></span>
     </div>
-    {brief.learning && <div className="atlas-learning-state" title={brief.learning.fact}>
+    {brief.learning && !trialAlert && <div className="atlas-learning-state" title={brief.learning.fact}>
       <small>{brief.learning.label}</small>
       <span className={brief.learning.evidence === "ready" ? "ready" : "review"}>DATA {brief.learning.evidence === "ready" ? "READY" : "CHECK"}</span>
       <span className={brief.learning.experiment === "ready_to_score" ? "ready" : "neutral"}>TEST {brief.learning.experiment.replaceAll("_", " ").toUpperCase()}</span>
       <span className={brief.learning.capacity === "paper_step_ready" ? "ready" : "neutral"}>SIZE {brief.learning.capacity === "paper_step_ready" ? `${brief.learning.currentContracts ?? "?"}→${brief.learning.proposedContracts ?? "?"}` : "HOLD"}</span>
     </div>}
     <details className="atlas-evidence-drawer" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}><summary>See supporting evidence</summary><div className="atlas-brief-body">
+      {trialAlert && <>
+        <p className="atlas-scope-warning">The trial review uses completed, current-spec executed trades. The research lenses below do not change that review cohort.</p>
+        <EvidenceScopeSummary brief={brief} summary={summary} />
+      </>}
       <nav aria-label="Decision evidence views">{(["entry", "exit", "manager", "size", "sources"] as EvidenceView[]).map((item) => <button key={item} type="button" className={view === item ? "on" : ""} aria-pressed={view === item} onClick={() => { setView(item); onAxisChange?.(item); }}>{item === "sources" ? "SOURCES" : item.toUpperCase()}</button>)}</nav>
       {view === "entry" && <EntrySequence model={model} entryAtlas={brief.entryAtlas} />}
       {view === "exit" && <ExitCapture model={model} />}
