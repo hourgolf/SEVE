@@ -79,11 +79,11 @@ assert.equal(deriveSentinelConfigurationFreshness(null, "b".repeat(64)).state, "
 assert.equal(deriveSentinelConfigurationFreshness("not-a-hash", "b".repeat(64)).state, "unknown");
 assert.equal(
   deterministicSentinelRunId("2026-08-11", "2026-08-12", `sha256:${"a".repeat(64)}`),
-  `deterministic-sentinel-publisher-v3:2026-08-11:2026-08-12:${"a".repeat(64)}`,
+  `deterministic-sentinel-publisher-v4:2026-08-11:2026-08-12:${"a".repeat(64)}`,
 );
 assert.equal(
   deterministicSentinelRunId("2026-08-11", "2026-08-12", null),
-  "deterministic-sentinel-publisher-v3:2026-08-11:2026-08-12:unverified",
+  "deterministic-sentinel-publisher-v4:2026-08-11:2026-08-12:unverified",
 );
 
 console.log("sentinel-operator-packet-selftest: 32/32 passed");

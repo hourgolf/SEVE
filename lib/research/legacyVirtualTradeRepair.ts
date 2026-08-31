@@ -67,6 +67,25 @@ export const changedPayloadFields = (
   stableResearchJson(local[field as keyof CanonicalVirtualTradePayload])
     !== stableResearchJson(remote[field as keyof CanonicalVirtualTradePayload]));
 
+// Match the exact raw database values read before approval, not rounded or
+// timestamp-normalized equivalents. Every payload and provenance column is a
+// compare-and-set precondition; another legacy writer must not be overwritten.
+export function legacyRepairPreconditions(row: Record<string, unknown>): Array<{
+  column: string; value: string | number | null;
+}> {
+  const columns = ["signal_id", "slug", "occ", "signal_at", "blocked", "entry_px", "exit_reason",
+    "exit_px", "exit_at", "pnl_per_contract", "stop_pct", "tp_pct", "n_quotes", "mfe_pct", "giveback_pct",
+    "channel_spec_version_id", "release_manifest_id", "configuration_epoch_id",
+    "native_manager_policy_version", "research_publisher_version"];
+  return columns.map((column) => {
+    const value = row[column];
+    if (value !== null && typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) {
+      throw new Error(`repair precondition missing/invalid: ${column}`);
+    }
+    return { column, value: value as string | number | null };
+  });
+}
+
 export function buildLegacyVirtualTradeRepairManifest(input: {
   session: string;
   local: CanonicalVirtualTradePayload[];

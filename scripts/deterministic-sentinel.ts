@@ -17,6 +17,7 @@ import {
   type SentinelOperatorPacketInput,
 } from "@/lib/sentinel/operatorPacket";
 import { auditSentinelManagerBook } from "@/lib/sentinel/managerBookAudit";
+import { sentinelExactReportReadiness } from "@/lib/sentinel/exactReportReadiness";
 import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
 import { auditSentinelRelease } from "@/lib/sentinel/releaseAudit";
 import type { WorkerObservation } from "@/lib/ops/preopenReadinessEngine";
@@ -213,6 +214,8 @@ async function main(): Promise<void> {
       || exact.completeness.sessionDateEt !== SESSION || exact.replay.sessionDateEt !== SESSION)) {
     throw new Error("exact replay identity conflicts with the frozen Sentinel session");
   }
+  const exactReadiness = sentinelExactReportReadiness({ reportState: exact?.completeness.state,
+    requestEnds: freeze.contractRequests.map((request) => request.endIso), nowMs: Date.parse(generatedAt) });
 
   const sb = createServerSupabaseClient("deterministic-sentinel");
   const [
@@ -226,16 +229,19 @@ async function main(): Promise<void> {
       .ilike("message", "%release ACTIVE%").order("created_at", { ascending: false }).limit(50),
     sb.from("worker_runs").select("version,started_at,last_heartbeat_at,last_phase,last_error")
       .is("ended_at", null).order("started_at", { ascending: false }).limit(20),
-    sb.from("positions").select("id,status,opened_at,closed_at,realized_pnl,close_reason,runner_of")
-      .gte("opened_at", range.start).lt("opened_at", range.end).order("opened_at").limit(100),
-    sb.from("manager_shadow_runs").select("id,position_id,manager_id,status,evidence_state,censor_code,entry_at")
-      .gte("entry_at", range.start).lt("entry_at", range.end).order("entry_at").limit(1_000),
+    sb.from("positions").select("id,status,opened_at,closed_at,realized_pnl,close_reason,runner_of", { count: "exact" })
+      .gte("opened_at", range.start).lt("opened_at", range.end).order("opened_at").order("id").limit(100),
+    sb.from("manager_shadow_runs").select("id,position_id,manager_id,status,evidence_state,censor_code,entry_at", { count: "exact" })
+      .gte("entry_at", range.start).lt("entry_at", range.end).order("entry_at").order("id").limit(1_000),
     loadActiveRc54OperationalAuthority(
       sb as unknown as Parameters<typeof loadActiveRc54OperationalAuthority>[0],
     ),
   ]);
   for (const [label, read] of [["release", releaseRead], ["workers", workerRead], ["positions", positionsRead], ["managers", managersRead]] as const) {
     if (read.error) throw new Error(`${label} read failed: ${read.error.message}`);
+  }
+  for (const [label, read] of [["positions", positionsRead], ["managers", managersRead]] as const) {
+    if (read.count == null || read.count !== (read.data ?? []).length) throw new Error(`Sentinel ${label} read is incomplete`);
   }
 
   const releaseContract = operationalAuthority.contract;
@@ -319,16 +325,12 @@ async function main(): Promise<void> {
       active,
     },
     darkBook: {
-      state: exact
-        ? exact.completeness.state === "complete" ? "ok"
-          : exact.completeness.state === "exact_pending" ? "not_due"
-            : exact.completeness.state === "censored" ? "error" : "partial"
-        : "not_due",
+      state: exactReadiness.state,
       source: exact ? "dark-candidate-t1-v1:exact-cbbo-manager-replay" : "dark-candidate-freeze-v1:signals-plus-execution-observations",
       asOf: exact ? generatedAt : range.end,
-      detail: exact
+      detail: exact && exact.completeness.state !== "exact_pending"
         ? `${exact.completeness.state}; ${exact.replay.source.independentManagerPaths} independent manager paths after sequential overlap censoring`
-        : "source decisions are frozen; exact Databento CBBO replay remains gated until T+1",
+        : exactReadiness.detail,
       rawDecisions: freeze.summary.validRawDecisions,
       sourceCensors: freeze.summary.censoredSignals,
       exactContracts: freeze.summary.exactContracts,
@@ -358,15 +360,18 @@ async function main(): Promise<void> {
         ? sb.from("positions")
           .select(
             "id,status,opened_at,closed_at,realized_pnl,close_reason,runner_of,channel_spec_version_id,configuration_epoch_id",
+            { count: "exact" },
           )
           .eq(
             "configuration_epoch_id",
             operationalAuthority.runtime.configurationEpochId,
           )
           .in("channel_spec_version_id", specDatabaseIds)
+          .lt("opened_at", range.end)
           .order("opened_at")
+          .order("id")
           .limit(10_000)
-        : Promise.resolve({ data: [], error: null }),
+        : Promise.resolve({ data: [], error: null, count: 0 }),
       sb.from("events")
         .select("meta,created_at")
         .like("message", "sentinel:%")
@@ -381,6 +386,9 @@ async function main(): Promise<void> {
       throw new Error(
         `current configuration cohort read failed: ${cohortRead.error.message}`,
       );
+    }
+    if (cohortRead.count == null || cohortRead.count !== (cohortRead.data ?? []).length) {
+      throw new Error("current configuration cohort read is incomplete");
     }
     if (priorPacketRead.error) {
       throw new Error(

@@ -9,6 +9,7 @@ import {
 } from "@/lib/channels/activeRelease";
 import { deriveSentinelReceiptStatus, type SentinelReceiptInput } from "@/lib/sentinel/receipt";
 import type { BrokerReconciliationReceipt } from "@/lib/ops/brokerReconciliation";
+import type { AtlasPublicationVerification } from "@/lib/research/atlasPublication";
 
 export type OpsEvidenceState = "loading" | "ok" | "error";
 export type ReadinessTone = "green" | "yellow" | "red" | "neutral";
@@ -152,6 +153,9 @@ export interface DeriveOpsReadinessInput {
   sentinel: SentinelReceiptInput;
   openPositions: number;
   closedPositions: number;
+  atlasPublication?: AtlasPublicationVerification;
+  atlasState?: string;
+  atlasFreshness?: string;
 }
 
 const DAY1_COHORT_FROM = "2026-07-20";
@@ -337,24 +341,20 @@ export function deriveOpsReadiness(input: DeriveOpsReadinessInput): OpsReadiness
 
   const publisher = input.evidence.publisher;
   const latestPublisher = publisher.state === "ok" ? latest(publisher.rows, (row) => row.created_at) : null;
-  const sentinelPublisherDone = input.sentinel.state === "ok"
-    && input.sentinel.session === clock.date
-    && Boolean(input.sentinel.publishedAt || input.sentinel.createdAt);
-  const legacyPublisherDone = Boolean(latestPublisher?.message.includes("done")
-    && latestPublisher.created_at.slice(0, 10) === clock.date);
-  const publisherDone = sentinelPublisherDone || legacyPublisherDone;
-  const publisherFailed = !sentinelPublisherDone && (latestPublisher?.message.includes("exited") ?? false);
-  const publisherObservedAt = sentinelPublisherDone
-    ? input.sentinel.publishedAt || input.sentinel.createdAt
-    : latestPublisher?.created_at;
-  const publisherDetail = sentinelPublisherDone
-    ? "nightly research and deterministic next-session receipt published"
-    : latestPublisher?.message ?? "publisher complete";
+  // Day-report, Atlas, and Sentinel are independent publications. A timestamp
+  // or a legacy "done" message is not proof that the complete Atlas arrived.
+  const publication = input.atlasPublication;
+  const publisherDone = publication?.state === "verified" && publication.throughSession === clock.date;
   const postClose = clock.minute >= 16 * 60;
-  if (publisher.state === "error") evidence.push(readError("publisher", "POST-CLOSE PUBLISHER", publisher));
-  else if (publisherFailed) evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: "FAILED", tone: "red", detail: latestPublisher?.message ?? "publisher failed", observedAt: latestPublisher?.created_at });
-  else if (postClose && (candidates > 0 || fillsByPosition.size > 0) && !publisherDone) evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: "DUE", tone: "yellow", detail: "current-session activity exists but no same-session completion receipt is observed" });
-  else evidence.push({ id: "publisher", label: "POST-CLOSE PUBLISHER", state: publisherDone ? "LAST RUN OK" : "NOT DUE", tone: publisherDone ? "green" : "neutral", detail: publisherDone ? publisherDetail : "publication is evaluated after the close", observedAt: publisherObservedAt });
+  if (input.atlasState === "error") evidence.push({ id: "publisher", label: "ATLAS PUBLICATION", state: "READ / VERIFY FAILED", tone: "red", detail: "Atlas payload or publication receipt could not be verified" });
+  else if (postClose && (candidates > 0 || fillsByPosition.size > 0) && !publisherDone) evidence.push({ id: "publisher", label: "ATLAS PUBLICATION", state: "DUE", tone: "yellow", detail: "current-session activity exists but no verified same-session Atlas bundle is observed" });
+  else if (publication) evidence.push({ id: "publisher", label: "ATLAS PUBLICATION",
+    state: input.atlasFreshness === "stale" ? "STALE" : publication.state === "verified" ? "BUNDLE VERIFIED" : "UNVERIFIED BUNDLE",
+    tone: publication.state === "verified" && input.atlasFreshness !== "stale" ? "green" : "yellow",
+    detail: `through ${publication.throughSession} · ${publication.detail}` });
+  else evidence.push({ id: "publisher", label: "ATLAS PUBLICATION", state: "NOT VERIFIED", tone: "neutral", detail: "no complete-bundle verification is available; day-report and next-session brief are separate" });
+  if (publisher.state === "error") evidence.push(readError("day-report", "DAY-REPORT PUBLISHER", publisher));
+  else if (latestPublisher?.message.includes("exited")) evidence.push({ id: "day-report", label: "DAY-REPORT PUBLISHER", state: "FAILED", tone: "red", detail: latestPublisher.message, observedAt: latestPublisher.created_at });
 
   evidence.push({ id: "sentinel", label: "SENTINEL RECEIPT", state: sentinel.label, tone: sentinel.tone, detail: sentinel.detail, observedAt: sentinel.publishedAt });
   const broker = input.evidence.broker;

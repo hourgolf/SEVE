@@ -4,6 +4,7 @@ import {
   buildLegacyVirtualTradeRepairManifest,
   changedPayloadFields,
   isStrictlyLegacyProvenance,
+  legacyRepairPreconditions,
   type CanonicalVirtualTradePayload,
 } from "./legacyVirtualTradeRepair";
 
@@ -62,7 +63,17 @@ const publisher = readFileSync(new URL("../../scripts/repair-legacy-virtual-trad
 assert.match(publisher, /const PUBLISH = process\.argv\.includes\("--publish"\)/);
 assert.match(publisher, /--publish requires --expected-manifest-sha256/);
 assert.match(publisher, /\.from\("virtual_trades"\)\.update\(payload\)/);
-assert.match(publisher, /\.is\("channel_spec_version_id", null\)/);
+assert.match(publisher, /legacyRepairPreconditions\(before/);
+assert.match(publisher, /value === null \? query\.is\(column, null\) : query\.eq\(column, value\)/);
+assert.ok(publisher.indexOf('writeFileSync(beforeImageFile') < publisher.indexOf('for (const payload of payloads)'));
+assert.throws(() => legacyRepairPreconditions({ signal_id: base.signalId }), /precondition missing/);
+const beforeValues = { signal_id: base.signalId, slug: base.slug, occ: base.occ, signal_at: base.signalAt,
+  blocked: base.blocked, entry_px: "1.00", exit_reason: base.exitReason, exit_px: 1.5, exit_at: base.exitAt,
+  pnl_per_contract: 50, stop_pct: 50, tp_pct: 25, n_quotes: 10, mfe_pct: 55, giveback_pct: 9,
+  channel_spec_version_id: null, release_manifest_id: null, configuration_epoch_id: null,
+  native_manager_policy_version: null, research_publisher_version: null };
+assert.equal(legacyRepairPreconditions(beforeValues).length, 20);
+assert.deepEqual(Object.fromEntries(legacyRepairPreconditions(beforeValues).map(({ column, value }) => [column, value])), beforeValues);
 assert.doesNotMatch(publisher, /\.from\("events"|\.from\("positions"|\.from\("strategists"|\.from\("orders"/);
 assert.match(publisher, /preservedLegacyProvenance: true/);
 assert.match(publisher, /eventInserts: 0/);

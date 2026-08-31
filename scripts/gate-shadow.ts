@@ -23,8 +23,8 @@
 //  BOUNDS, hypothesis substrate only — never an arm basis (registry A8), no K
 //  change before the pre-registered ≥30-block check. Paper; no edge claims.
 //
-//    npm run gate-shadow            # last 6 days (inside the 7d prune window)
-//    npm run gate-shadow -- --days 3
+//    npm run gate-shadow -- --read-only --days 3
+//    Publication requires a stamped bounded session or exact approved catch-up.
 // ============================================================================
 
 import { createHash } from "node:crypto";
@@ -106,6 +106,9 @@ if (STAMP_PROVENANCE && (!SESSION || !VIRTUAL_TRADES_ONLY || authorizedCatchupId
 }
 if (SESSION && VIRTUAL_TRADES_ONLY && !STAMP_PROVENANCE && !authorizedCatchupIds) {
   throw new Error("bounded session rebuilds require --stamp-provenance; mutable current-policy lookup is not a historical audit");
+}
+if (HAS_SERVICE && !STAMP_PROVENANCE && !authorizedCatchupIds) {
+  throw new Error("unstamped rolling publication is disabled; use --read-only or a bounded --session with --virtual-trades-only --stamp-provenance");
 }
 
 interface ShadowRow {

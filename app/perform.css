@@ -1039,6 +1039,7 @@ body:has(.shell-root[data-mode="perform"]) { padding: 0; overflow: hidden; }
 .decision-home-status>div>span { display:grid; gap:4px; padding:8px; border-right:1px solid var(--909-line,#c9c4b9); }
 .decision-home-status>div>span:last-child { border-right:0; }
 .decision-home-status>div b { color:var(--909-status-ok,#3b7c48); font-size:10px; }
+.decision-home-status>div>span[data-review="true"] b { color:var(--909-status-attention,#a56f21); }
 .decision-home button { min-height:34px; padding:0 11px; border:1px solid var(--909-line-strong,#827d73); border-radius:5px; background:transparent; color:inherit; font:800 9px/1 var(--sh-mono,var(--mono)); letter-spacing:.06em; cursor:pointer; }
 .decision-home button:hover { border-color:var(--909-accent,#b27828); color:var(--909-accent,#8c5b19); }
 .decision-home-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }

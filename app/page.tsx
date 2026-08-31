@@ -195,6 +195,7 @@ function Surface({
   const incident = process.env.NODE_ENV !== "production" && devSev
     ? devIncidentFixture(devSev, positionsBE, derivedIncident.session)
     : derivedIncident;
+  const decisionAtlas = useDecisionAtlasReports(!accountsLoading);
   const opsReadiness = deriveOpsReadiness({
     nowMs: Date.now(),
     releaseEvents: data.releaseEvents,
@@ -221,12 +222,14 @@ function Surface({
     },
     openPositions: feed.sessionTrades.open,
     closedPositions: feed.sessionTrades.closed,
+    atlasPublication: decisionAtlas.publication,
+    atlasState: decisionAtlas.state,
+    atlasFreshness: decisionAtlas.freshness,
   });
   // Keep the bounded prospective ledger warm so channel-level dry-powder
   // diagnostics are already present when the operator opens an inspector.
   const shadowResearch = useShadowResearch(!accountsLoading, configuredPaperAccountIds);
   const managerEvidence = useChannelManagerEvidence(true);
-  const decisionAtlas = useDecisionAtlasReports(!accountsLoading);
   const reviewEnabled = activeRoom === "tape";
   const daily = useDailyReports(8, reviewEnabled);
   const weekly = useWeeklyReports(6, reviewEnabled);
