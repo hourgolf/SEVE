@@ -1,6 +1,25 @@
 # SEVE Monday readiness program — August 31, 2026
 
-Status: AUTHORIZED / IN PROGRESS · all four bounded production actions approved August 31 before 04:56 Pacific · objective incomplete · Monday read-only check unchanged.
+Status: AUTHORIZED RELEASES APPLIED · post-release verification passed at 05:20 Pacific August 31 · final mobile navigation correction in progress · 06:10 preopen check still pending.
+
+## Monday production delivery — read this before historical notes
+
+The user's August 31 “authorized” covered the four exact production actions below, including Vercel AND Railway restarts. All four have been executed. No trading economics, roster, manager, sizing, priority, account, routing, feed setting, broker order/position, or forward observer activation changed.
+
+- Readiness hardening: PR [146](https://github.com/hourgolf/SEVE/pull/146), merged as `6f2414ce47e9728dc17d534b758dfff4dcfac68b`.
+- Separate quote-provenance source: PR [147](https://github.com/hourgolf/SEVE/pull/147), merged as `c45c20dd6aed56c88f01e4dcf90a90ff46969d1e`. At 05:20 this was the independently observed healthy worker Git SHA. Railway deployment `e521d253-b2a2-4e04-9fed-f773adfb07c5`; Vercel deployment `H9DsQAjWMCYcqfGRLLYYV6y7Bn4h`; both reported SUCCESS.
+- Active trading authority remains `release:proposal:07c47519-ead9-5084-bde8-a0aebee13b78`, configuration `37b779cc9529a8c70171debc36c4fdf6bf90c149fbf01eee929a4735cbe03c98`. Ten trading roots and fifteen observe-only roots; three paper accounts flat, no orders, matching books; exactly one healthy worker. This is an early release check, not the promised 06:10 check.
+- Exact approved virtual repairs: 12 August 27 + 14 August 28 updated and all 26 read back. All nine out-of-scope rows stayed byte-equivalent under canonical comparison. Complete-session independent verification: 143/143 Thursday and 118/118 Friday scoped rows, no missing/duplicate/mismatched payloads. Both original failed source artifacts and exclusive before-image backups are preserved. Do not apply these repairs again.
+- Corrected Thursday and Friday pipelines completed through learning. Atlas canonical hashes: Thursday `sha256:e8f17a265dfb82a6e7fc5eb1f1f9f58a92a5ed2cd68fbd27740da0961d9b1985`; Friday `sha256:7731c1159817b08f8d1f6036e2e99a552c6659216e1d7dcc020870b904406450`. Friday retained 68 channels and 9,001 logical opportunities. The first Friday invocation had a mistaken local manifest path; all preceding stages passed and the learning stage was rerun with the correct `friday-artifact/data/gate-shadow-catchup-manifest.json`. Nothing was published from the failed invocation.
+- Learning-enriched briefs published: 68 rows for each date, independently read back with complete-bundle/hash verification. Thursday bundle `sha256:53d94c7a2d29959d87993242df3fa33063f12cf8bd0e3bdbbb21ecf87873919e`; Friday bundle `sha256:6e4fbfb53d55ec2abc274c952dc521e069308b57dd7acf2333654c7cba427637`.
+- Monday-targeted Sentinel v4 published, event `33372ec5-fc5b-4257-a14e-cca68b824362`, session August 28 / target August 31. Independent payload readback SHA `a28b067e9bc5e84f518d65014e91f8bb98a68b0d8d479c23c2aaaf64aae0b289`. Six logical trades, +$350 gross realized; 45/48 manager paths terminal and three censored. Reused the verified exact replay: 849 eligible, 175 censored, zero missing. Overall PARTIAL remains truthful; do not turn this into an evidence-complete or trading-halt claim.
+- Quote schema `20260829010000` applied in one bounded transaction at 05:08 Pacific, including exact migration-history entry; all 18 nullable columns and three validated constraints independently checked. SQL SHA `f2e7f9f8894115218dca7b97274808cdc5b6f87e5dc5679456a8e3262ed5b55c`. No other migrations or backfills applied.
+- `market-ingest` version 12 deployed ACTIVE with JWT verification unchanged. Downloaded production source matches reviewed generated source byte-for-byte: `8bd7ab3a018ac7e30db3d594f567f72fab4c62048be275cf642f9b64b1bd0883`. Original version 11 source retained for rollback. Backups use `.ts.source` so the web typechecker does not compile downloaded Deno artifacts. SIP/OPRA settings unchanged. At 05:20, zero new provenance rows was expected before the 05:55 Pacific ingestion window; first-row and full-session/archive validation remain prospective.
+- Authenticated production checks confirmed current 08/28 Atlas publication on mobile Home/System, current-but-partial Sentinel, and no sampled warnings/errors. Mobile Review exposes historical periods and Atlas. The NEXT tab revealed a pre-existing routing omission (`sentinel` fell through to Home); a bounded route fix and URL round-trip regression checks are being released before the final smoke. Do not claim that navigation check passed until the post-fix receipt below exists.
+
+Local proof directory: `data/monday-readiness-2026-08-31/` in this checkout. The consolidated SELECT/GET-only receipt is `production-verification-2026-08-31T12-20-13-679Z.json`; per-date publications are under `final-YYYY-MM-DD/learning/publication-receipt.json`. Exact repair receipts and full before-images are under `virtual-repair-proposal-2026-08-27/published-2026-08-31-receipt.json[.before.json]` and `virtual-repair-proposal/published-2026-08-31-receipt.json[.before.json]`. Sentinel proof is under `sentinel-2026-08-28-published/`.
+
+Remaining acceptance: final mobile navigation deployment/readback; fresh scheduled 06:10 worker/accounts/calendar/UI check; first forward provider-timestamp rows after ingestion starts; full-session archive parity after close. Broader research recommendations are not activation approvals. The automated packet's generic “ready” labels mean a local evidence gate, not completed independent roster/portfolio review. The old unstamped writer has not been positively identified; watch for recurrence rather than repeatedly repairing its output.
 
 ## Objective
 
@@ -98,7 +117,7 @@ Do not silently bypass validation to meet the deadline. If reporting cannot be r
 
 Separate observed facts, supported inference, hypotheses, and missing prospective evidence. State the strongest counterargument and material uncertainty for consequential recommendations. A better exit does not prove good entries; a profitable sum does not prove a positive typical outcome; an exploratory backtest does not establish rehabilitation. Same-opportunity, chronological holdout, without-best-session, era compatibility, capacity/collision and displacement gates remain required for trading recommendations.
 
-## Handoff / current progress
+## Historical preparation notes — superseded by Monday delivery above
 
 - Goal is incomplete; the approval blocker was removed by the user's August 31 authorization. At 04:57 Pacific, the unchanged release/configuration passed fresh SELECT/GET-only flatness and congruence checks: one fresh healthy worker, three distinct reachable paper accounts, zero positions/orders and matching books, SIP/OPRA settings. This is an early release preflight, not the scheduled 06:10 check. Current origin/main remains `08737635a4f77c55295b80301e9f09bccecfdb60` before the approved release.
 - Retrieval fix implemented: counted, deterministically ordered reads with an exclusive through-session bound. Successfully retrieved 51,764 signals; every counted source matched its before/after count and unique identity count. Counts are not a transactional database snapshot; the returned snapshot is frozen and hashed.
@@ -110,7 +129,7 @@ Separate observed facts, supported inference, hypotheses, and missing prospectiv
 - Regression suites PASS: Atlas/reader, legacy repair, gate policy/quote-path audit, publication/hash verification, readiness, channel decision packet, Sentinel operator/manager/release audits; TypeScript and production build PASS. Nine three-axis suites and generated market-ingest artifact parity PASS.
 - Recovered study source/input/output locations and hashes are below. Optional quote release is prepared separately. A SELECT probe confirms the proposed `option_quotes.provider` column is absent; schema must precede updated ingestion. Production OPRA/SIP settings are now confirmed by the separate 17:30 Pacific read-only check above. Actual provider timestamp capture and one-full-session forward/archive validation remain prospective requirements.
 - One-time read-only Monday check scheduled for 06:10 Pacific. Machine/app must remain available. Do not use Sunday's health observation as Monday GO.
-- No production repair, publication, push, merge, deployment, migration, feed change or trading change has been performed under this goal.
+- Before the August 31 authorization, no production mutations had been performed under this goal. The Monday delivery section now records the approved mutations; only that section describes the current delivery state.
 
 ## Exact recovery receipts
 
@@ -138,7 +157,7 @@ Saturday workflow `33281087108` scored Friday exact evidence and published/read 
 - Report bytes hash verified: `6b9d9639a07eafdbf9ce5ef8ab6793cd89fec7db19f9ac7e4e36b6f6916dfd7a`.
 - Publication receipt bytes hash verified: `2f0b38290b83fdb953793bbbddaa5c98a68484f2b42a1da18e118c5506757123`.
 - Freeze matches Friday's exact source identity: `4fa6bbd43fcd99e5d53797b99272f623264d8c16948486aadb5f84cd90eb79c7`.
-- Latest local Monday brief: `sentinel-2026-08-28-v4/packet.json` and `2026-08-28.receipt.json`. Six executed logical trades closed; 45/48 manager runs terminal, three censored. Exact results are attached, not inaccurately described as still waiting for T+1. Overall PARTIAL is truthful and is not a trading halt instruction.
+- Original local-only Monday draft: `sentinel-2026-08-28-v4/packet.json` and `2026-08-28.receipt.json`. The newer published/read-back packet is under `sentinel-2026-08-28-published/`. Six executed logical trades closed; 45/48 manager runs terminal, three censored. Exact results are attached, not inaccurately described as still waiting for T+1. Overall PARTIAL is truthful and is not a trading halt instruction.
 
 ## Study recovery evidence
 

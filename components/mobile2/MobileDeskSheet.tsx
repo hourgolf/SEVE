@@ -27,6 +27,7 @@ import { ReviewSessionScorecard } from "@/components/perform/ReviewSessionScorec
 import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 import type { PnlWindow } from "@/hooks/useWindowedPnl";
 import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
+import { mobileReviewDestination, mobileReviewModeForDestination } from "@/lib/mobile/workspaceRouting";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -157,15 +158,16 @@ export function MobileReviewView({ props, channels, livePnl, destination, onNavi
   const judge = sentinel.judge;
   const tape = useMemo(() => deriveTapeRows(props.data.events).slice(0, 12), [props.data.events]);
   useEffect(() => {
-    if (destination?.section === "research") setMode("shadow");
-    else if (destination?.section === "tape") setMode(destination.reviewSection === "counterfactuals" ? "evidence" : "session");
+    const nextMode = mobileReviewModeForDestination(destination);
+    if (nextMode) setMode(nextMode);
   }, [destination?.reviewSection, destination?.section]);
 
   return <>
     <nav className="m2-review-modes" aria-label="Review workspace">
       {MOBILE_REVIEW_MODES.map((item) => <button type="button" key={item.id} className={mode === item.id ? "on" : ""} onClick={() => {
         setMode(item.id);
-        if (item.id !== "council") onNavigate?.({ section: item.id === "shadow" ? "research" : item.id === "sentinel" ? "sentinel" : "tape", researchMode: item.id === "shadow" ? "decisions" : undefined });
+        const next = mobileReviewDestination(item.id);
+        if (next) onNavigate?.(next);
       }} aria-pressed={mode === item.id}><b>{item.label}</b><small>{item.sub}</small></button>)}
     </nav>
     {mode !== "council" && <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="review" onNavigate={onNavigate} />}
