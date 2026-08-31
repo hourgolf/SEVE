@@ -174,18 +174,25 @@ var H = {
   "accept": "application/json"
 };
 async function getJson(url) {
+  const requestStartedAt = (/* @__PURE__ */ new Date()).toISOString();
   const r = await fetch(url, { headers: H });
   const body = await r.text();
+  const requestCompletedAt = (/* @__PURE__ */ new Date()).toISOString();
   if (!r.ok) throw new Error(`${r.status} from ${url.split("?")[0]} -> ${body.slice(0, 200)}`);
-  return JSON.parse(body);
+  return { json: JSON.parse(body), requestStartedAt, requestCompletedAt };
 }
 var OCC = /^([A-Z]+)(\d{6})([CP])(\d{8})$/;
 async function ingestOne(sb, sym, today, oneDTE) {
-  const [barRes, tradeRes] = await Promise.all([
+  const [barFetch, tradeFetch] = await Promise.all([
     getJson(`${DATA}/v2/stocks/${sym}/bars/latest?feed=${STOCK_FEED}`),
     getJson(`${DATA}/v2/stocks/${sym}/trades/latest?feed=${STOCK_FEED}`)
   ]);
+  const barRes = barFetch.json;
+  const tradeRes = tradeFetch.json;
   const spot = tradeRes?.trade?.p ?? barRes?.bar?.c;
+  const underlyingSource = tradeRes?.trade?.p != null ? "latest_trade" : barRes?.bar?.c != null ? "latest_bar" : null;
+  const underlyingProviderAt = tradeRes?.trade?.p != null ? tradeRes?.trade?.t ?? null : barRes?.bar?.t ?? null;
+  const underlyingObservedAt = tradeRes?.trade?.p != null ? tradeFetch.requestCompletedAt : barRes?.bar?.c != null ? barFetch.requestCompletedAt : null;
   if (barRes?.bar) {
     const b = barRes.bar;
     const { error } = await sb.from("underlying_bars").upsert(
@@ -198,13 +205,22 @@ async function ingestOne(sb, sym, today, oneDTE) {
   if (spot) {
     url += `&strike_price_gte=${Math.floor(spot - STRIKE_WINDOW)}&strike_price_lte=${Math.ceil(spot + STRIKE_WINDOW)}`;
   }
-  const chain = await getJson(url);
+  const chainFetch = await getJson(url);
+  const chain = chainFetch.json;
   const raw = chain?.snapshots ?? {};
   const rows = Object.entries(raw).map(([occSym, s]) => {
     const m = occSym.match(OCC);
     if (!m) return null;
     const [, , yymmdd, cp, strk] = m;
     const g = s.greeks ?? {};
+    const hasGreeks = [
+      g.delta,
+      g.gamma,
+      g.theta,
+      g.vega,
+      g.rho,
+      s.impliedVolatility
+    ].some((value) => value != null);
     return {
       occ_symbol: occSym,
       underlying: sym,
@@ -222,7 +238,29 @@ async function ingestOne(sb, sym, today, oneDTE) {
       gamma: g.gamma ?? null,
       theta: g.theta ?? null,
       vega: g.vega ?? null,
-      rho: g.rho ?? null
+      rho: g.rho ?? null,
+      provider: "alpaca",
+      option_feed: OPT_FEED,
+      request_started_at: chainFetch.requestStartedAt,
+      request_completed_at: chainFetch.requestCompletedAt,
+      observed_at: chainFetch.requestCompletedAt,
+      provider_quote_at: s.latestQuote?.t ?? null,
+      provider_trade_at: s.latestTrade?.t ?? null,
+      quote_conditions: s.latestQuote?.c ?? null,
+      trade_conditions: s.latestTrade?.c ?? null,
+      underlying_feed: STOCK_FEED,
+      underlying_source: underlyingSource,
+      underlying_provider_at: underlyingProviderAt,
+      underlying_observed_at: underlyingObservedAt,
+      // Alpaca snapshot Greeks do not carry an independent provider timestamp.
+      // Keep that unknown explicit instead of borrowing the quote or receipt clock.
+      greeks_provider_at: null,
+      greeks_observed_at: hasGreeks ? chainFetch.requestCompletedAt : null,
+      greeks_provenance: hasGreeks ? "alpaca_snapshot_unstamped" : null,
+      // The snapshot endpoint does not prove contract metadata. A later metadata
+      // join may populate these fields; the collector must not assume 100 here.
+      contract_multiplier: null,
+      contract_metadata_source: null
     };
   }).filter(Boolean);
   if (rows.length) {
