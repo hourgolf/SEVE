@@ -1,5 +1,6 @@
 import { contentHash } from "./channelControlPlane";
 import {
+  CHANNEL_DECISION_AS_OF,
   channelDecisionReview,
   type ChannelDecisionReview,
   type DecisionEvidenceLayer,
@@ -105,9 +106,26 @@ export function buildVersionedChannelDecisionPacket(input: {
   const cohorts = new Map(
     input.exactCurrentCohorts.map((cohort) => [cohort.slug, cohort]),
   );
+  if (input.exactCurrentCohorts.some((cohort) => cohort.configurationEpochId !== input.configurationEpochId)) {
+    throw new Error("current cohort configuration does not match the packet");
+  }
   const reviews = Object.fromEntries(
     [...new Set(input.slugs)].sort().map((slug) => {
-      const basis = channelDecisionReview(slug) ?? insufficient(slug);
+      const historicalReview = channelDecisionReview(slug);
+      // A new packet date or fresh counts do not renew a static operator
+      // recommendation. Retain the old evidence without calling it current.
+      const basis: ChannelDecisionReview = historicalReview && input.sessionDateEt !== CHANNEL_DECISION_AS_OF
+        ? {
+          ...insufficient(slug),
+          summary: `Historical review from ${CHANNEL_DECISION_AS_OF}; no renewed channel decision is established by this packet. Current execution, when available, is shown separately.`,
+          layers: historicalReview.layers.map((layer) => ({
+            ...layer,
+            kind: layer.kind === "current-config-executed" ? "broad-executed" : layer.kind,
+            comparability: layer.comparability === "exact-current" || layer.comparability === "exact-comparable" ? "mixed-config" : layer.comparability,
+            label: `HISTORICAL ${CHANNEL_DECISION_AS_OF} · ${layer.label}`,
+            fact: `Historical review evidence; compatibility with this packet's release has not been re-established. ${layer.fact}`,
+          })),
+        } : historicalReview ?? insufficient(slug);
       const cohort = cohorts.get(slug);
       const layers = cohort
         ? [

@@ -42,4 +42,22 @@ assert.equal(readVersionedChannelDecisionPacket({
   sessionDateEt: "2026-07-31",
 }), null);
 
+const refreshed = buildVersionedChannelDecisionPacket({
+  ...packet,
+  sessionDateEt: "2026-08-28",
+  generatedAt: "2026-08-30T23:00:00.000Z",
+  slugs: ["pb-ride", "breakout-alt-v3-iwm"],
+  exactCurrentCohorts: [],
+});
+assert.equal(refreshed.reviews["breakout-alt-v3-iwm"].disposition, "insufficient-evidence");
+assert.match(refreshed.reviews["pb-ride"].summary, /Historical review from 2026-07-30/);
+assert.ok(refreshed.reviews["pb-ride"].layers.length > 0, "historical evidence is retained");
+assert.ok(refreshed.reviews["pb-ride"].layers.every((layer) => layer.comparability !== "exact-current"));
+assert.ok(refreshed.reviews["pb-ride"].layers.every((layer) => layer.comparability !== "exact-comparable"));
+assert.throws(() => buildVersionedChannelDecisionPacket({
+  ...packet, slugs: ["pb-ride"],
+  exactCurrentCohorts: [{ slug: "pb-ride", channelSpecVersionId: "old-spec", configurationEpochId: "old-epoch",
+    observations: 1, sessions: 1, totalUsd: 10, evidenceRef: `sha256:${"4".repeat(64)}` }],
+}), /configuration does not match/);
+
 console.log("channelDecisionPacket selftest passed");

@@ -10,6 +10,7 @@ import { dirname, resolve } from "node:path";
 import {
   buildLegacyVirtualTradeRepairManifest,
   isStrictlyLegacyProvenance,
+  legacyRepairPreconditions,
   researchSha256,
   stableResearchJson,
   type CanonicalVirtualTradePayload,
@@ -153,17 +154,24 @@ async function main(): Promise<void> {
       || stableResearchJson(reviewed) !== stableResearchJson(currentManifest)) {
       throw new Error("reviewed repair manifest does not match current local, remote, and source evidence");
     }
+    // Preserve the exact rollback evidence before any write. This is not an
+    // automatic rollback: a partial failure requires a new bounded review.
+    const beforeImageFile = `${receiptFile}.before.json`;
+    if (existsSync(beforeImageFile)) throw new Error(`use a fresh receipt path; before image exists: ${beforeImageFile}`);
+    mkdirSync(dirname(beforeImageFile), { recursive: true });
+    writeFileSync(beforeImageFile, `${JSON.stringify({ manifestSha256, remoteRows, payloads }, null, 2)}\n`, { flag: "wx" });
     // All rows and source policies were validated before the first write. Each
-    // update is additionally conditional on every provenance field remaining
-    // null, so concurrent publication fails closed rather than overwriting it.
+    // update additionally matches every original value, including nulls, so a
+    // concurrent legacy or provenance-stamped writer cannot be overwritten.
     // The immutable nulls remain null by design; source provenance is hashed
     // in the manifest rather than retroactively written to a legacy row.
     for (const payload of payloads) {
-      const write = await sb.from("virtual_trades").update(payload)
-        .eq("signal_id", payload.signal_id)
-        .is("channel_spec_version_id", null).is("release_manifest_id", null)
-        .is("configuration_epoch_id", null).is("native_manager_policy_version", null)
-        .is("research_publisher_version", null).select("signal_id");
+      const before = remoteRows.find((row) => row.signal_id === payload.signal_id)!;
+      let query = sb.from("virtual_trades").update(payload);
+      for (const { column, value } of legacyRepairPreconditions(before as unknown as Record<string, unknown>)) {
+        query = value === null ? query.is(column, null) : query.eq(column, value);
+      }
+      const write = await query.select("signal_id");
       if (write.error) throw new Error(`virtual_trades repair failed (${payload.signal_id}): ${write.error.message}`);
       if ((write.data ?? []).length !== 1) throw new Error(`virtual_trades repair lost legacy precondition (${payload.signal_id})`);
       upserts += 1;

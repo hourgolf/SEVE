@@ -9,6 +9,7 @@ import {
   etSessionDate,
 } from "@/lib/research/decisionAtlasFreshness";
 import { useRefreshTick } from "./useRefreshTick";
+import { browserPublicationHash, verifyAtlasPublication, type AtlasPublicationVerification } from "@/lib/research/atlasPublication";
 
 export interface DecisionAtlasReportsRead {
   throughSession: string | null;
@@ -17,6 +18,7 @@ export interface DecisionAtlasReportsRead {
   bySlug: Record<string, ChannelDecisionBrief>;
   state: "idle" | "loading" | "ready" | "unavailable" | "error";
   error: string | null;
+  publication?: AtlasPublicationVerification;
 }
 
 export function useDecisionAtlasReports(enabled = true): DecisionAtlasReportsRead {
@@ -54,13 +56,16 @@ export function useDecisionAtlasReports(enabled = true): DecisionAtlasReportsRea
         return;
       }
       const reports = await sb.from("decision_atlas_channel_reports")
-        .select("channel_slug,brief").eq("through_session", throughSession).order("channel_slug").limit(500);
+        .select("channel_slug,brief,brief_sha256", { count: "exact" }).eq("through_session", throughSession).order("channel_slug").limit(500);
       if (!alive) return;
       if (reports.error) throw reports.error;
+      if (reports.count == null || reports.count !== (reports.data ?? []).length) throw new Error("Atlas publication read is incomplete");
+      const publication = await verifyAtlasPublication(reports.data ?? [], throughSession, browserPublicationHash);
+      if (!alive) return;
       const bySlug = Object.fromEntries((reports.data ?? []).map((row) => [
         String(row.channel_slug), row.brief as ChannelDecisionBrief,
       ]));
-      setRead({ throughSession, evidenceThroughSession, freshness: decisionAtlasFreshness(throughSession, evidenceThroughSession), bySlug, state: "ready", error: null });
+      setRead({ throughSession, evidenceThroughSession, freshness: decisionAtlasFreshness(throughSession, evidenceThroughSession), bySlug, state: "ready", error: null, publication });
     })().catch((error) => {
       if (alive) setRead({ throughSession: null, evidenceThroughSession: null, freshness: "unknown", bySlug: {}, state: "error", error: (error as Error)?.message ?? "Atlas brief read failed" });
     });

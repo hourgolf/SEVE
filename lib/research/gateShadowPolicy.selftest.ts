@@ -71,6 +71,8 @@ assert.match(script, /authorizedCatchupIds\.has\(base\.signalId\)/, "bounded pub
 assert.match(script, /pendingAuthorized/, "bounded publication must reconstruct the complete approved set before writing");
 assert.match(script, /manifest is stale/, "bounded publication must refuse rows that appeared after authorization");
 assert.match(script, /bounded session rebuilds require --stamp-provenance/, "bounded session rebuilds must refuse mutable current-policy lookup");
+assert.match(script, /if \(HAS_SERVICE && !STAMP_PROVENANCE && !authorizedCatchupIds\)/);
+assert.match(script, /unstamped rolling publication is disabled/);
 const verifier = readFileSync(new URL("../../scripts/verify-shadow-rebuild.ts", import.meta.url), "utf8");
 assert.match(verifier, /remoteSelectOnly: true/, "independent verifier must declare its SELECT-only boundary");
 assert.match(verifier, /productionWrites: 0/, "independent verifier must declare zero production writes");

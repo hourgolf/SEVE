@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { pageAll } from "../engine/pageAll";
+import { atlasEvidenceWindow, readAtlasEvidenceRows, type AtlasReadCoverage } from "../lib/research/decisionAtlasRead";
 import { loadStoredReceiptBoundControlPlane } from "../lib/channels/channelControlPlanePersistence";
 import type { ProfitabilityLedger } from "../lib/profitability/profitabilityLedger";
 import { etDateOf } from "../lib/profitability/profitabilityLedger";
@@ -54,8 +54,7 @@ const virtualCatchupFile = arg("virtual-catchup-file");
 const virtualCatchupManifestFile = arg("virtual-catchup-manifest");
 const cohortFrom = arg("cohort-from") ?? "2026-07-01T04:00:00.000Z";
 const throughSession = arg("through") ?? etDateOf(new Date().toISOString());
-const readOptions = { pageSize: 1_000, max: 50_000, attempts: 3,
-  retryDelaysMs: [250, 750], timeoutMs: 15_000 } as const;
+const evidenceWindow = atlasEvidenceWindow(cohortFrom, throughSession);
 
 interface ProfitabilityArtifact { ledger: ProfitabilityLedger }
 
@@ -140,15 +139,26 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
   snapshot: DecisionAtlasSourceSnapshot;
   timingsMs: Record<string, number>;
   controlPlaneState: string;
+  sourceReadCoverage: Record<string, AtlasReadCoverage>;
 }> {
   const sb = createServerSupabaseClient("decision-atlas");
   const timingsMs: Record<string, number> = {};
+  const sourceReadCoverage: Record<string, AtlasReadCoverage> = {};
   const timed = async <T>(label: string, read: () => Promise<T>): Promise<T> => {
     const started = Date.now();
     const value = await read();
     timingsMs[label] = Date.now() - started;
     return value;
   };
+  const read = <T>(label: string, query: (options: { head: boolean; count?: "exact" }) => any, key = "id") =>
+    timed(label, async () => {
+      const result = await readAtlasEvidenceRows<T>({ label,
+        query: (head) => query(head ? { head, count: "exact" } : { head }),
+        key: (row) => String((row as Record<string, unknown>)[key] ?? ""),
+      });
+      sourceReadCoverage[label] = result.coverage;
+      return result.rows;
+    });
   const optional = async <T>(read: () => Promise<T[]>): Promise<T[]> => {
     try { return await read(); }
     catch (error) {
@@ -159,52 +169,54 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
   };
   const [strategists, positions, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
     vbCandidateReceipts, vbExactPathReceipts, vbExactManagerPathReceipts, control] = await Promise.all([
-    timed("strategists", () => pageAll<AtlasStrategistRow>((from) => sb.from("strategists")
-      .select("id,slug,underlying").order("id"), { ...readOptions, max: 5_000 })),
-    timed("position_context", () => pageAll<AtlasPositionContextRow>((from) => sb.from("positions")
-      .select("id,runner_of,entry_features,occ_symbol,opened_at")
-      .gte("opened_at", cohortFrom).order("opened_at").order("id"), readOptions)),
-    timed("signals", () => pageAll<AtlasSignalRow>((from) => sb.from("signals")
-      .select("id,strategist_id,signal_type,underlying_price,direction,rationale,acted_on,blocked_reason,created_at,configuration_epoch_id")
-      .gte("created_at", cohortFrom).order("created_at").order("id"), readOptions)),
-    timed("execution_observations", () => pageAll<AtlasExecutionRow>((from) => sb.from("execution_observations")
+    read<AtlasStrategistRow>("strategists", (options) => sb.from("strategists")
+      .select("id,slug,underlying", options).order("id")),
+    read<AtlasPositionContextRow>("position_context", (options) => sb.from("positions")
+      .select("id,runner_of,entry_features,occ_symbol,opened_at", options)
+      .gte("opened_at", evidenceWindow.start).lt("opened_at", evidenceWindow.end).order("opened_at").order("id")),
+    read<AtlasSignalRow>("signals", (options) => sb.from("signals")
+      .select("id,strategist_id,signal_type,underlying_price,direction,rationale,acted_on,blocked_reason,created_at,configuration_epoch_id", options)
+      .gte("created_at", evidenceWindow.start).lt("created_at", evidenceWindow.end).order("created_at").order("id")),
+    read<AtlasExecutionRow>("execution_observations", (options) => sb.from("execution_observations")
       .select(["id", "trace_id", "event_kind", "event_at", "strategist_id", "account_id", "channel_slug",
         "opportunity_id", "position_id", "action", "reason", "blocked_reason", "underlying", "occ_symbol",
         "option_side", "bid", "ask", "requested_qty", "broker_status", "filled_qty", "fill_price", "payload",
-        "configuration_epoch_id", "source_bar_at", "client_order_id", "broker_order_id", "source_boot_id"].join(","))
-      .gte("event_at", cohortFrom).order("event_at").order("id"), readOptions)),
-    timed("virtual_trades", () => pageAll<AtlasVirtualTradeRow>((from) => sb.from("virtual_trades")
-      .select("signal_id,strategist_id,slug,occ,signal_at,blocked,entry_px,exit_reason,exit_px,exit_at,pnl_per_contract,mfe_pct,giveback_pct")
-      .gte("signal_at", cohortFrom).order("signal_at").order("signal_id"), { ...readOptions, max: 20_000 })),
-    timed("manager_shadow_runs", () => pageAll<ChannelManagerRunRow>((from) => sb.from("manager_shadow_runs")
+        "configuration_epoch_id", "source_bar_at", "client_order_id", "broker_order_id", "source_boot_id"].join(","), options)
+      .gte("event_at", evidenceWindow.start).lt("event_at", evidenceWindow.end).order("event_at").order("id")),
+    read<AtlasVirtualTradeRow>("virtual_trades", (options) => sb.from("virtual_trades")
+      .select("signal_id,strategist_id,slug,occ,signal_at,blocked,entry_px,exit_reason,exit_px,exit_at,pnl_per_contract,mfe_pct,giveback_pct", options)
+      .gte("signal_at", evidenceWindow.start).lt("signal_at", evidenceWindow.end).order("signal_at").order("signal_id"), "signal_id"),
+    read<ChannelManagerRunRow>("manager_shadow_runs", (options) => sb.from("manager_shadow_runs")
       .select(["id", "position_id", "channel_slug", "manager_id", "manager_policy_version", "shadow_book_version",
         "configuration_epoch_id", "status", "evidence_state", "entry_at", "entry_price", "original_qty",
         "economic_mode", "peak_return_pct", "terminal_at", "terminal_return_pct", "terminal_pnl", "censored_at",
-        "censor_code"].join(","))
-      .gte("entry_at", cohortFrom).order("entry_at").order("id"), readOptions)),
+        "censor_code"].join(","), options)
+      .gte("entry_at", evidenceWindow.start).lt("entry_at", evidenceWindow.end).order("entry_at").order("id")),
     timed("equity_snapshots", async () => {
       const result = await sb.from("equity_snapshots")
       .select("id,account_id,net_liquidation,captured_at")
       .not("account_id", "is", null).is("strategist_id", null)
+      .lt("captured_at", evidenceWindow.end)
       .order("captured_at", { ascending: false }).order("id", { ascending: false }).limit(500);
       if (result.error) throw result.error;
       return (result.data ?? []) as unknown as Array<AtlasEquitySnapshotRow & { id: string }>;
     }),
-    timed("worker_runs", () => pageAll<AtlasWorkerRunRow>((from) => sb.from("worker_runs")
-      .select("boot_id,instance_id,git_sha,railway_deployment,started_at,last_heartbeat_at,shutdown_started_at,ended_at,termination_kind,last_phase,memory_rss_mb")
-      .gte("started_at", cohortFrom).order("started_at").order("boot_id"), { ...readOptions, max: 5_000 })),
-    timed("vb_candidate_receipts", () => optional(() => pageAll<AtlasVbCandidateReceiptRow>((from) =>
+    read<AtlasWorkerRunRow>("worker_runs", (options) => sb.from("worker_runs")
+      .select("boot_id,instance_id,git_sha,railway_deployment,started_at,last_heartbeat_at,shutdown_started_at,ended_at,termination_kind,last_phase,memory_rss_mb", options)
+      .gte("started_at", evidenceWindow.start).lt("started_at", evidenceWindow.end).order("started_at").order("boot_id"), "boot_id"),
+    optional(() => read<AtlasVbCandidateReceiptRow>("vb_candidate_receipts", (options) =>
       sb.from("vb_candidate_receipts")
-        .select("id,opportunity_id,signal_id,channel_slug,session_date_et,source_bar_at,blocked_reason,channel_version,configuration_epoch_id,manager_paths_expected,manager_paths_published,manager_censors")
-        .gte("source_bar_at", cohortFrom).order("source_bar_at").order("id"), { ...readOptions, max: 20_000 }))),
-    timed("vb_exact_path_receipts", () => optional(() => pageAll<AtlasVbExactPathReceiptRow>((from) =>
+        .select("id,opportunity_id,signal_id,channel_slug,session_date_et,source_bar_at,blocked_reason,channel_version,configuration_epoch_id,manager_paths_expected,manager_paths_published,manager_censors", options)
+        .gte("source_bar_at", evidenceWindow.start).lt("source_bar_at", evidenceWindow.end).order("source_bar_at").order("id"))),
+    optional(() => read<AtlasVbExactPathReceiptRow>("vb_exact_path_receipts", (options) =>
       sb.from("vb_exact_path_receipts")
-        .select("id,candidate_id,opportunity_id,entry_ask")
-        .gte("completed_at", cohortFrom).order("completed_at").order("id"), { ...readOptions, max: 20_000 }))),
-    timed("vb_exact_manager_path_receipts", () => optional(() => pageAll<AtlasVbExactManagerPathReceiptRow>((from) =>
+        .select("id,candidate_id,opportunity_id,entry_ask", options)
+        // T+1 publication belongs to its entry cohort, not the later publication day.
+        .gte("entry_quote_at", evidenceWindow.start).lt("entry_quote_at", evidenceWindow.end).order("entry_quote_at").order("id"))),
+    optional(() => read<AtlasVbExactManagerPathReceiptRow>("vb_exact_manager_path_receipts", (options) =>
       sb.from("vb_exact_manager_path_receipts")
-        .select("id,candidate_id,opportunity_id,channel_slug,manager_id,pnl_per_contract,basis,independent_opportunity")
-        .gte("source_bar_at", cohortFrom).order("source_bar_at").order("id"), { ...readOptions, max: 100_000 }))),
+        .select("id,candidate_id,opportunity_id,channel_slug,manager_id,pnl_per_contract,basis,independent_opportunity", options)
+        .gte("source_bar_at", evidenceWindow.start).lt("source_bar_at", evidenceWindow.end).order("source_bar_at").order("id"))),
     timed("active_control_plane", () => loadStoredReceiptBoundControlPlane(sb)),
   ]);
   if (!control.compiled) throw new Error(`active control plane unavailable: ${control.error ?? control.state}`);
@@ -218,6 +230,7 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
     },
     timingsMs,
     controlPlaneState: control.state,
+    sourceReadCoverage,
   };
 }
 
@@ -254,6 +267,7 @@ async function main(): Promise<void> {
   let timingsMs: Record<string, number>;
   let posture: "select_only_local_artifacts" | "local_snapshot_replay";
   let controlPlaneState: string;
+  let sourceReadCoverage: Record<string, AtlasReadCoverage> | null = null;
   if (snapshotFile) {
     const path = resolve(snapshotFile);
     const started = Date.now();
@@ -267,6 +281,7 @@ async function main(): Promise<void> {
     timingsMs = collected.timingsMs;
     posture = "select_only_local_artifacts";
     controlPlaneState = collected.controlPlaneState;
+    sourceReadCoverage = collected.sourceReadCoverage;
   }
   const catchup = applyLocalVirtualCatchup(snapshot);
   snapshot = catchup.snapshot;
@@ -291,6 +306,9 @@ async function main(): Promise<void> {
     controlPlaneState,
     ledgerFile,
     cohortFrom,
+    evidenceWindow,
+    sourceReadCoverage,
+    equitySelection: "latest 500 account snapshots before the evidence-window end; not a historical equity series",
     timingsMs,
     localVirtualCatchup: catchup.metadata,
     sourceRows: {

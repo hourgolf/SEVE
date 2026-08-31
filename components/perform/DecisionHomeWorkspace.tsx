@@ -12,7 +12,7 @@ const pt = (value: string | null | undefined): string => value ? new Date(value)
 }) + " PT" : "checking";
 
 const plainChange = (message: string): string => {
-  if (/shadow-publish: day-report done/i.test(message)) return "Nightly research evidence finished publishing.";
+  if (/shadow-publish: day-report done/i.test(message)) return "The day report finished; Atlas and the next-session brief have separate checks.";
   if (/stream: boot/i.test(message)) return "The paper worker restarted and reported its active release.";
   if (/rc54-release ACTIVE/i.test(message)) return "The current paper release was observed running.";
   return "New operational evidence was recorded.";
@@ -33,12 +33,18 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
     reportThroughSession: surface.decisionAtlas.throughSession,
   });
   const atlasStale = surface.decisionAtlas.state === "ready" && surface.decisionAtlas.freshness === "stale";
-  const evidenceQuality = readiness.tone === "red" || surface.decisionAtlas.state === "error" || atlasStale ? "partial"
-    : surface.decisionAtlas.state === "ready" ? "complete" : "checking";
+  const researchVerified = surface.decisionAtlas.state === "ready"
+    && surface.decisionAtlas.publication?.state === "verified" && surface.decisionAtlas.freshness === "current";
+  const researchLabel = surface.decisionAtlas.state === "ready"
+    ? atlasStale ? atlasLabel : researchVerified ? `VERIFIED · ${surface.decisionAtlas.throughSession?.slice(5).replace("-", "/")}` : "BUNDLE UNVERIFIED"
+    : surface.decisionAtlas.state.toUpperCase();
+  const evidenceQuality = readiness.tone === "red" || surface.decisionAtlas.state === "error" || atlasStale || !researchVerified ? "partial"
+    : "complete";
   const attention = [
     surface.incident.severity !== "normal" ? { label: surface.incident.title, destination: { section: "ops" as const, check: "reconciliation" } } : null,
     atlasStale ? { label: "Nightly channel decisions need a fresh close", destination: { section: "research" as const, researchMode: "decisions" as const } } : null,
-    fleet.lead ? { label: `${fleet.lead.channel}: ${fleet.lead.disposition.toLowerCase()}`, destination: { section: "research" as const, channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" as const } } : null,
+    !atlasStale && !researchVerified ? { label: "Channel publication needs verification", destination: { section: "ops" as const } } : null,
+    researchVerified && fleet.lead ? { label: `${fleet.lead.channel}: ${fleet.lead.disposition.toLowerCase()}`, destination: { section: "research" as const, channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" as const } } : null,
     readiness.tone === "red" ? { label: readiness.detail, destination: { section: "ops" as const } } : null,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item)).slice(0, 3);
 
@@ -53,9 +59,9 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
       quality={evidenceQuality}
       detail="Actual selected-account positions are kept separate from all-paper nightly research."
     />
-    <section className={`decision-home-status ${healthy ? "healthy" : "attention"}`}>
-      <span><small>DESK STATUS</small><b>{healthy ? "READY FOR THE NEXT SESSION" : "CHECK BEFORE THE NEXT SESSION"}</b><p>{deskFlat ? `${account?.name ?? "The selected paper account"} is flat.` : `${surface.feed.positions.length} selected-account paper positions remain open.`}</p></span>
-      <div><span><small>TRADING</small><b>{readiness.tone === "red" ? "NEEDS REVIEW" : "READY"}</b></span><span><small>DATA</small><b>{surface.data.status === "err" ? "NEEDS REVIEW" : "AVAILABLE"}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? atlasLabel : surface.decisionAtlas.state.toUpperCase()}</b></span></div>
+    <section className={`decision-home-status ${healthy && researchVerified ? "healthy" : "attention"}`}>
+      <span><small>DESK STATUS</small><b>{healthy ? researchVerified ? "PAPER DESK READY" : "PAPER DESK READY · RESEARCH NEEDS REVIEW" : "CHECK BEFORE THE NEXT SESSION"}</b><p>{deskFlat ? `${account?.name ?? "The selected paper account"} is flat.` : `${surface.feed.positions.length} selected-account paper positions remain open.`}</p></span>
+      <div><span data-review={readiness.tone === "red"}><small>TRADING</small><b>{readiness.tone === "red" ? "NEEDS REVIEW" : "READY"}</b></span><span data-review={surface.data.status === "err"}><small>DATA</small><b>{surface.data.status === "err" ? "NEEDS REVIEW" : "AVAILABLE"}</b></span><span data-review={!researchVerified}><small>RESEARCH</small><b>{researchLabel}</b></span></div>
       <button type="button" onClick={() => onNavigate({ section: "ops" })}>OPEN SYSTEM STATUS</button>
     </section>
     <div className="decision-home-grid">
@@ -72,9 +78,9 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
         <button type="button" onClick={() => onNavigate(fleet.lead ? { section: "research", channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" } : { section: "sentinel" })}>{fleet.lead ? "OPEN CHANNEL DECISIONS" : "OPEN NEXT-SESSION BRIEF"}</button>
       </section>
       <section className="decision-home-card next"><header><small>03</small><b>WHAT SHOULD I DO NEXT?</b></header>
-        <strong>{fleet.lead ? `Review ${fleet.lead.channel}` : "Keep the current paper configuration"}</strong>
-        <p>{fleet.lead ? `${fleet.lead.disposition}. Compare the supporting evidence before preparing a controlled proposal.` : "No channel decision currently clears the evidence floor for immediate review."}</p>
-        <div><button type="button" onClick={() => onNavigate({ section: "studio", channel: fleet.lead?.channel })}>OPEN CHANNEL</button><button type="button" onClick={() => onNavigate({ section: "market" })}>OPEN MARKETS</button></div>
+        <strong>{!researchVerified ? "Verify the latest close" : fleet.lead ? `Review ${fleet.lead.channel}` : "Keep the current paper configuration"}</strong>
+        <p>{!researchVerified ? "Refresh and verify the nightly bundle before making a channel decision." : fleet.lead ? `${fleet.lead.disposition}. Compare the supporting evidence before preparing a controlled proposal.` : "No channel decision currently clears the evidence floor for immediate review."}</p>
+        <div><button type="button" onClick={() => onNavigate(researchVerified ? { section: "studio", channel: fleet.lead?.channel } : { section: "ops" })}>{researchVerified ? "OPEN CHANNEL" : "CHECK RESEARCH"}</button><button type="button" onClick={() => onNavigate({ section: "market" })}>OPEN MARKETS</button></div>
       </section>
     </div>
     <details className="decision-home-technical"><summary><span><small>TECHNICAL CONTEXT</small><b>Current receipt and feed details</b></span><em>OPEN ONLY FOR TROUBLESHOOTING</em><i>▾</i></summary><div>

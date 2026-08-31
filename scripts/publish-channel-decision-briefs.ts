@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { ChannelDecisionBrief, ChannelDecisionBriefBundle } from "../lib/research/channelDecisionBrief";
 import { createServerSupabaseClient } from "./serverSupabase";
+import { atlasPublicationDescriptor, stablePublicationJson, verifyAtlasPublication } from "../lib/research/atlasPublication";
 
 const PUBLISH = process.argv.includes("--publish");
 const arg = (name: string, fallback?: string): string | null => {
@@ -20,12 +21,7 @@ const receiptFile = resolve(arg("receipt-file", "data/decision-atlas/latest/brie
 const expectedThrough = arg("expected-through");
 if (!existsSync(briefsFile)) throw new Error(`brief bundle not found: ${briefsFile}`);
 
-const stable = (value: unknown): string => {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
-  return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(",")}}`;
-};
+const stable = stablePublicationJson;
 const sha256 = (value: unknown): string => `sha256:${createHash("sha256").update(stable(value)).digest("hex")}`;
 const bundle = JSON.parse(readFileSync(briefsFile, "utf8")) as ChannelDecisionBriefBundle;
 if (expectedThrough && bundle.throughSession !== expectedThrough) {
@@ -39,7 +35,10 @@ if (!briefs.length || briefs.some((brief) => brief.throughSession !== bundle.thr
   || brief.recommendation.productionChangeAuthorized !== false)) {
   throw new Error("brief bundle channel boundary failed");
 }
-const rows = briefs.map((brief) => ({
+const publication = atlasPublicationDescriptor(bundle, sha256(bundle));
+const rows = briefs.map((sourceBrief) => {
+  const brief = { ...sourceBrief, publication };
+  return ({
   through_session: bundle.throughSession,
   channel_slug: brief.channel,
   brief_version: bundle.briefVersion,
@@ -47,9 +46,14 @@ const rows = briefs.map((brief) => ({
   brief,
   brief_sha256: sha256(brief),
   generated_at: bundle.generatedAt,
-}));
+  published_at: new Date().toISOString(),
+});
+});
 
 async function main(): Promise<void> {
+  // Validate the entire proposed batch before the first possible write, also
+  // in dry runs. Readback below remains an independent publication check.
+  await verifyAtlasPublication(rows, bundle.throughSession, async (value) => sha256(value));
   let upserts = 0;
   let verifiedReadbacks = 0;
   if (PUBLISH) {
@@ -73,6 +77,7 @@ async function main(): Promise<void> {
       verifiedReadbacks += 1;
     }
     if (verifiedReadbacks !== upserts) throw new Error(`readback count ${verifiedReadbacks} != upserts ${upserts}`);
+    await verifyAtlasPublication(read.data ?? [], bundle.throughSession, async (value) => sha256(value));
   }
   const receipt = {
     schemaVersion: 1,
@@ -80,6 +85,7 @@ async function main(): Promise<void> {
     generatedAt: bundle.generatedAt,
     throughSession: bundle.throughSession,
     bundleSha256: sha256(bundle),
+    publication,
     plannedRows: rows.length,
     remoteUpserts: upserts,
     verifiedReadbacks,

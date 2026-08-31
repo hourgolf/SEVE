@@ -312,7 +312,7 @@ const postClose = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T21:00:
 assert.equal(find(postClose, "publisher").state, "DUE");
 
 const sameDayPublisher = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T21:00:00Z"), evidence: evidence({ execution: ok([decision]), publisher: ok([{ id: "today", message: "shadow-publish: day-report done", created_at: "2026-07-20T20:40:00Z" }]) }) }));
-assert.equal(find(sameDayPublisher, "publisher").tone, "green");
+assert.equal(find(sameDayPublisher, "publisher").state, "DUE");
 
 const deterministicPublisher = deriveOpsReadiness(base({
   nowMs: Date.parse("2026-07-20T21:00:00Z"),
@@ -323,10 +323,24 @@ const deterministicPublisher = deriveOpsReadiness(base({
     publisherEvidenceState: "partial", publisherEvidenceDetail: "exact replay remains queued",
   },
 }));
-assert.equal(find(deterministicPublisher, "publisher").state, "LAST RUN OK");
-assert.equal(find(deterministicPublisher, "publisher").tone, "green");
-assert.match(find(deterministicPublisher, "publisher").detail, /deterministic next-session receipt/);
+assert.equal(find(deterministicPublisher, "publisher").state, "DUE");
+assert.equal(find(deterministicPublisher, "publisher").tone, "yellow");
 assert.equal(find(deterministicPublisher, "sentinel").state, "CURRENT · PARTIAL EVIDENCE");
+const verifiedAtlas = { state: "verified" as const, throughSession: "2026-07-20", rows: 68, detail: "complete-bundle receipt" };
+const atlasPublished = deriveOpsReadiness(base({ nowMs: Date.parse("2026-07-20T21:00:00Z"), atlasPublication: verifiedAtlas, atlasFreshness: "current" }));
+assert.equal(find(atlasPublished, "publisher").state, "BUNDLE VERIFIED");
+assert.equal(find(atlasPublished, "publisher").tone, "green");
+const staleAtlas = deriveOpsReadiness(base({ atlasPublication: verifiedAtlas, atlasFreshness: "stale" }));
+assert.equal(find(staleAtlas, "publisher").state, "STALE");
+const partialAtlas = deriveOpsReadiness(base({ atlasPublication: { ...verifiedAtlas, state: "unverified" } }));
+assert.equal(find(partialAtlas, "publisher").state, "UNVERIFIED BUNDLE");
+const failedDayReport = deriveOpsReadiness(base({ atlasPublication: verifiedAtlas,
+  evidence: evidence({ publisher: ok([{ id: "failed", message: "shadow-publish: exited 1", created_at: "2026-07-20T22:00:00Z" }]) }),
+  sentinel: { state: "ok", session: "2026-07-20", date: "2026-07-20", publishedAt: "2026-07-20T23:00:00Z", forDate: "2026-07-21" },
+}));
+assert.equal(find(failedDayReport, "day-report").state, "FAILED", "a later Sentinel cannot erase a day-report failure");
+const failedAtlas = deriveOpsReadiness(base({ atlasState: "error" }));
+assert.equal(find(failedAtlas, "publisher").tone, "red");
 
 const sentinelConflict = deriveOpsReadiness(base({ sentinel: { state: "ok", session: "2026-07-18", date: "2026-07-18", briefAsOf: "2026-07-17", forDate: "2026-07-20" } }));
 assert.equal(find(sentinelConflict, "sentinel").tone, "yellow");
