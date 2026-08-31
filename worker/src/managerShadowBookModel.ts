@@ -6,6 +6,8 @@ import {
   MANAGER_POLICY_VERSION,
   advanceManager,
   managerIdsForChannel,
+  managerIdsForObservedConfiguration,
+  isBankRunnerManager,
   type ManagerId,
   type ManagerState,
 } from "../../engine/managerPolicy.js";
@@ -144,6 +146,9 @@ export interface ManagerShadowDbRow {
 }
 
 export interface ManagerEnrollmentInput {
+  /** Must come from the immutable entry stamp, never today's channel config. */
+  nativeManagerProfileId?: string | null;
+  nativeManagerVersion?: string | null;
   positionId: string;
   strategistId: string;
   accountId: string;
@@ -202,9 +207,7 @@ export function managerShadowTerminalObservationId(positionId: string, managerId
 
 export function managerAllocation(originalQty: number, managerId: ManagerId): ManagerAllocation | null {
   if (!Number.isInteger(originalQty) || originalQty < 1) return null;
-  if (managerId !== "BANK20/RUN50"
-      && managerId !== "PB2-BANK15/HALF-GIVEBACK"
-      && managerId !== "GRIND-B25/CURRENT-A13") {
+  if (!isBankRunnerManager(managerId)) {
     return { kind: "all_out", totalQty: originalQty, exitQty: originalQty, bankQty: 0, runnerQty: 0 };
   }
   if (originalQty === 1) {
@@ -251,7 +254,10 @@ export function buildManagerShadowEnrollments(input: ManagerEnrollmentInput): Ma
   const entryAt = iso(input.entryAt) as string;
   const admittedAt = iso(input.admittedAt) as string;
   const admissionDelayMs = Math.max(0, Date.parse(admittedAt) - Date.parse(entryAt));
-  return managerIdsForChannel(input.channelSlug)
+  // Late recovery cannot recreate quote history for newly introduced controls.
+  const native = input.admissionSource === "fill_hook" || admissionDelayMs <= 30_000
+    ? input.nativeManagerProfileId : null;
+  return managerIdsForObservedConfiguration(input.channelSlug, native, input.nativeManagerVersion)
     .filter((managerId) => input.originalQty >= minimumModeledQty(managerId))
     .map((managerId) => {
     const allocation = managerAllocation(input.originalQty, managerId) as ManagerAllocation;
@@ -315,9 +321,7 @@ export function quantityWeightedReturnPct(
   currentReturnPct: number,
 ): number | null {
   if (!finite(currentReturnPct)) return null;
-  if (run.managerId !== "BANK20/RUN50"
-      && run.managerId !== "PB2-BANK15/HALF-GIVEBACK"
-      && run.managerId !== "GRIND-B25/CURRENT-A13")
+  if (!isBankRunnerManager(run.managerId))
     return rounded(currentReturnPct);
   if (!finite(state.bankReturnPct) || state.bankReturnPct == null) return rounded(currentReturnPct);
   const { totalQty, bankQty, runnerQty } = run.allocation;

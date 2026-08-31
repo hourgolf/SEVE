@@ -1,4 +1,5 @@
 import type { ChannelDecisionAxis, ChannelDecisionBrief } from "./channelDecisionBrief";
+import { trialReviewNeedsAttention } from "./rosterTrialReview";
 
 export const CHANNEL_DECISION_SUMMARY_VERSION = "channel-decision-summary-v1" as const;
 
@@ -11,10 +12,11 @@ export const CHANNEL_DISPOSITIONS = [
   "KEEP COLLECTING",
   "REVIEW PROMOTION",
   "REVIEW RETIREMENT",
+  "REVIEW TRIAL",
 ] as const;
 
 export type ChannelDisposition = typeof CHANNEL_DISPOSITIONS[number];
-export type DecisionEvidenceState = "DECISION READY" | "DEVELOPING" | "TOO EARLY";
+export type DecisionEvidenceState = "DECISION READY" | "DEVELOPING" | "TOO EARLY" | "REVIEW REQUIRED";
 
 export interface ChannelDecisionMetric {
   label: string;
@@ -124,6 +126,9 @@ function fixedForAxis(axis: ChannelDecisionAxis): string[] {
 }
 
 function evidenceState(brief: ChannelDecisionBrief): { state: DecisionEvidenceState; fact: string } {
+  if (trialReviewNeedsAttention(brief.trialReview)) return {
+    state: "REVIEW REQUIRED", fact: `${brief.trialReview!.sessions} completed sessions / ${brief.trialReview!.trades} current-spec executed trades. Trial governance review, not proof of a better strategy.`,
+  };
   const sessions = brief.evidence.decisionSessions;
   const opportunities = brief.evidence.decisionOpportunities;
   if (brief.evidence.exactCurrentAvailable && sessions >= 5 && opportunities >= 10) {
@@ -136,6 +141,11 @@ function evidenceState(brief: ChannelDecisionBrief): { state: DecisionEvidenceSt
 }
 
 function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
+  if (trialReviewNeedsAttention(brief.trialReview)) return {
+    label: brief.trialReview!.action === "size_review" ? "SIZE REVIEW" : "TRIAL LIMIT",
+    value: brief.trialReview!.action === "size_review" ? "4→2 ct?" : brief.trialReview!.state === "unavailable" ? "UNVERIFIED" : "REACHED",
+    fact: brief.trialReview!.fact,
+  };
   const axis = brief.recommendation.axis;
   if (axis === "entry") {
     if (brief.entryAtlas?.leadingRelationship) return {
@@ -213,13 +223,17 @@ export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): Channe
     channel: brief.channel,
     throughSession: brief.throughSession,
     sourceLabel: "NIGHTLY PAIRED",
-    disposition: dispositionForAxis(brief.recommendation.axis),
-    diagnosis: plainDiagnosis(brief),
-    nextTest: plainNextTest(brief),
-    keepFixed: fixedForAxis(brief.recommendation.axis),
+    disposition: trialReviewNeedsAttention(brief.trialReview) ? "REVIEW TRIAL" : dispositionForAxis(brief.recommendation.axis),
+    diagnosis: trialReviewNeedsAttention(brief.trialReview) ? brief.trialReview!.fact : plainDiagnosis(brief),
+    nextTest: trialReviewNeedsAttention(brief.trialReview) ? brief.trialReview!.next : plainNextTest(brief),
+    keepFixed: trialReviewNeedsAttention(brief.trialReview) ? ["unchanged pending approval"] : fixedForAxis(brief.recommendation.axis),
     evidenceState: evidence.state,
     evidenceStateFact: evidence.fact,
-    metrics: [
+    metrics: trialReviewNeedsAttention(brief.trialReview) ? [
+      { label: "TYPICAL EXECUTED TRADE", value: money(brief.trialReview!.typicalTradeUsd), fact: "Current-spec completed logical trades at their actual size, not per contract." },
+      { label: "COMPLETED EVIDENCE", value: `${brief.trialReview!.sessions} sessions / ${brief.trialReview!.trades} trades`, fact: evidence.fact },
+      metricForAxis(brief),
+    ] : [
       { label: "TYPICAL RESULT", value: typical.value, fact: typical.fact },
       { label: "EVIDENCE", value: sample.value, fact: sample.fact },
       metricForAxis(brief),
@@ -271,10 +285,11 @@ export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): Channe
 
 export function buildFleetDecisionSummary(bySlug: Readonly<Record<string, ChannelDecisionBrief>>, throughSession: string | null): FleetDecisionSummary {
   const summaries = Object.values(bySlug).map(buildChannelDecisionSummary);
-  const investigate = summaries.filter((row) => ["TEST ENTRY TIMING", "TEST EXIT", "TEST MANAGER", "REVIEW SIZE", "TEST ADMISSION"].includes(row.disposition)).length;
+  const investigate = summaries.filter((row) => ["TEST ENTRY TIMING", "TEST EXIT", "TEST MANAGER", "REVIEW SIZE", "TEST ADMISSION", "REVIEW TRIAL"].includes(row.disposition)).length;
   const promoteOrRetire = summaries.filter((row) => row.disposition === "REVIEW PROMOTION" || row.disposition === "REVIEW RETIREMENT").length;
   const collecting = summaries.filter((row) => row.disposition === "KEEP COLLECTING").length;
-  const lead = summaries.find((row) => row.evidenceState === "DECISION READY" && row.disposition !== "KEEP COLLECTING")
+  const lead = summaries.find((row) => row.disposition === "REVIEW TRIAL")
+    ?? summaries.find((row) => row.evidenceState === "DECISION READY" && row.disposition !== "KEEP COLLECTING")
     ?? summaries.find((row) => row.disposition !== "KEEP COLLECTING") ?? null;
   return { throughSession, reports: summaries.length, investigate, promoteOrRetire, collecting,
     lead: lead ? { channel: lead.channel, disposition: lead.disposition } : null };

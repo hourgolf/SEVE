@@ -836,6 +836,8 @@ export async function executeEntry(
             ctx,
           });
           if (inserted.id && inserted.openedAt) queueManagerShadowAdmission({
+            nativeManagerProfileId: ctx.configurationWriteStamp?.configuration_identity.managerProfileId,
+            nativeManagerVersion: ctx.configurationWriteStamp?.configuration_identity.managerVersion,
             positionId: inserted.id, strategistId: ch.id, accountId: ctx.accountId,
             channelSlug: ch.slug, occSymbol: occ, underlying: ch.underlying,
             optionSide: dir, entryPrice: avg, entryPriceBasis: "broker_fill",
@@ -991,6 +993,8 @@ export async function executeEntry(
       opportunityId,
     });
     if (inserted.id && inserted.openedAt) queueManagerShadowAdmission({
+      nativeManagerProfileId: ctx.configurationWriteStamp?.configuration_identity.managerProfileId,
+      nativeManagerVersion: ctx.configurationWriteStamp?.configuration_identity.managerVersion,
       positionId: inserted.id, strategistId: ch.id, accountId: ctx.accountId,
       channelSlug: ch.slug, occSymbol: occ, underlying: ch.underlying,
       optionSide: dir, entryPrice: entryPx, entryPriceBasis: "broker_fill",

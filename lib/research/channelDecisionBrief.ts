@@ -10,6 +10,7 @@ import type { WeeklyExecutedRow, WeeklyReadout, WeeklyVirtualSummary } from "./w
 import type { ChannelTrailFrontierBook, TrailCandidateSummary } from "./channelTrailFrontier";
 import type { ChannelEntryAtlas, EntryAtlas } from "./entryAtlas";
 import type { ChannelResearchAssignment } from "./channelResearchBooks";
+import { trialReviewNeedsAttention, type RosterTrialReview } from "./rosterTrialReview";
 
 export const CHANNEL_DECISION_BRIEF_VERSION = "channel-decision-brief-v1" as const;
 
@@ -153,6 +154,7 @@ export interface ChannelDecisionBrief {
   /** Nightly institutional research posture. This is proposal-only and cannot
    * override the sealed worker execution posture carried elsewhere in the UI. */
   researchProgram?: ChannelResearchAssignment;
+  trialReview?: RosterTrialReview;
 }
 
 export interface ChannelDecisionBriefBundle {
@@ -425,6 +427,7 @@ export function buildChannelDecisionBriefs(input: {
   currentContractsByChannel?: Readonly<Record<string, number>>;
   trailFrontier?: ChannelTrailFrontierBook | null;
   entryAtlas?: EntryAtlas | null;
+  trialReviews?: Readonly<Record<string, RosterTrialReview>>;
 }): ChannelDecisionBriefBundle {
   const channels = Object.fromEntries(Object.values(input.atlas.channels).map((dossier) => {
     const rows = decisionRows(input.opportunities, dossier);
@@ -486,8 +489,16 @@ export function buildChannelDecisionBriefs(input: {
       ? `${currentContracts == null ? "Current size is not in the nightly inventory" : `Current size is ${currentContracts} contracts${currentSizeObserved ? " and is represented in the decision cohort" : " but is not yet represented in the decision cohort"}`}. The replay remains deployable through ${bestPoint.contracts} contracts, with ${bestPoint.additionalDisplacedOtherOpportunitiesVsOneContract ?? 0} additional peer opportunities displaced versus one contract.`
       : "The 1–6 contract replay does not support an additional size conclusion.";
     const entryAtlas = input.entryAtlas?.channels[dossier.channel];
+    const trialReview = input.trialReviews?.[dossier.channel];
     const recommendation = chooseRecommendation({ dossier, native, managers, entries, currentContracts,
       currentSizeObserved, bestSupportedContracts: dossier.capacity.bestSupportedContracts, trail, platformEffect, entryAtlas });
+    // Trial-limit decisions precede general research sample minimums.
+    if (trialReviewNeedsAttention(trialReview)) {
+      recommendation.axis = trialReview!.action === "size_review" ? "size" : "collection";
+      recommendation.label = trialReview!.state === "threshold_reached" ? "TRIAL LIMIT REACHED" : "REVIEW TRIAL";
+      recommendation.summary = trialReview!.fact;
+      recommendation.nextExperiment = trialReview!.next;
+    }
     const brief: ChannelDecisionBrief = {
       schemaVersion: 1,
       briefVersion: CHANNEL_DECISION_BRIEF_VERSION,
@@ -495,6 +506,7 @@ export function buildChannelDecisionBriefs(input: {
       throughSession: input.atlas.throughSession,
       generatedAt: input.atlas.generatedAt,
       recommendation,
+      trialReview,
       metrics: [
         { label: "typical result", value: money(dossier.lifecycle.typicalOpportunityUsd, " / ct"), fact: "Median logical opportunity in the decision cohort; one large winner cannot dominate it." },
         { label: "evidence", value: `${dossier.lifecycle.evidenceSessions}s / ${dossier.lifecycle.scoredOpportunities}`, fact: "Independent scored sessions and logical opportunities in the decision cohort." },
@@ -549,6 +561,12 @@ export function buildChannelDecisionBriefs(input: {
         ])],
       },
     };
+    if (trialReviewNeedsAttention(trialReview)) {
+      brief.metrics[0] = { label: "typical result", value: money(trialReview!.typicalTradeUsd, " / trade"), fact: "Current-spec executed whole logical trades at actual size; not per contract." };
+      brief.metrics[1] = { label: "evidence", value: `${trialReview!.sessions}s / ${trialReview!.trades}`, fact: "Completed current-spec executed sessions and logical trades used by the trial rule." };
+      brief.metrics[3] = { label: "manager test", value: "UNCHANGED", fact: "Trial review does not authorize a native-manager change." };
+      brief.metrics[4] = { label: "size replay", value: trialReview!.action === "size_review" ? "REVIEW 4→2 ct" : "NO CHANGE APPROVED", fact: trialReview!.next };
+    }
     return [dossier.channel, brief];
   }));
   return {

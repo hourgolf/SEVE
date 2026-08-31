@@ -3,7 +3,7 @@ import type { ChannelDecisionBrief, ChannelDecisionAxis } from "./channelDecisio
 import { buildChannelDecisionSummary, buildFleetDecisionSummary, CHANNEL_DISPOSITIONS, dispositionForAxis } from "./channelDecisionSummary";
 
 const axes: ChannelDecisionAxis[] = ["entry", "exit", "manager", "size", "admission", "collection", "promotion", "retirement"];
-assert.deepEqual(axes.map(dispositionForAxis), CHANNEL_DISPOSITIONS);
+assert.deepEqual(axes.map(dispositionForAxis), CHANNEL_DISPOSITIONS.filter(d => d !== "REVIEW TRIAL"));
 
 const brief = (axis: ChannelDecisionAxis): ChannelDecisionBrief => ({
   schemaVersion: 1,

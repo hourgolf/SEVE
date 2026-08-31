@@ -5,13 +5,13 @@ import { getSupabase } from "@/lib/supabaseClient";
 import { shortDate, timeOfDay } from "@/lib/format";
 import {
   attributePositionsByImmutableExecutionAccount,
-  type ExecutionAccountObservation,
 } from "@/lib/ops/brokerReconciliation";
 import {
   combinePerformanceEvidenceState,
   type CombinedPerformanceEvidenceState,
   type PerformanceEvidenceState,
 } from "@/lib/perform/performanceEvidence";
+import { readCompleteEvidence, readWindowedPositions, readWindowedExecutionRoutes } from "@/lib/perform/windowedEvidenceRead";
 import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
 
 export type PnlWindow = "today" | "week" | "month" | "all";
@@ -34,18 +34,6 @@ export interface WindowedPnl {
   attributedPositionRows: number;
   withheldPositionRows: number;
 }
-
-type PerformancePositionRow = Record<string, unknown> & {
-  id: string;
-  status: "open" | "closed";
-  qty: number | string;
-  realized_pnl: number | string | null;
-  unrealized_pnl?: number | string | null;
-  peak_mark: number | string | null;
-  avg_entry_price: number | string;
-  runner_of: string | null;
-  strategists?: { slug?: string } | null;
-};
 
 const startISO = (window: PnlWindow): string | null => {
   if (window === "all") return null;
@@ -105,6 +93,7 @@ export function useWindowedPnl(
     (async () => {
       const sb = getSupabase();
       const start = startISO(window);
+      const asOf = new Date().toISOString();
       const configured = new Set(configuredKey.split(",").filter(Boolean));
       if (configured.size === 0) throw new Error("configured paper accounts unavailable");
       if (!acctId) {
@@ -120,49 +109,8 @@ export function useWindowedPnl(
         attributedPositionRows: number;
         withheldPositionRows: number;
       }> => {
-        const allPositions: Record<string, unknown>[] = [];
-        for (let from = 0; from <= 60_000; from += 1_000) {
-          let query = sb.from("positions")
-            .select("id,status,qty,realized_pnl,peak_mark,avg_entry_price,runner_of,strategists(slug)")
-            .eq("status", "closed");
-          if (start) query = query.gte("closed_at", start);
-          const result = await query.order("closed_at", { ascending: false }).range(from, from + 999);
-          if (result.error) throw new Error(`closed-position read failed: ${result.error.message}`);
-          const rows = (result.data ?? []) as Record<string, unknown>[];
-          allPositions.push(...rows);
-          if (rows.length < 1_000) break;
-        }
-
-        const openResult = await sb.from("positions")
-          .select("id,status,qty,unrealized_pnl,realized_pnl,peak_mark,avg_entry_price,runner_of,strategists(slug)")
-          .eq("status", "open")
-          .limit(200);
-        if (openResult.error) throw new Error(`open-position read failed: ${openResult.error.message}`);
-        allPositions.push(...((openResult.data ?? []) as Record<string, unknown>[]));
-
-        const positionRows = allPositions.filter(
-          (row): row is PerformancePositionRow =>
-            typeof row.id === "string"
-            && row.id.length > 0
-            && (row.status === "open" || row.status === "closed")
-            && (row.runner_of == null || typeof row.runner_of === "string"),
-        );
-        if (positionRows.length !== allPositions.length) {
-          throw new Error("performance positions contain missing ids");
-        }
-
-        const observations: ExecutionAccountObservation[] = [];
-        for (let from = 0; from < positionRows.length; from += 200) {
-          const positionIds = positionRows.slice(from, from + 200).map((row) => row.id);
-          const routeResult = await sb.from("execution_observations")
-            .select("id,position_id,account_id,event_at")
-            .in("position_id", positionIds);
-          if (routeResult.error) {
-            throw new Error(`execution-route read failed: ${routeResult.error.message}`);
-          }
-          observations.push(...((routeResult.data ?? []) as ExecutionAccountObservation[]));
-        }
-
+        const positionRows = await readWindowedPositions(sb, start, asOf);
+        const observations = await readWindowedExecutionRoutes(sb, positionRows);
         const attribution = attributePositionsByImmutableExecutionAccount({
           positions: positionRows,
           observations,
@@ -173,7 +121,7 @@ export function useWindowedPnl(
         for (const [accountId, rows] of attribution.byAccount.entries()) {
           for (const row of rows) accountByPositionId.set(row.id, accountId);
         }
-        const logical = summarizeLogicalTradeCohort(positionRows, { allowExternalParents: true });
+        const logical = summarizeLogicalTradeCohort(positionRows, { allowExternalParents: false });
         if (logical.issues.length) throw new Error(logical.issues.join("; "));
         const stats: Record<string, ChannelStat> = {};
         let attributedPositionRows = 0;
@@ -195,6 +143,10 @@ export function useWindowedPnl(
           if (slugs.length !== 1) {
             throw new Error(`logical trade ${trade.rootPositionId} spans channel identities`);
           }
+          // Hydrated family members can predate the selected window; count the
+          // complete trade only when its final close belongs to this window.
+          const finalClose = trade.rows.map(row => String(row.closed_at ?? "")).sort().at(-1);
+          if (trade.status === "closed" && start && (!finalClose || finalClose < start)) continue;
           const channel = bump(slugs[0]);
           if (trade.status === "closed") {
             const pnl = trade.realizedPnl;
@@ -215,7 +167,7 @@ export function useWindowedPnl(
               channel.pkN += 1;
             }
           } else {
-            channel.pnl += trade.rows.reduce((sum, row) => sum + Number(row.unrealized_pnl ?? 0), 0);
+            channel.pnl += trade.rows.reduce((sum, row) => sum + Number(row.status === "closed" ? row.realized_pnl ?? 0 : row.unrealized_pnl ?? 0), 0);
           }
         }
         for (const channel of Object.values(stats)) channel.pnl = Math.round(channel.pnl);
@@ -229,19 +181,14 @@ export function useWindowedPnl(
         sinceNote: string | null;
       }> => {
         const output: { nav: number; at: string }[] = [];
-        for (let page = 0; page < 40; page++) {
+        const navRows = await readCompleteEvidence<{ id: string; net_liquidation: number; captured_at: string }>(() => {
           let query = sb.from("equity_snapshots")
-            .select("net_liquidation,captured_at")
-            .is("strategist_id", null)
-            .eq("account_id", acctId);
+            .select("id,net_liquidation,captured_at", { count: "exact" })
+            .is("strategist_id", null).eq("account_id", acctId).lte("captured_at", asOf);
           if (start) query = query.gte("captured_at", start);
-          const result = await query.order("captured_at", { ascending: true })
-            .range(page * 1_000, page * 1_000 + 999);
-          if (result.error) throw new Error(`equity-snapshot read failed: ${result.error.message}`);
-          const rows = (result.data ?? []) as { net_liquidation: number; captured_at: string }[];
-          for (const row of rows) output.push({ nav: Number(row.net_liquidation), at: row.captured_at });
-          if (rows.length < 1_000) break;
-        }
+          return query.order("captured_at").order("id");
+        }, "account NAV");
+        for (const row of navRows) output.push({ nav: Number(row.net_liquidation), at: row.captured_at });
         const firstAt = output[0]?.at ?? null;
         const curveRaw = output.map((row) => row.nav);
         const labelsRaw = output.map((row) =>

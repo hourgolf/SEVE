@@ -1,11 +1,13 @@
 import type { ChannelDecisionBrief } from "./channelDecisionBrief";
 import type { ShadowChannelSummary } from "./shadowResearch";
+import { trialReviewNeedsAttention } from "./rosterTrialReview";
 
 export const CHANNEL_LINEUP_VERSION = "channel-lineup-v1" as const;
 export const MIN_DECISION_SESSIONS = 5;
 export const MIN_DECISION_OPPORTUNITIES = 10;
 
 export const CHANNEL_LINEUP_GROUPS = [
+  "REVIEW TRIAL",
   "WORKING CONSISTENTLY",
   "GOOD ENTRY · LEAKING EXIT",
   "WEAK ENTRY",
@@ -14,7 +16,7 @@ export const CHANNEL_LINEUP_GROUPS = [
   "CONSISTENTLY NEGATIVE",
 ] as const;
 export type ChannelLineupGroup = typeof CHANNEL_LINEUP_GROUPS[number];
-export type EvidenceMaturity = "DECISION READY" | "BUILDING" | "ONE SESSION · EARLY" | "LOW SAMPLE";
+export type EvidenceMaturity = "DECISION READY" | "BUILDING" | "ONE SESSION · EARLY" | "LOW SAMPLE" | "REVIEW REQUIRED";
 export type EvidenceFreshness = "CURRENT" | "AGING" | "STALE" | "UNKNOWN";
 
 export interface ChannelLineupStory {
@@ -35,7 +37,7 @@ export interface ChannelLineupStory {
   weakSession: number | null;
   strongSession: number | null;
   why: string;
-  next: "HOLD" | "SIZE" | "TEST EXIT" | "TEST ENTRY" | "COLLECT" | "RETIRE";
+  next: "HOLD" | "SIZE" | "TEST EXIT" | "TEST ENTRY" | "COLLECT" | "RETIRE" | "REVIEW TRIAL";
 }
 
 export function evidenceMaturity(sessions: number, opportunities: number): EvidenceMaturity {
@@ -82,7 +84,7 @@ export function deriveChannelLineupStory(input: {
   const sessions = distribution?.sessions ?? summary.sessions;
   const opportunities = distribution?.opportunities ?? summary.scored;
   const throughSession = distribution ? brief?.throughSession ?? summary.throughSession : summary.throughSession;
-  const maturity = evidenceMaturity(sessions, opportunities);
+  const maturity = trialReviewNeedsAttention(brief?.trialReview) ? "REVIEW REQUIRED" : evidenceMaturity(sessions, opportunities);
   const freshness = evidenceFreshness(throughSession, input.referenceSession);
   const rawBestMove = distribution?.typicalBestMovePct ?? summary.typicalMfePct;
   const bestMove = rawBestMove == null ? null : Math.max(0, rawBestMove);
@@ -108,7 +110,11 @@ export function deriveChannelLineupStory(input: {
   let group: ChannelLineupGroup;
   let why: string;
   let next: ChannelLineupStory["next"];
-  if (maturity !== "DECISION READY" || freshness === "STALE") {
+  if (trialReviewNeedsAttention(brief?.trialReview)) {
+    group = "REVIEW TRIAL";
+    why = brief!.trialReview!.fact;
+    next = "REVIEW TRIAL";
+  } else if (maturity !== "DECISION READY" || freshness === "STALE") {
     group = "TOO EARLY / STALE";
     why = freshness === "STALE"
       ? `Last observed ${throughSession}; the sample is no longer current enough to lead a decision.`
@@ -160,6 +166,7 @@ export function deriveChannelLineupStory(input: {
 }
 
 const groupOrder: Record<ChannelLineupGroup, number> = {
+  "REVIEW TRIAL": -1,
   "GOOD ENTRY · LEAKING EXIT": 0,
   "WEAK ENTRY": 1,
   "CONSISTENTLY NEGATIVE": 2,

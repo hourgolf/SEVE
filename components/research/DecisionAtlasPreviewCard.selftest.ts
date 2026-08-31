@@ -64,9 +64,9 @@ assert.match(finishMap, /typicalFinalReturnPct/,
   "Entry → Finish must plot the observed typical final return, not reconstruct it from capture");
 assert.match(finishMap, /scopeLabel/,
   "Entry → Finish must identify which evidence scope produced its points");
-assert.match(finishMap, /active<\/span>/,
+assert.match(finishMap, /trading<\/span>/,
   "the fleet-map legend must distinguish channels with live entry authority");
-assert.match(finishMap, /shadowing<\/span>/,
+assert.match(finishMap, /observing<\/span>/,
   "the fleet-map legend must name research-only channels plainly");
 assert.match(finishMap, /selection-ring/,
   "the selected channel must remain visually identifiable in a crowded fleet map");
