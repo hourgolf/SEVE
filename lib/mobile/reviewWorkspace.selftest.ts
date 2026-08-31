@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { mobileReviewDestination, mobileReviewModeForDestination, mobileRoomForDestination } from "./workspaceRouting";
+import { parseWorkspaceDestination, workspaceDestinationUrl, type WorkspaceSection } from "../shell/workspaceDestination";
 import {
   DEFAULT_MOBILE_REVIEW_MODE,
   MOBILE_REVIEW_MODES,
@@ -55,6 +57,33 @@ check("mobile agent room keeps full research one tap away", () => {
   const source = readFileSync("components/mobile2/MobileDeskSheet.tsx", "utf8");
   assert.match(source, /<ResearchCouncilRoom/);
   assert.match(source, /OPEN FULL CHANNEL RESEARCH/);
+});
+
+check("all workspace routes select their intended mobile room, including Next open", () => {
+  const rooms: Record<WorkspaceSection, string> = { overview: "play", market: "play", studio: "studio", positions: "book", research: "review", tape: "review", sentinel: "review", ops: "ops" };
+  for (const [section, room] of Object.entries(rooms)) {
+    assert.equal(mobileRoomForDestination({ section: section as WorkspaceSection }), room);
+  }
+});
+check("review tabs survive URL round trips and direct reloads", () => {
+  for (const mode of ["session", "shadow", "evidence", "sentinel"] as const) {
+    const destination = mobileReviewDestination(mode);
+    assert.ok(destination);
+    const url = new URL(workspaceDestinationUrl(destination, "https://seve.local/?view=overview"), "https://seve.local");
+    const reloaded = parseWorkspaceDestination(url.search);
+    assert.equal(mobileRoomForDestination(reloaded), "review");
+    assert.equal(mobileReviewModeForDestination(reloaded), mode);
+  }
+  assert.equal(mobileReviewDestination("council"), null);
+  assert.equal(mobileReviewModeForDestination(undefined), null);
+});
+check("both mobile components use the tested shared routing contract", () => {
+  const shell = readFileSync("components/mobile2/MobileShell.tsx", "utf8");
+  const review = readFileSync("components/mobile2/MobileDeskSheet.tsx", "utf8");
+  assert.match(shell, /setRoom\(mobileRoomForDestination\(destination\)\)/);
+  assert.match(shell, /setRoom\(mobileRoomForDestination\(next\)\)/);
+  assert.match(review, /mobileReviewModeForDestination\(destination\)/);
+  assert.match(review, /mobileReviewDestination\(item.id\)/);
 });
 
 console.log(`${passed}/${passed} mobile review workspace checks passed`);

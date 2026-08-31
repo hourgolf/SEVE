@@ -16,6 +16,7 @@ import { useShell } from "@/hooks/useShellState";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { useWorkspaceDestination } from "@/hooks/useWorkspaceDestination";
 import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { mobileRoomForDestination, type MobileRoom } from "@/lib/mobile/workspaceRouting";
 
 // =============================================================================
 // MOBILE SHELL — a phone-native 909 desk. The legacy mobile information
@@ -33,7 +34,6 @@ const IcCog = () => (
   </svg>
 );
 
-type MobileRoom = "play" | "studio" | "book" | "review" | "ops";
 const ROOMS: { id: MobileRoom; label: string; sub: string }[] = [
   { id: "play", label: "HOME", sub: "MARKET" },
   { id: "studio", label: "CHANNELS", sub: "ROSTER" },
@@ -54,12 +54,8 @@ export function MobileShell(props: SurfaceProps) {
   const [openSlug, setOpenSlug] = useState<string | null>(null); // studio accordion — one at a time
   const { destination, navigate } = useWorkspaceDestination("overview");
 
-  const roomFor = (next: WorkspaceDestination): MobileRoom => next.section === "studio" ? "studio"
-    : next.section === "positions" ? "book"
-      : next.section === "research" || next.section === "tape" ? "review"
-        : next.section === "ops" ? "ops" : "play";
   useEffect(() => {
-    setRoom(roomFor(destination));
+    setRoom(mobileRoomForDestination(destination));
     if (destination.channel && destination.section === "studio") setOpenSlug(destination.channel);
     if (destination.section === "market") {
       setMarketView("chain");
@@ -100,7 +96,7 @@ export function MobileShell(props: SurfaceProps) {
     navigate({ section: "studio", channel: slug });
   };
   const navigateMobile = (next: WorkspaceDestination) => {
-    setRoom(roomFor(next));
+    setRoom(mobileRoomForDestination(next));
     navigate(next);
   };
   return (
