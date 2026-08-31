@@ -38,3 +38,16 @@ export const mobileReviewSections = (mode: MobileReviewMode): readonly MobileRev
 
 export const mobileReviewHas = (mode: MobileReviewMode, section: MobileReviewSection): boolean =>
   SECTIONS[mode].includes(section);
+
+/** Stats are already scoped by immutable execution account. Today's roster is
+ * display metadata only: moved/retired channels still belong in account history. */
+export function mobileAccountResultRows(
+  stats: Readonly<Record<string, { pnl: number; trades: number; wins: number }>>,
+  labels: readonly { slug: string; color: string }[],
+) {
+  const colors = new Map(labels.map(channel => [channel.slug, channel.color]));
+  return Object.entries(stats)
+    .filter(([, result]) => result.trades > 0 || result.pnl !== 0)
+    .map(([slug, result]) => ({ slug, color: colors.get(slug) ?? "green", result }))
+    .sort((left, right) => Math.abs(right.result.pnl) - Math.abs(left.result.pnl) || left.slug.localeCompare(right.slug));
+}
