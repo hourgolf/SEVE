@@ -57,6 +57,11 @@ assert.match(generated.text, /function marketIngestWindow\(/);
 assert.match(generated.text, /skipReason: "calendar_unknown"/);
 assert.match(generated.text, /skipReason: "after_capture_tail"/);
 assert.match(generated.text, /nextSessionDateEt: nextTradingDay\(dateEt\)/);
+assert.match(generated.text, /provider_quote_at: s\.latestQuote\?\.t \?\? null/);
+assert.match(generated.text, /option_feed: OPT_FEED/);
+assert.match(generated.text, /greeks_provider_at: null/);
+assert.match(generated.text, /greeks_provenance: hasGreeks \? "alpaca_snapshot_unstamped" : null/);
+assert.match(generated.text, /contract_multiplier: null/);
 
 if (process.argv.includes("--write")) {
   mkdirSync(dirname(ARTIFACT), { recursive: true });
