@@ -19,6 +19,7 @@ import {
   DEFAULT_MOBILE_REVIEW_MODE,
   MOBILE_REVIEW_MODES,
   mobileReviewHas,
+  mobileAccountResultRows,
   type MobileReviewMode,
 } from "@/lib/mobile/reviewWorkspace";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
@@ -129,12 +130,12 @@ function MobilePeriodResults({ props, channels, livePnl }: {
   const fundValue = today ? props.liveFund.dayPnl : historical?.fundPnl;
   const curve = today ? props.feed.equityCurve.map((point) => point.equity) : historical?.curve ?? [];
   const labels = today ? props.feed.equityCurve.map((point) => timeOfDay(point.ts)) : historical?.curveLabels;
-  const rowFor = (slug: string) => today
-    ? { pnl: livePnl[slug]?.dayPnl ?? 0, trades: livePnl[slug]?.trades ?? 0, wins: livePnl[slug]?.wins ?? 0 }
-    : historical?.statsBySlug[slug] ?? { pnl: 0, trades: 0, wins: 0 };
-  const rows = channels.map((channel) => ({ channel, result: rowFor(channel.slug) }))
-    .filter((row) => row.result.trades > 0 || row.result.pnl !== 0)
-    .sort((left, right) => Math.abs(right.result.pnl) - Math.abs(left.result.pnl));
+  const scopedStats = today
+    ? Object.fromEntries(channels.map(({ slug }) => [slug, {
+      pnl: livePnl[slug]?.dayPnl ?? 0, trades: livePnl[slug]?.trades ?? 0, wins: livePnl[slug]?.wins ?? 0,
+    }]))
+    : historical?.statsBySlug ?? {};
+  const rows = mobileAccountResultRows(scopedStats, channels);
   const coveragePartial = !today && historical?.attributionEvidenceState === "partial";
   const coverageBlocked = !today && historical?.attributionEvidenceState === "blocked";
   const issue = !today && historical?.attributionIssues[0]
@@ -146,7 +147,7 @@ function MobilePeriodResults({ props, channels, livePnl }: {
       <div className="m2-period-hero"><span><small>{period === "today" ? "SESSION NAV CHANGE" : `${MOBILE_PERIODS.find((item) => item.id === period)?.label} NAV CHANGE`}</small><b className={(fundValue ?? 0) < 0 ? "neg" : "pos"}>{loading ? "…" : fundValue == null ? "UNAVAILABLE" : signedUsd(fundValue)}</b></span><span><small>CHANNELS THAT TRADED</small><b>{rows.length}</b></span><span><small>LOGICAL TRADES</small><b>{rows.reduce((total, row) => total + row.result.trades, 0)}</b></span></div>
       {coveragePartial || coverageBlocked ? <div className="m2-period-coverage" role="status"><b>{coverageBlocked ? "CHANNEL HISTORY UNAVAILABLE" : "CHANNEL HISTORY PARTIAL"}</b><span>{issue ?? "Some older channel rows do not have a verified account route."}</span>{coveragePartial ? <small>{historical?.attributedPositionRows ?? 0} verified rows shown · {historical?.withheldPositionRows ?? 0} rows withheld to keep trades whole. Account NAV is complete.</small> : null}</div> : null}
       {curve.length >= 2 ? <LineChart values={curve} height={92} id={`m2-results-${period}`} baseline={curve[0]} format={usd0} formatDelta={signedUsd} labels={labels} /> : <div className="m2-desk-empty">{loading ? "Loading account history…" : "No account curve in this period."}</div>}
-      {!coverageBlocked ? <div className="m2-review-rows">{rows.slice(0, 10).map(({ channel, result }) => <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><b>{channel.slug}</b><span className={result.pnl < 0 ? "neg" : result.pnl > 0 ? "pos" : ""}>{signedUsd(result.pnl)}</span><small>{result.trades} logical trade{result.trades === 1 ? "" : "s"} · {result.wins} profitable</small></div>)}{!loading && rows.length === 0 ? <div className="m2-period-empty">No channel activity in this period.</div> : null}</div> : null}
+      {!coverageBlocked ? <div className="m2-review-rows">{rows.map(({ slug, color, result }) => <div key={slug} style={{ ["--pm" as string]: pmVar(color) }}><i /><b>{slug}</b><span className={result.pnl < 0 ? "neg" : result.pnl > 0 ? "pos" : ""}>{signedUsd(result.pnl)}</span><small>{result.trades} logical trade{result.trades === 1 ? "" : "s"} · {result.wins} profitable</small></div>)}{!loading && rows.length === 0 ? <div className="m2-period-empty">No channel activity in this period.</div> : null}</div> : null}
     </div>
   </Section>;
 }

@@ -6,6 +6,7 @@ import {
   DEFAULT_MOBILE_REVIEW_MODE,
   MOBILE_REVIEW_MODES,
   mobileReviewHas,
+  mobileAccountResultRows,
   mobileReviewSections,
   type MobileReviewMode,
 } from "./reviewWorkspace";
@@ -47,6 +48,28 @@ check("mobile session exposes selected-account history without a second subscrip
   assert.match(source, /reviewEvidence\.setPnlWindow/);
   assert.match(source, /reviewEvidence\.windowedPnl/);
   assert.match(source, /rows withheld to keep trades whole/);
+});
+check("historical account rows survive a channel move and roster removal", () => {
+  const stats = {
+    "grind-smart-entries": { pnl: 464, trades: 12, wins: 7 },
+    "pb-ride": { pnl: 82, trades: 14, wins: 7 },
+    retired: { pnl: -25, trades: 2, wins: 0 },
+    idle: { pnl: 0, trades: 0, wins: 0 },
+  };
+  const rows = mobileAccountResultRows(stats, [{ slug: "grind-smart-entries", color: "green" }, { slug: "other-account", color: "red" }]);
+  assert.deepEqual(rows.map(row => row.slug), ["grind-smart-entries", "pb-ride", "retired"]);
+  assert.equal(rows.reduce((n, row) => n + row.result.trades, 0), 28);
+  assert.equal(rows.find(row => row.slug === "pb-ride")?.result.pnl, 82);
+  assert.equal(rows.some(row => row.slug === "other-account"), false);
+  assert.deepEqual(mobileAccountResultRows({}, [{ slug: "old-roster", color: "green" }]), []);
+});
+check("zero-dollar closed trades and more than ten historical channels remain visible", () => {
+  const stats = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`channel-${i}`, { pnl: 0, trades: 1, wins: 0 }]));
+  assert.equal(mobileAccountResultRows(stats, []).length, 12);
+  const source = readFileSync("components/mobile2/MobileDeskSheet.tsx", "utf8").split("function MobilePeriodResults")[1].split("export function MobileReviewView")[0];
+  assert.match(source, /mobileAccountResultRows\(scopedStats, channels\)/);
+  assert.match(source, /historical\?\.statsBySlug \?\? \{\}/);
+  assert.doesNotMatch(source, /rows\.slice/);
 });
 check("mobile gives Atlas a first-class label", () => assert.deepEqual(MOBILE_REVIEW_MODES.find((mode) => mode.id === "shadow"), { id: "shadow", label: "ATLAS", sub: "decisions" }));
 check("mobile Sentinel labels its all-paper-account scope", () => {
