@@ -309,6 +309,54 @@ check("quantity-only change does not materialize an implicit paper posture", () 
     spec.slug === "orb-ustop-ctl")?.executionPosture, undefined);
 });
 
+check("entry-frequency limits are atomic, receipt-visible roster changes", () => {
+  const throttled = draft();
+  throttled.changes = [
+    { slug: "orb-ustop-ctl", maxEntriesPerSession: 1 },
+    { slug: "grind-v3", maxEntriesPerSession: 2 },
+  ];
+  const result = buildChannelRosterBundlePreview({
+    active,
+    registry: registry(),
+    draft: throttled,
+    envelope: envelope(),
+    live: flat(),
+    collectionStates: collectionStates(),
+  });
+  assert.equal(result.state, "ready-for-worker-ack", result.blockers.join(";"));
+  assert.equal(result.candidate?.channelSpecs.find((spec) =>
+    spec.slug === "orb-ustop-ctl")?.entryParameters.maxEntriesPerSession, 1);
+  assert.equal(result.candidate?.channelSpecs.find((spec) =>
+    spec.slug === "orb-ustop-ctl")?.reentryPolicy, "disabled");
+  assert.equal(result.candidate?.channelSpecs.find((spec) =>
+    spec.slug === "grind-v3")?.entryParameters.maxEntriesPerSession, 2);
+  assert.equal(result.candidate?.channelSpecs.find((spec) =>
+    spec.slug === "grind-v3")?.reentryPolicy, "bounded");
+  const orbFields = result.diffs.find((diff) =>
+    diff.slug === "orb-ustop-ctl")?.fields.map((field) => field.field) ?? [];
+  const grindFields = result.diffs.find((diff) =>
+    diff.slug === "grind-v3")?.fields.map((field) => field.field) ?? [];
+  assert.ok(orbFields.includes("entryParameters"));
+  assert.ok(grindFields.includes("entryParameters"));
+});
+
+check("invalid entry-frequency limits fail closed", () => {
+  const invalid = draft();
+  invalid.changes = [{ slug: "orb-ustop-ctl", maxEntriesPerSession: 0 }];
+  const result = buildChannelRosterBundlePreview({
+    active,
+    registry: registry(),
+    draft: invalid,
+    envelope: envelope(),
+    live: flat(),
+    collectionStates: collectionStates(),
+  });
+  assert.ok(result.blockers.includes(
+    "bundle:entry_limit_invalid:orb-ustop-ctl",
+  ));
+  assert.equal(result.candidate, null);
+});
+
 check("priority changes are receipt-visible and remain bound to admission policy", () => {
   const reprioritized = draft();
   reprioritized.changes = [

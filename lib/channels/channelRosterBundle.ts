@@ -26,6 +26,7 @@ export interface ChannelRosterTarget {
   executionPosture?: "paper" | "observe-only";
   priority?: number;
   quantity?: number;
+  maxEntriesPerSession?: number;
   maxRiskUsd?: number;
   collisionDomain?: string;
 }
@@ -85,7 +86,7 @@ function fieldsChanged(
   before: ChannelSpecVersionDraft,
   after: ChannelSpecVersionDraft,
 ): ChannelRosterBundleDiff["fields"] {
-  return ["executionPosture", "priority", "quantity", "maxDebitUsd", "riskLimits", "collisionDomain"]
+  return ["executionPosture", "priority", "quantity", "entryParameters", "reentryPolicy", "maxDebitUsd", "riskLimits", "collisionDomain"]
     .map((field) => ({
       field,
       before: canonicalJson(
@@ -117,6 +118,15 @@ function applyTarget(input: {
     parentVersionId: input.source.id,
     priority: input.target.priority ?? input.source.priority,
     quantity,
+    entryParameters: input.target.maxEntriesPerSession == null
+      ? structuredClone(input.source.entryParameters)
+      : {
+          ...structuredClone(input.source.entryParameters),
+          maxEntriesPerSession: input.target.maxEntriesPerSession,
+        },
+    reentryPolicy: input.target.maxEntriesPerSession == null
+      ? input.source.reentryPolicy
+      : input.target.maxEntriesPerSession === 1 ? "disabled" : "bounded",
     maxDebitUsd,
     riskLimits: {
       maxContracts: quantity,
@@ -203,7 +213,7 @@ export function buildChannelRosterBundlePreview(input: {
     if (target.membership === "exclude") {
       if (!active) blockers.push(`bundle:exclude_not_active:${target.slug}`);
       else if (target.executionPosture != null || target.priority != null
-          || target.quantity != null
+          || target.quantity != null || target.maxEntriesPerSession != null
           || target.maxRiskUsd != null || target.collisionDomain != null) {
         blockers.push(`bundle:exclude_must_be_standalone:${target.slug}`);
       } else {
@@ -221,7 +231,7 @@ export function buildChannelRosterBundlePreview(input: {
       continue;
     }
     if (target.executionPosture == null && target.priority == null
-        && target.quantity == null
+        && target.quantity == null && target.maxEntriesPerSession == null
         && target.maxRiskUsd == null && target.collisionDomain == null) {
       blockers.push(`bundle:empty_change:${target.slug}`);
       continue;
@@ -235,6 +245,13 @@ export function buildChannelRosterBundlePreview(input: {
     if (!Number.isInteger(quantity) || quantity < 1
         || quantity > MAX_QUANTITY) {
       blockers.push(`bundle:quantity_invalid:${target.slug}`);
+      continue;
+    }
+    if (target.maxEntriesPerSession != null
+        && (!Number.isInteger(target.maxEntriesPerSession)
+          || target.maxEntriesPerSession < 1
+          || target.maxEntriesPerSession > 3)) {
+      blockers.push(`bundle:entry_limit_invalid:${target.slug}`);
       continue;
     }
     if (source.takeProfit.kind === "bank"

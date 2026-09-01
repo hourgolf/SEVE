@@ -38,6 +38,11 @@ const supplementalVirtualFiles = arg("supplemental-virtual-files", "")
   .map((value) => resolve(value));
 const requestedCohort = arg("cohort", "").trim();
 const requestedThroughSession = arg("through-session", "").trim();
+const rollbackPacketFile = arg("rollback-packet", "").trim();
+const requestedRollbackChoices = arg(
+  "rollback-choices",
+  "gap-observe,level-two,gap-observe-level-two",
+).split(",").map((value) => value.trim()).filter(Boolean);
 
 interface SignalRow {
   id: string;
@@ -71,6 +76,27 @@ interface Snapshot {
   signals: SignalRow[];
   virtualTrades: VirtualRow[];
   ledger: { logicalTrades: LogicalTrade[] };
+}
+
+interface RollbackPacket {
+  beforeManifestHash: string;
+  alternatives: Array<{
+    choice: string;
+    changes: Array<Record<string, unknown>>;
+    candidate: {
+      manifest: { admissionPolicies: DeskReplayPolicy[] };
+      channelSpecs: Array<{
+        slug: string;
+        accountId: string;
+        collisionDomain: string;
+        familyId: string;
+        symbolScope: string[];
+        executionPosture: string;
+        quantity: number;
+        entryParameters: Record<string, unknown>;
+      }>;
+    };
+  }>;
 }
 
 const ADMISSION_REASONS = new Set([
@@ -165,6 +191,54 @@ function usd(value: number): string {
   return `${value >= 0 ? "+" : "-"}$${Math.abs(value)}`;
 }
 
+function reasonCounts(result: DeskReplayResult): Record<string, number> {
+  return Object.fromEntries(Object.entries(result.rejected.reduce<Record<string, number>>(
+    (accumulator, row) => {
+      accumulator[row.reason] = (accumulator[row.reason] ?? 0) + 1;
+      return accumulator;
+    }, {},
+  )).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function withoutBestSession(result: DeskReplayResult): number | null {
+  if (result.sessions.length < 2) return null;
+  return Math.round((result.modeledPnlUsd
+    - Math.max(...result.sessions.map((row) => row.modeledPnlUsd))) * 100) / 100;
+}
+
+function fixedPathSummary(rows: DeskReplayCandidate[]): {
+  modeledPnlUsd: number;
+  sessions: Array<{ session: string; admitted: number; modeledPnlUsd: number }>;
+  withoutBestSessionUsd: number | null;
+} {
+  const sessions = [...new Set(rows.map((row) => row.session))].sort().map((session) => {
+    const selected = rows.filter((row) => row.session === session);
+    return { session, admitted: selected.length,
+      modeledPnlUsd: Math.round(selected.reduce((sum, row) => sum + row.pnlUsd, 0) * 100) / 100 };
+  });
+  const modeledPnlUsd = Math.round(rows.reduce((sum, row) => sum + row.pnlUsd, 0) * 100) / 100;
+  return { modeledPnlUsd, sessions,
+    withoutBestSessionUsd: sessions.length < 2 ? null : Math.round((modeledPnlUsd
+      - Math.max(...sessions.map((row) => row.modeledPnlUsd))) * 100) / 100 };
+}
+
+function replayWindow(input: {
+  candidates: DeskReplayCandidate[];
+  policies: DeskReplayPolicy[];
+  sessions: Set<string>;
+  id: string;
+}): DeskReplayResult {
+  return replayDeskSameClockCapacity({
+    candidates: input.candidates.filter((row) => input.sessions.has(row.session)),
+    variant: {
+      id: input.id,
+      label: input.id,
+      distinctOccAtSameClock: false,
+      policies: input.policies,
+    },
+  });
+}
+
 function markdown(packet: Record<string, any>): string {
   const rows = packet.comparisons as Array<Record<string, any>>;
   const incremental = new Map((packet.capacityComparisons as Array<Record<string, any>>)
@@ -172,6 +246,7 @@ function markdown(packet: Record<string, any>): string {
   const isolated = packet.capacityComparisons as Array<Record<string, any>>;
   const priority = packet.priorityComparisons as Array<Record<string, any>>;
   const channelCapacity = packet.channelCapacityComparisons as Array<Record<string, any>>;
+  const rollbacks = packet.rollbackComparisons as Array<Record<string, any>>;
   return [
     `# Desk-wide distinct-OCC same-clock replay · through ${packet.throughSession ?? "no observed session"}`,
     "",
@@ -180,6 +255,16 @@ function markdown(packet: Record<string, any>): string {
       ? `\nFrozen historical cohort \`${packet.cohort}\` replayed under the currently active routing and admission policy. This is not exact-current execution evidence.\n`
       : "",
     "",
+    ...(rollbacks.length ? [
+      "## Approved rollback-direction comparisons",
+      "",
+      "| Scenario | Exact acted-fill delta | Chronological delta | Added alternatives | Removed Gap fills | Development | Holdout |",
+      "|---|---:|---:|---:|---:|---:|---:|",
+      ...rollbacks.map((row) => `| ${row.choice} | ${usd(row.sameFillActual.deltaUsd)} | ${usd(row.modeledPnlDeltaUsd)} | ${row.added.length} | ${row.displaced.length} | ${usd(row.development.deltaUsd)} | ${usd(row.holdout.deltaUsd)} |`),
+      "",
+      `The chronological baseline reproduced ${packet.validation.matchedOriginalActed}/${packet.validation.originalActed} acted signals and substituted ${packet.validation.baselineExtra} complete virtual paths where the original winning same-clock path was not reproducible from the bounded candidate set. Exact acted-fill arithmetic remains the broker-comparable result; the chronological delta is the capacity/collision sensitivity check.`,
+      "",
+    ] : []),
     "| Variant | Added | Displaced | vs current desk | Capacity effect after Account 3 priority |",
     "|---|---:|---:|---:|---:|",
     ...rows.map((row) => {
@@ -229,9 +314,10 @@ async function main(): Promise<void> {
     throw new Error("one exact active control-plane manifest is required");
   }
   const active = activeRead.compiled;
-  const activeBySlug = new Map(active.channelSpecs
+  const activeBySlug = new Map(active.channelSpecs.map((row) => [row.slug, row]));
+  const currentPaperSlugs = new Set(active.channelSpecs
     .filter((row) => row.executionPosture !== "observe-only")
-    .map((row) => [row.slug, row]));
+    .map((row) => row.slug));
   const slugById = new Map(snapshot.strategists.map((row) => [row.id, row.slug]));
   const virtualBySignal = new Map(snapshot.virtualTrades.map((row) =>
     [row.signal_id, row]));
@@ -263,7 +349,8 @@ async function main(): Promise<void> {
     const slug = slugById.get(signal.strategist_id);
     const spec = slug ? activeBySlug.get(slug) : null;
     if (!slug || !spec || signal.rationale?.rc54Candidate?.cohortId !== cohort) continue;
-    if (!signal.acted_on && !ADMISSION_REASONS.has(signal.blocked_reason ?? "")) continue;
+    if (currentPaperSlugs.has(slug) && !signal.acted_on
+        && !ADMISSION_REASONS.has(signal.blocked_reason ?? "")) continue;
     const occ = String(signal.rationale?.occ ?? "").trim();
     const sourceBar = String(signal.rationale?.decision_source_bar_at ?? signal.created_at);
     const domainId = String(signal.rationale?.rc54Candidate?.domainId
@@ -317,6 +404,8 @@ async function main(): Promise<void> {
       originalActed: signal.acted_on,
     });
   }
+  const allCandidates = candidates;
+  const currentCandidates = allCandidates.filter((row) => currentPaperSlugs.has(row.slug));
   const currentPolicies = clonePolicies(
     active.manifest.admissionPolicies as DeskReplayPolicy[],
   );
@@ -341,7 +430,7 @@ async function main(): Promise<void> {
     },
   ]);
   const observedSlugsByDomain = new Map<string, string[]>();
-  for (const candidate of candidates) {
+  for (const candidate of currentCandidates) {
     const values = observedSlugsByDomain.get(candidate.domainId) ?? [];
     if (!values.includes(candidate.slug)) values.push(candidate.slug);
     observedSlugsByDomain.set(candidate.domainId, values);
@@ -399,12 +488,111 @@ async function main(): Promise<void> {
     ...channelCapacityVariants,
   ];
   const results = variants.map((variant) => replayDeskSameClockCapacity({
-    candidates,
+    candidates: currentCandidates,
     variant,
   }));
   const baseline = results[0];
   const priorityBaseline = results[1];
-  const actedIds = new Set(candidates.filter((row) => row.originalActed)
+  let rollbackComparisons: Array<Record<string, unknown>> = [];
+  let rollbackPacketSha256: string | null = null;
+  if (rollbackPacketFile) {
+    const rollbackPath = resolve(rollbackPacketFile);
+    if (!existsSync(rollbackPath)) throw new Error(`rollback packet not found: ${rollbackPath}`);
+    const rollbackText = readFileSync(rollbackPath, "utf8");
+    rollbackPacketSha256 = createHash("sha256").update(rollbackText).digest("hex");
+    const rollbackPacket = JSON.parse(rollbackText) as RollbackPacket;
+    if (rollbackPacket.beforeManifestHash !== active.manifest.contentHash) {
+      throw new Error("rollback packet before-manifest hash does not match the active control plane");
+    }
+    const alternatives = new Map(rollbackPacket.alternatives.map((row) => [row.choice, row]));
+    const sessions = [...new Set(currentCandidates.map((row) => row.session))].sort();
+    const holdoutSessions = new Set(sessions.slice(-2));
+    const developmentSessions = new Set(sessions.slice(0, -2));
+    rollbackComparisons = requestedRollbackChoices.map((choice) => {
+      const alternative = alternatives.get(choice);
+      if (!alternative) throw new Error(`rollback choice not found: ${choice}`);
+      const specs = new Map(alternative.candidate.channelSpecs.map((row) => [row.slug, row]));
+      const transformed = allCandidates.flatMap((row): DeskReplayCandidate[] => {
+        const spec = specs.get(row.slug);
+        if (!spec || spec.executionPosture === "observe-only") return [];
+        if (!Number.isInteger(spec.quantity) || spec.quantity < 1 || row.quantity < 1) {
+          throw new Error(`${choice}:${row.slug}: invalid quantity`);
+        }
+        const ratio = spec.quantity / row.quantity;
+        return [{ ...row,
+          accountId: spec.accountId,
+          domainId: spec.collisionDomain,
+          familyId: spec.familyId,
+          underlying: spec.symbolScope[0] ?? row.underlying,
+          quantity: spec.quantity,
+          maxEntriesPerSession: Number(spec.entryParameters.maxEntriesPerSession ?? 1),
+          pnlUsd: Math.round(row.pnlUsd * ratio * 100) / 100 }];
+      });
+      const policies = structuredClone(alternative.candidate.manifest.admissionPolicies);
+      const result = replayDeskSameClockCapacity({
+        candidates: transformed,
+        variant: { id: choice, label: choice, distinctOccAtSameClock: false, policies },
+      });
+      const comparison = compareDeskReplay(baseline, result);
+      const actualBaseline = fixedPathSummary(currentCandidates.filter((row) => row.originalActed));
+      const actualCandidate = fixedPathSummary(transformed.filter((row) => row.originalActed));
+      const baselineDevelopment = replayWindow({ candidates: currentCandidates, policies: currentPolicies,
+        sessions: developmentSessions, id: `${choice}-baseline-development` });
+      const candidateDevelopment = replayWindow({ candidates: transformed, policies,
+        sessions: developmentSessions, id: `${choice}-candidate-development` });
+      const baselineHoldout = replayWindow({ candidates: currentCandidates, policies: currentPolicies,
+        sessions: holdoutSessions, id: `${choice}-baseline-holdout` });
+      const candidateHoldout = replayWindow({ candidates: transformed, policies,
+        sessions: holdoutSessions, id: `${choice}-candidate-holdout` });
+      return {
+        choice,
+        changes: alternative.changes,
+        sameOpportunityUniverse: allCandidates.length,
+        candidateUniverse: transformed.length,
+        admitted: result.admitted.length,
+        modeledPnlUsd: result.modeledPnlUsd,
+        modeledPnlDeltaUsd: comparison.modeledPnlDeltaUsd,
+        sameFillActual: {
+          baselineUsd: actualBaseline.modeledPnlUsd,
+          candidateUsd: actualCandidate.modeledPnlUsd,
+          deltaUsd: Math.round((actualCandidate.modeledPnlUsd
+            - actualBaseline.modeledPnlUsd) * 100) / 100,
+          baselineWithoutBestSessionUsd: actualBaseline.withoutBestSessionUsd,
+          candidateWithoutBestSessionUsd: actualCandidate.withoutBestSessionUsd,
+          baselineSessions: actualBaseline.sessions,
+          candidateSessions: actualCandidate.sessions,
+        },
+        added: comparison.added.map((row) => ({ id: row.id, session: row.session,
+          slug: row.slug, occ: row.occ, pnlUsd: row.pnlUsd, basis: row.basis })),
+        displaced: comparison.displaced.map((row) => ({ id: row.id, session: row.session,
+          slug: row.slug, occ: row.occ, pnlUsd: row.pnlUsd, basis: row.basis })),
+        chronological: result.sessions,
+        development: {
+          sessions: [...developmentSessions],
+          baselineUsd: baselineDevelopment.modeledPnlUsd,
+          candidateUsd: candidateDevelopment.modeledPnlUsd,
+          deltaUsd: Math.round((candidateDevelopment.modeledPnlUsd
+            - baselineDevelopment.modeledPnlUsd) * 100) / 100,
+        },
+        holdout: {
+          sessions: [...holdoutSessions],
+          baselineUsd: baselineHoldout.modeledPnlUsd,
+          candidateUsd: candidateHoldout.modeledPnlUsd,
+          deltaUsd: Math.round((candidateHoldout.modeledPnlUsd
+            - baselineHoldout.modeledPnlUsd) * 100) / 100,
+        },
+        withoutBestSession: {
+          baselineUsd: withoutBestSession(baseline),
+          candidateUsd: withoutBestSession(result),
+        },
+        rejectedByReason: reasonCounts(result),
+        policyIdentityHeld: JSON.stringify(policies) === JSON.stringify(currentPolicies),
+        actualPaths: result.actualPaths,
+        virtualPaths: result.virtualPaths,
+      };
+    });
+  }
+  const actedIds = new Set(currentCandidates.filter((row) => row.originalActed)
     .map((row) => row.id));
   const baselineIds = new Set(baseline.admitted.map((row) => row.id));
   const matched = [...actedIds].filter((id) => baselineIds.has(id)).length;
@@ -413,12 +601,12 @@ async function main(): Promise<void> {
     version: "desk-same-clock-capacity-packet-v1",
     generatedAt: new Date().toISOString(),
     throughSession: requestedThroughSession
-      || [...new Set(candidates.map((row) => row.session))].sort().at(-1)
+      || [...new Set(currentCandidates.map((row) => row.session))].sort().at(-1)
       || null,
     cohort,
     cohortMode: cohort === activeCohort ? "active_epoch" : "frozen_historical_epoch",
     activeCohort,
-    sessions: [...new Set(candidates.map((row) => row.session))].sort(),
+    sessions: [...new Set(currentCandidates.map((row) => row.session))].sort(),
     baseline,
     results,
     comparisons: results.filter((row) => [
@@ -433,6 +621,7 @@ async function main(): Promise<void> {
     channelCapacityComparisons: results.filter((row) =>
       row.variantId.startsWith("extra-slot-"))
       .map((row) => summarizeDifference(priorityBaseline, row)),
+    rollbackComparisons,
     validation: {
       originalActed: actedIds.size,
       matchedOriginalActed: matched,
@@ -440,9 +629,10 @@ async function main(): Promise<void> {
       baselineExtra: baseline.admitted.filter((row) => !actedIds.has(row.id)).length,
     },
     coverage: {
-      candidates: candidates.length,
-      actualPaths: candidates.filter((row) => row.basis === "actual-executed").length,
-      virtualPaths: candidates.filter((row) => row.basis === "virtual-mid-basis").length,
+      candidates: currentCandidates.length,
+      prospectiveCandidates: allCandidates.length,
+      actualPaths: currentCandidates.filter((row) => row.basis === "actual-executed").length,
+      virtualPaths: currentCandidates.filter((row) => row.basis === "virtual-mid-basis").length,
       supplementalPathCount,
       missingPaths: missingPaths.length,
       missing: missingPaths,
@@ -470,6 +660,7 @@ async function main(): Promise<void> {
     sourceSnapshot: snapshotFile,
     supplementalVirtualFiles,
     sourceEpoch: snapshot.currentConfigurationEpochId,
+    rollbackPacketSha256,
     productionWrites: false,
     orderAuthority: false,
   }, null, 2)}\n`);
