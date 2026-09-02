@@ -63,6 +63,7 @@ for (const candidate of DECISION_ATLAS_TOMORROW_PROMOTIONS) {
     assert.equal(registration.state, "registered-blocked");
     assert.deepEqual(registration.blockers, [
       "promotion:custom_arm35_runtime_compatibility_not_sealed",
+      "promotion:event_only_option_path_evidence_missing",
       "promotion:event_session_or_manual_arm_gate_missing",
     ]);
   } else {

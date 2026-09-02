@@ -18,7 +18,6 @@ import { buildChannelLifecycleDecisionPacket, renderChannelLifecycleDecisionPack
 import type { GateShadowCatchupManifest } from "../lib/research/gateShadowCatchupAuthorization";
 import { buildOperatorExperimentPacket, renderOperatorExperimentPacket } from "../lib/research/operatorExperimentPacket";
 import type { ChannelTrailFrontierBook } from "../lib/research/channelTrailFrontier";
-import { buildNextSevenActionProgram, renderNextSevenActionProgram } from "../lib/research/nextSevenActionProgram";
 import { buildChannelResearchBooks, renderChannelResearchBooks } from "../lib/research/channelResearchBooks";
 
 const arg = (name: string, fallback: string): string => {
@@ -59,8 +58,22 @@ const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt: atlas.gen
 const evidence = buildEvidenceReconciliation({ atlas, snapshot, opportunities: normalized.opportunities,
   catchupManifests, independentShadowVerifications });
 const experiments = buildChannelExperimentPacket(briefs, normalized.opportunities,
-  normalized.managerPaths);
-const nextSevenActions = buildNextSevenActionProgram({ briefs, experiments });
+  normalized.managerPaths, snapshot.activeChannelSpecs);
+// The August 20 seven-action program named fixed channels, sizes, and managers.
+// It became unsafe once later receipt-bound manifests changed those controls.
+// Keep a tombstone at the old artifact path so an older file cannot survive a
+// refresh and masquerade as current guidance. Current work is represented by
+// the receipt-aware experiment and operator packets below.
+const retiredSevenActionProgram = {
+  schemaVersion: 1,
+  state: "retired" as const,
+  throughSession: atlas.throughSession,
+  generatedAt: atlas.generatedAt,
+  reason: "The fixed August seven-action narrative was superseded by later receipt-bound channel configurations.",
+  replacement: "operator-packet.json",
+  productionWrites: 0 as const,
+  configurationAuthority: false as const,
+};
 const executionCapacity = buildExecutionCapacityReadiness({ atlas, briefs, snapshot });
 const executionResilience = buildExecutionResilienceReport({ snapshot, generatedAt: atlas.generatedAt,
   throughSession: atlas.throughSession });
@@ -88,7 +101,7 @@ const packet = {
   headline,
   evidence,
   experiments,
-  nextSevenActions,
+  nextSevenActions: retiredSevenActionProgram,
   executionCapacity,
   executionResilience,
   portfolioCapacity,
@@ -99,7 +112,7 @@ const packet = {
     ...(executionCapacity.execution.state === "block" ? ["Investigate orphaned execution traces before relying on replayed capacity."] : []),
     ...(executionResilience.state === "limited" ? ["Review restart/trace exceptions and require the first guarded broker receipt before declaring the submit-once correction proven live."] : []),
     ...(experiments.summary.preregistered ? ["Review preregistered one-variable paper experiments; activation remains a separate decision."] : []),
-    "Review the seven-action channel program; its four tests, collection holds, and review trigger cannot activate themselves.",
+    "Review the receipt-aware operator experiment packet; the superseded August seven-action narrative is retired.",
     ...(executionCapacity.summary.paperStepsReady ? ["Review replay-supported one-contract sizing steps, including displaced peer opportunities."] : []),
     ...(lifecycle.queues.retirement_review.length ? [`Review ${lifecycle.queues.retirement_review.length} mature negative/redundant retirement proposal(s).`] : []),
     ...(lifecycle.queues.promotion_review.length ? [`Review ${lifecycle.queues.promotion_review.length} bounded paper promotion proposal(s).`] : []),
@@ -141,7 +154,7 @@ const receipt = {
     lifecycleSha256: lifecycle.receiptSha256,
     researchBooksSha256: researchBooks.packetSha256,
     operatorPacketSha256: operatorPacket.packetSha256,
-    nextSevenActionsSha256: nextSevenActions.programSha256,
+    nextSevenActionsSha256: hash(retiredSevenActionProgram),
     dashboardBriefsSha256: hash(dashboardBriefs) },
   productionReads: 0,
   productionWrites: 0,
@@ -156,7 +169,7 @@ const markdown = [
   "",
   `- Evidence: ${evidence.summary.readyChannels} ready · ${evidence.summary.channelsNeedingRecovery} recovery · ${evidence.summary.limitedChannels} limited`,
   `- Experiments: ${experiments.summary.preregistered} preregistered · ${experiments.summary.draft} draft · ${experiments.summary.control_only} unchanged controls`,
-  `- Prepared program: ${nextSevenActions.summary.preparedTests} tests · ${nextSevenActions.summary.collectionHolds} collection/review holds · 0 size changes`,
+  `- Legacy seven-action program: retired · use the receipt-aware operator packet`,
   `- Capacity: ${executionCapacity.summary.paperStepsReady} paper steps ready · ${executionCapacity.summary.holds} hold · ${executionCapacity.summary.insufficientEvidence} need evidence`,
   `- Execution: ${executionResilience.state} · ${executionResilience.traces.total} traces · ${executionResilience.restarts.observedRuns} worker runs`,
   `- Lifecycle queue: ${lifecycle.queues.promotion_review.length} promote · ${lifecycle.queues.size_review.length} size · ${lifecycle.queues.manager_review.length} manager · ${lifecycle.queues.retirement_review.length} retire`,
@@ -190,8 +203,16 @@ writeFileSync(resolve(outputDir, "research-books.json"), `${JSON.stringify(resea
 writeFileSync(resolve(outputDir, "research-books.md"), `${renderChannelResearchBooks(researchBooks)}\n`);
 writeFileSync(resolve(outputDir, "operator-packet.json"), `${JSON.stringify(operatorPacket, null, 2)}\n`);
 writeFileSync(resolve(outputDir, "operator-packet.md"), `${renderOperatorExperimentPacket(operatorPacket)}\n`);
-writeFileSync(resolve(outputDir, "next-seven-actions.json"), `${JSON.stringify(nextSevenActions, null, 2)}\n`);
-writeFileSync(resolve(outputDir, "next-seven-actions.md"), `${renderNextSevenActionProgram(nextSevenActions)}\n`);
+writeFileSync(resolve(outputDir, "next-seven-actions.json"), `${JSON.stringify(retiredSevenActionProgram, null, 2)}\n`);
+writeFileSync(resolve(outputDir, "next-seven-actions.md"), [
+  "# Seven-action channel program · retired",
+  "",
+  retiredSevenActionProgram.reason,
+  "",
+  "Use `operator-packet.json`, whose controls are reconciled to the active receipt-bound specifications.",
+  "",
+  "No production behavior or configuration change is authorized.",
+].join("\n") + "\n");
 writeFileSync(resolve(outputDir, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 console.log(`nightly-channel-learning: PASS · through ${atlas.throughSession}`);
 console.log(`  ${headline}`);

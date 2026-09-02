@@ -203,6 +203,7 @@ export const DECISION_ATLAS_TOMORROW_PROMOTIONS = Object.freeze([
     takeProfit: { kind: "ride", targetPct: null, fraction: 0 },
     ratchetParameters: ARM35_KEEP67,
     declaredBlockers: [
+      "promotion:event_only_option_path_evidence_missing",
       "promotion:event_session_or_manual_arm_gate_missing",
       "promotion:custom_arm35_runtime_compatibility_not_sealed",
     ],
