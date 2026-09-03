@@ -101,6 +101,7 @@ import {
   rc54ReleaseEodDue,
   rc54ReleaseEvidenceContext,
   rc54Root,
+  rc54SealedCompatibilityFleet,
   validateRc54ReleaseStartup,
   type Rc54BrokerHolding,
   type Rc54PendingOrderOccupancy,
@@ -690,7 +691,11 @@ async function reloadConfigAttempt(): Promise<void> {
       }
       if (resolution.state === "receipt-bound") {
         const operationalValidation = validateRc54ReleaseStartup({
-          channels: c.channels,
+          // The receipt-bound resolver above has already forced non-manifest
+          // sources to draft posture. Validate the legacy sealed source fleet
+          // against its original checksum without treating later registered,
+          // authority-dark research channels as executable roots.
+          channels: rc54SealedCompatibilityFleet(c.channels),
           accounts,
           fundMode: c.fund.mode,
           workerVersion: RC54_WORKER_VERSION,
