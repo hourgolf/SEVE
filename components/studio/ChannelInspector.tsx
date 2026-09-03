@@ -10,6 +10,7 @@ import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManage
 import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
 import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
 import { ChannelResearchProgramCard } from "@/components/research/ChannelResearchBooks";
+import { ExecutableShadowStatus } from "@/components/research/ExecutableShadowStatus";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useChannelConfigDraft } from "@/hooks/useChannelConfigDraft";
 import { useChannelManagerProposal } from "@/hooks/useChannelManagerProposal";
@@ -147,6 +148,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           <span className="ih-stats">state <b>{effectiveStateLabel}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
         </div>
         <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
+        <ExecutableShadowStatus slug={slug} />
         <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
         <div className="mixer-deck">
         {passport?.effective && <details className="channel-disclosure operating-context">

@@ -29,6 +29,12 @@ jobs:
         run: npm run market-calendar-selftest
       - name: anyOf selftest
         run: npm run anyof-selftest
+      - name: executable-shadow selftests
+        run: npm run executable-shadow-selftest
+      - name: event-day strategy selftest
+        run: npm run event-day-spec-selftest
+      - name: FOMC executable-shadow fork selftest
+        run: npm run fomc-executable-shadow-forks-selftest
       - name: candle selftest
         run: npm run candle-selftest
       - name: runner exit-rules selftest

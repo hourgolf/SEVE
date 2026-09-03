@@ -19,6 +19,7 @@
 
 import { ema, sma, rsi, crossDir } from "../lib/indicators";
 import { pinBar, engulfing, strongTrendBar, sessionSince, curlUp, rolloverDown, rangeCompression, rangeBreakoutDirection } from "./candle-shapes";
+import { eventsOn } from "./market-events";
 import type { StrategySpec, Condition, SpecEntry, SpecLeg } from "../lib/desk/strategySpec";
 import type { Bar, Evaluate, Features, Intent, OptType, Position } from "./types";
 
@@ -47,6 +48,12 @@ const ET_HM = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
   hour12: false,
 });
+const ET_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 function etMinuteOfDay(ms: number): number {
   let h = 0;
   let m = 0;
@@ -56,6 +63,12 @@ function etMinuteOfDay(ms: number): number {
   }
   if (h === 24) h = 0; // some envs emit "24" for midnight
   return h * 60 + m;
+}
+function etSessionDate(ms: number): string {
+  const parts = Object.fromEntries(ET_DATE.formatToParts(new Date(ms))
+    .filter((part) => part.type !== "literal")
+    .map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 function parseET(hhmm: string): number | null {
   const m = /^\s*(\d{1,2}):(\d{2})/.exec(hhmm);
@@ -68,6 +81,7 @@ function parseET(hhmm: string): number | null {
 const SUPPORTED = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
+  "event_day",
   "efficiency_ratio", "momentum_atr", "macd", "macd_hist_align", "level",
   "pin_bar", "engulfing", "strong_trend", "stale_extreme",
   "curl", "range_break", "sma_cross",
@@ -145,6 +159,7 @@ interface Ctx {
   rsiSeries: Map<number, number[]>;
   smaSeries: Map<number, number[]>; // for sma_cross (SMA fast/slow)
   etMin: number[];
+  etDate: string[];
   closes: number[];
   bars: Bar[]; // raw OHLC (for candle-shape conditions)
   sinceHod: number[]; // bars since session HOD per index (for stale_extreme)
@@ -327,6 +342,10 @@ function condHolds(c: Condition, ctx: Ctx): boolean {
       const b = parseET(c.endET);
       return a != null && b != null && ctx.etMin[i] >= a && ctx.etMin[i] <= b;
     }
+    case "event_day": {
+      const present = eventsOn(ctx.etDate[i]).some((event) => event.kind === c.event);
+      return present === c.present;
+    }
     default:
       return false; // feed-dependent kinds: handled by the caller (ignored)
   }
@@ -401,6 +420,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
     }
   }
   const etMin = bars.map((b) => etMinuteOfDay(b.ts));
+  const etDate = bars.map((b) => etSessionDate(b.ts));
   const { sinceHod, sinceLod } = sessionSince(bars); // for stale_extreme
   const warmup = computeWarmup(spec);
   const timeExit = timeExitMinute(spec);
@@ -419,7 +439,7 @@ function makeSpecEvaluator(spec: StrategySpec, bars: Bar[], _tfMin: number, leve
 
   return (f: Features, pos: Position | null): Intent => {
     const i = f.minute;
-    const ctx: Ctx = { f, i, emaSeries, rsiSeries, smaSeries, etMin, closes, bars, sinceHod, sinceLod, macdSeries, macdLineSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap, customLevels: levels?.customLevels };
+    const ctx: Ctx = { f, i, emaSeries, rsiSeries, smaSeries, etMin, etDate, closes, bars, sinceHod, sinceLod, macdSeries, macdLineSeries, pdh: levels?.pdh, pdl: levels?.pdl, gap: levels?.gap, customLevels: levels?.customLevels };
 
     // ---- exits (premium profit/stop handled by the driver) ----
     if (pos) {

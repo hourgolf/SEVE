@@ -43,6 +43,7 @@ export type Condition =
   | { kind: "rsi"; period: number; cmp: ">" | "<"; value: number }
   | { kind: "time_before"; et: string }
   | { kind: "time_between"; startET: string; endET: string }
+  | { kind: "event_day"; event: "fomc"; present: boolean }
   // ---- engine signals (computeFeatures / precomputed indicators) ----
   | { kind: "efficiency_ratio"; op: ">=" | "<="; value: number; lookback?: number }
   | { kind: "momentum_atr"; op: ">=" | "<="; value: number; lookback?: number } // (close − close[lookback]) / ATR
@@ -158,6 +159,7 @@ export interface StrategySpec {
 const SUPPORTED_KINDS = new Set<Condition["kind"]>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min",
   "rel_vol", "rsi", "time_before", "time_between",
+  "event_day",
   "efficiency_ratio", "momentum_atr", "macd", "macd_hist_align", "level",
   "pin_bar", "engulfing", "strong_trend", "stale_extreme", "curl", "range_break", "sma_cross",
 ]);
@@ -257,6 +259,7 @@ export function validateLegs(structure: LegStructure, legs: SpecLeg[] | undefine
 const KNOWN_KINDS = new Set<string>([
   "ma_cross", "vwap_side", "trend_align", "vwap_dev", "opening_range", "or_width_min", "gap_min", "rel_vol",
   "rsi", "time_before", "time_between", "efficiency_ratio", "momentum_atr", "macd", "macd_hist_align",
+  "event_day",
   "level", "pin_bar", "engulfing", "strong_trend", "stale_extreme", "curl", "range_break", "sma_cross",
   "tick", "gamma_regime", "gamma_wall", "iv_rank", "event_within", "unknown",
 ]);
