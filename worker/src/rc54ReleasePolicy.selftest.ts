@@ -15,6 +15,7 @@ import {
   rc54ManagerProfileId,
   rc54OperationalPostureErrors,
   rc54PaperExecutorPostureErrors,
+  rc54SealedCompatibilityFleet,
   validateRc54AccountBindings,
   validateRc54SourceExecutorBoundary,
 } from "./rc54ReleasePolicy.js";
@@ -125,6 +126,17 @@ check("shadow rehearsal does not require the write path",
     liveTrading: false,
     paperExecutorWriteReady: false,
   }), []);
+
+check("receipt-bound compatibility ignores later authority-dark research sources", (() => {
+  const extra: ChannelConfig = {
+    ...channel("orb-ustop-ctl"),
+    id: "research-only",
+    slug: "fomc-event-follow",
+    status: "draft",
+  };
+  return rc54SealedCompatibilityFleet([channel("orb-ustop-ctl"), extra])
+    .map((row) => row.slug);
+})(), ["orb-ustop-ctl"]);
 
 const operationalPosture = {
   dryRun: false,

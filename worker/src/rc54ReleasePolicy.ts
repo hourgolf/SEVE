@@ -710,6 +710,24 @@ export function rc54SourceFleetErrors(
   return [...new Set(errors)].sort();
 }
 
+/**
+ * The legacy sealed RC5.4 validator owns the 68-channel source fleet that was
+ * present when its checksum was cut. A later receipt-bound runtime may coexist
+ * with separately registered authority-dark research sources. The generic
+ * receipt-bound validator forces every non-manifest source to draft posture;
+ * this projection therefore narrows only the legacy compatibility check and
+ * never grants an extra channel execution authority.
+ */
+export function rc54SealedCompatibilityFleet(
+  channels: readonly ChannelConfig[],
+): ChannelConfig[] {
+  const sealed = new Set<string>([
+    ...DAY1_ROOTS.map((root) => root.slug),
+    ...DAY1_DARK_CHANNELS,
+  ]);
+  return channels.filter((channel) => sealed.has(channel.slug));
+}
+
 function paperOrigin(host: string): { origin: string | null; hasCredentials: boolean } {
   try {
     const parsed = new URL(host);
