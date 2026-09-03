@@ -116,6 +116,36 @@ const run = (
 }
 
 {
+  const bankRunner = opportunity("bank-runner", {
+    quantity: 2,
+    manager: {
+      kind: "bank_runner",
+      id: "BANK30-R50-K67",
+      version: "manager-v1",
+      stopLossPct: 30,
+      bankTargetPct: 30,
+      runnerFraction: 0.5,
+      runnerArmPct: 50,
+      runnerKeepFraction: 2 / 3,
+      postBankFloorPct: null,
+      forceExitAt: at(600),
+    },
+    quotes: [
+      quote(0, 0.9, 1),
+      quote(60, 1.3, 1.31, { bidSize: 1 }),
+      quote(120, 1.6, 1.61, { bidSize: 1 }),
+      quote(180, 1.39, 1.4, { bidSize: 1 }),
+    ],
+  });
+  const receipt = run([bankRunner]).receipts.find((row) =>
+    row.mode === "channel_isolated")!;
+  assert.equal(receipt.exit?.reason, "ratchet");
+  assert.equal(receipt.resultPerContractUsd, 34.5);
+  assert.equal(receipt.totalResultUsd, 69);
+  assert.equal(receipt.returnPct, 34.5);
+}
+
+{
   const tooExpensive = opportunity("channel-risk", { maxDebitUsd: 150, quantity: 2 });
   const receipt = run([tooExpensive]).receipts.find((row) => row.mode === "channel_isolated")!;
   assert.equal(receipt.disposition, "blocked_channel_debit");

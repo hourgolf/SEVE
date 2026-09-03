@@ -139,6 +139,7 @@ import {
 import {
   channelControlMutationWindow,
 } from "../../lib/channels/channelControlMutationWindow.js";
+import { SingleFlightReload } from "./singleFlightReload.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 const releaseMode = (): boolean => config.day1ReleaseEnabled || config.rc54ReleaseEnabled;
@@ -149,6 +150,7 @@ let receiptBoundRuntime: Readonly<ReceiptBoundRuntimeConfiguration> | null = nul
 let receiptBoundAdmissionRootResolver: Rc54AdmissionRootResolver | null = null;
 let receiptBoundAdmissionPolicies:
   readonly Readonly<AdmissionDomainPolicy>[] | null = null;
+const configReloadSingleFlight = new SingleFlightReload();
 let activationPreviewWatchBusy = false;
 
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
@@ -627,7 +629,7 @@ function resolvedCredentialAccountIds(
     .sort();
 }
 
-async function reloadConfig(): Promise<void> {
+async function reloadConfigAttempt(): Promise<void> {
   // Halt-transition watch: page the operator when the kill switch / master stop
   // trips while we hold prior state (a boot into an already-halted desk stays
   // quiet — that's known state, not news). Clearing the halt re-opens the slot
@@ -635,7 +637,6 @@ async function reloadConfig(): Promise<void> {
   const hadFund = !!cfg.fund;
   const prevHalted = cfg.fund?.is_halted ?? false;
   const c = await store.loadConfig();
-  if (releaseMode()) releaseSourceExecutorBoundaryReady = false;
   if (c.fund) {
     // Audit 2026-07-10 (critical): a TRANSIENT accounts-read failure must not replace a
     // good routing table with [] — every channel would regroup onto the default account
@@ -650,6 +651,8 @@ async function reloadConfig(): Promise<void> {
       }
     }
     const previousReceiptBoundRuntime = receiptBoundRuntime;
+    let nextReleaseStartupReceipt = releaseStartupReceipt;
+    let nextSourceExecutorBoundaryReady = !releaseMode();
     let nextReceiptBoundRuntime:
       Readonly<ReceiptBoundRuntimeConfiguration> | null = null;
     let nextReceiptBoundResolver: Rc54AdmissionRootResolver | null = null;
@@ -721,12 +724,12 @@ async function reloadConfig(): Promise<void> {
         nextReceiptBoundAdmissionPolicies =
           buildReceiptBoundRc54AdmissionPolicies(resolution.runtime);
         channels = [...resolution.channels];
-        releaseStartupReceipt = buildReceiptBoundRc54StartupReceipt({
+        nextReleaseStartupReceipt = buildReceiptBoundRc54StartupReceipt({
           runtime: resolution.runtime,
           operationalReceipt: operationalValidation.activeSettingsReceipt
             ?? {},
         });
-        releaseSourceExecutorBoundaryReady = true;
+        nextSourceExecutorBoundaryReady = true;
       }
     }
     if (config.day1ReleaseEnabled) {
@@ -741,8 +744,8 @@ async function reloadConfig(): Promise<void> {
         posture: sealedRuntimePosture(),
       });
       if (!validation.ok) throw new Error(`Day 1 RC5 startup validation failed: ${validation.errors.join(";")}`);
-      releaseStartupReceipt = validation.activeSettingsReceipt;
-      releaseSourceExecutorBoundaryReady = true;
+      nextReleaseStartupReceipt = validation.activeSettingsReceipt;
+      nextSourceExecutorBoundaryReady = true;
     } else if (config.rc54ReleaseEnabled && !nextReceiptBoundRuntime) {
       const validation = validateRc54ReleaseStartup({
         channels: c.channels,
@@ -758,8 +761,8 @@ async function reloadConfig(): Promise<void> {
       if (!validation.ok) {
         throw new Error(`RC5.4 startup validation failed: ${validation.errors.join(";")}`);
       }
-      releaseStartupReceipt = validation.activeSettingsReceipt;
-      releaseSourceExecutorBoundaryReady = true;
+      nextReleaseStartupReceipt = validation.activeSettingsReceipt;
+      nextSourceExecutorBoundaryReady = true;
     }
     if (config.channelCollectionRuntimeEnabled) {
       const collectionRead = await store.loadChannelCollectionStates();
@@ -791,45 +794,58 @@ async function reloadConfig(): Promise<void> {
       }
       channels = collection.channels;
     }
+    const hotAdoptedReceiptBoundRuntime = receiptBoundRuntimeIdentityChanged(
+      previousReceiptBoundRuntime,
+      nextReceiptBoundRuntime,
+    );
+    const nextCurrentStartupReceipt = currentStartupReceipt && nextReleaseStartupReceipt
+      ? {
+        ...nextReleaseStartupReceipt,
+        runtimeReadiness: currentStartupReceipt.runtimeReadiness,
+      }
+      : currentStartupReceipt;
+
+    // Atomic publication point: everything above is candidate construction and
+    // validation. There are deliberately no awaits between these assignments,
+    // so decision readers observe the prior complete runtime or this complete
+    // runtime, never a half-reloaded source/executor boundary.
+    cfg = { fund: c.fund, channels, accounts };
     receiptBoundRuntime = nextReceiptBoundRuntime;
     receiptBoundAdmissionRootResolver = nextReceiptBoundResolver;
     receiptBoundAdmissionPolicies = nextReceiptBoundAdmissionPolicies;
-    if (currentStartupReceipt && releaseStartupReceipt) {
-      currentStartupReceipt = {
-        ...releaseStartupReceipt,
-        runtimeReadiness: currentStartupReceipt.runtimeReadiness,
-      };
-      const hotAdoptedReceiptBoundRuntime = receiptBoundRuntimeIdentityChanged(
-        previousReceiptBoundRuntime,
-        nextReceiptBoundRuntime,
+    releaseStartupReceipt = nextReleaseStartupReceipt;
+    currentStartupReceipt = nextCurrentStartupReceipt;
+    releaseSourceExecutorBoundaryReady = nextSourceExecutorBoundaryReady;
+
+    if (hotAdoptedReceiptBoundRuntime && nextReceiptBoundRuntime && currentStartupReceipt) {
+      const paperRootCount = nextReceiptBoundRuntime.roots.filter((root) =>
+        root.executionPosture === "paper").length;
+      const observeOnlyRootCount =
+        nextReceiptBoundRuntime.roots.length - paperRootCount;
+      info(
+        `rc54-release: ACTIVE ${nextReceiptBoundRuntime.releaseId}`
+        + ` config=${nextReceiptBoundRuntime.manifestContentHash}`
+        + ` roots=${nextReceiptBoundRuntime.roots.length}`
+        + ` paper=${paperRootCount} observe-only=${observeOnlyRootCount}`
+        + " paper-only receipt-bound hot-adopted",
       );
-      if (hotAdoptedReceiptBoundRuntime && nextReceiptBoundRuntime) {
-        const paperRootCount = nextReceiptBoundRuntime.roots.filter((root) =>
-          root.executionPosture === "paper").length;
-        const observeOnlyRootCount =
-          nextReceiptBoundRuntime.roots.length - paperRootCount;
-        info(
-          `rc54-release: ACTIVE ${nextReceiptBoundRuntime.releaseId}`
-          + ` config=${nextReceiptBoundRuntime.manifestContentHash}`
-          + ` roots=${nextReceiptBoundRuntime.roots.length}`
-          + ` paper=${paperRootCount} observe-only=${observeOnlyRootCount}`
-          + " paper-only receipt-bound hot-adopted",
-        );
-        await store.journal(
-          "EXEC",
-          `rc54-release ACTIVE ${nextReceiptBoundRuntime.releaseId}`
-          + ` config=${nextReceiptBoundRuntime.manifestContentHash}`,
-          currentStartupReceipt,
-        );
-      }
+      await store.journal(
+        "EXEC",
+        `rc54-release ACTIVE ${nextReceiptBoundRuntime.releaseId}`
+        + ` config=${nextReceiptBoundRuntime.manifestContentHash}`,
+        currentStartupReceipt,
+      );
     }
-    cfg = { fund: c.fund, channels, accounts };
   }
   else warn("config: reload returned no fund_state — keeping previous");
   const nowHalted = cfg.fund?.is_halted ?? false;
   if (hadFund && !prevHalted && nowHalted)
     alertOnce(alpaca.etParts(Date.now()).date, "halt", "fund", "⛔ desk HALTED", "kill switch tripped — entries frozen; FLATTENING every open position at market (within ~10s in RTH, else at the next open)");
   if (prevHalted && !nowHalted) alertClear("halt", "fund");
+}
+
+async function reloadConfig(): Promise<void> {
+  return configReloadSingleFlight.run(reloadConfigAttempt);
 }
 
 async function refreshChain(sym: string): Promise<void> {

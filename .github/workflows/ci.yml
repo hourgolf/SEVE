@@ -45,6 +45,8 @@ jobs:
         run: npm run position-route-receipt-audit-selftest
       - name: active operational authority selftest
         run: npm run active-operational-contract-selftest
+      - name: single-flight release reload selftest
+        run: npm run single-flight-release-reload-selftest
       - name: profitability ledger selftest
         run: npm run profitability-ledger-selftest
       - name: native review selftest

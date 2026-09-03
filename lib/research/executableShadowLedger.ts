@@ -58,9 +58,23 @@ export interface ExecutableFullRatchetManager {
   forceExitAt: string;
 }
 
+export interface ExecutableBankRunnerManager {
+  kind: "bank_runner";
+  id: string;
+  version: string;
+  stopLossPct: number;
+  bankTargetPct: number;
+  runnerFraction: number;
+  runnerArmPct: number;
+  runnerKeepFraction: number;
+  postBankFloorPct: number | null;
+  forceExitAt: string;
+}
+
 export type ExecutableShadowManager =
   | ExecutableAllOutManager
-  | ExecutableFullRatchetManager;
+  | ExecutableFullRatchetManager
+  | ExecutableBankRunnerManager;
 
 export interface ExecutableShadowOpportunity {
   id: string;
@@ -263,6 +277,18 @@ function assertInput(input: {
           || row.manager.keepFraction > 1)) {
       throw new Error(`${row.id}: executable shadow ratchet is invalid`);
     }
+    if (row.manager.kind === "bank_runner"
+        && (row.quantity < 2
+          || row.manager.bankTargetPct <= 0
+          || row.manager.runnerFraction <= 0
+          || row.manager.runnerFraction >= 1
+          || row.manager.runnerArmPct <= row.manager.bankTargetPct
+          || row.manager.runnerKeepFraction <= 0
+          || row.manager.runnerKeepFraction > 1
+          || (row.manager.postBankFloorPct != null
+            && !Number.isFinite(row.manager.postBankFloorPct)))) {
+      throw new Error(`${row.id}: executable shadow bank/runner is invalid`);
+    }
   }
   const accountIds = new Set<string>();
   for (const account of input.accountPolicies) {
@@ -409,7 +435,7 @@ function simulateExit(
     validIso(quote.capturedAt)
       && Date.parse(quote.capturedAt) >= Date.parse(entry.capturedAt)
       && Date.parse(quote.capturedAt) <= forceExitAt
-      && validBidQuote(quote, policy, row.quantity))
+      && validBidQuote(quote, policy, 1))
     .sort((left, right) => left.capturedAt.localeCompare(right.capturedAt)
       || left.id.localeCompare(right.id));
   if (!quotes.length) {
@@ -428,6 +454,7 @@ function simulateExit(
   let peakReturn = Number.NEGATIVE_INFINITY;
   let troughReturn = Number.POSITIVE_INFINITY;
   let armed = false;
+  let bankReturn: number | null = null;
   let chosen: ExecutableShadowQuote | null = null;
   let reason: ExecutableShadowExit["reason"] = "force_exit";
   for (const quote of quotes) {
@@ -435,6 +462,7 @@ function simulateExit(
     peakReturn = Math.max(peakReturn, currentReturn);
     troughReturn = Math.min(troughReturn, currentReturn);
     if (row.manager.kind === "all_out") {
+      if (!validBidQuote(quote, policy, row.quantity)) continue;
       if (row.manager.takeProfitPct != null
           && currentReturn + 1e-9 >= row.manager.takeProfitPct) {
         chosen = quote;
@@ -446,7 +474,8 @@ function simulateExit(
         reason = "stop";
         break;
       }
-    } else {
+    } else if (row.manager.kind === "full_ratchet") {
+      if (!validBidQuote(quote, policy, row.quantity)) continue;
       if (peakReturn + 1e-9 >= row.manager.armPct) armed = true;
       const ratchetFloor = peakReturn * row.manager.keepFraction;
       if (armed && currentReturn - 1e-9 <= ratchetFloor) {
@@ -458,6 +487,41 @@ function simulateExit(
         chosen = quote;
         reason = "stop";
         break;
+      }
+    } else {
+      const runnerQty = Math.max(1, Math.round(row.quantity
+        * row.manager.runnerFraction));
+      const bankQty = row.quantity - runnerQty;
+      if (bankReturn == null) {
+        if (currentReturn + 1e-9 >= row.manager.bankTargetPct
+            && validBidQuote(quote, policy, bankQty)) {
+          bankReturn = currentReturn;
+        } else if (currentReturn - 1e-9 <= -row.manager.stopLossPct
+            && validBidQuote(quote, policy, row.quantity)) {
+          chosen = quote;
+          reason = "stop";
+          break;
+        }
+      }
+      if (bankReturn != null) {
+        if (peakReturn + 1e-9 >= row.manager.runnerArmPct) armed = true;
+        const ratchetFloor = peakReturn * row.manager.runnerKeepFraction;
+        const postBankFloorReached = !armed
+          && row.manager.postBankFloorPct != null
+          && currentReturn <= row.manager.postBankFloorPct;
+        if ((postBankFloorReached
+              || (armed && currentReturn - 1e-9 <= ratchetFloor))
+            && validBidQuote(quote, policy, runnerQty)) {
+          chosen = quote;
+          reason = armed ? "ratchet" : "stop";
+          break;
+        }
+        if (currentReturn - 1e-9 <= -row.manager.stopLossPct
+            && validBidQuote(quote, policy, runnerQty)) {
+          chosen = quote;
+          reason = "stop";
+          break;
+        }
       }
     }
   }
@@ -478,8 +542,16 @@ function simulateExit(
     }
     chosen = finalQuote;
   }
-  const realizedReturn = returnPct(entryAsk, chosen.bid!);
-  const perContract = (chosen.bid! - entryAsk) * 100;
+  const terminalReturn = returnPct(entryAsk, chosen.bid!);
+  const realizedReturn = row.manager.kind === "bank_runner" && bankReturn != null
+    ? (() => {
+      const runnerQty = Math.max(1, Math.round(row.quantity
+        * row.manager.runnerFraction));
+      const bankQty = row.quantity - runnerQty;
+      return (bankReturn! * bankQty + terminalReturn * runnerQty) / row.quantity;
+    })()
+    : terminalReturn;
+  const perContract = entryAsk * realizedReturn;
   return {
     disposition: "filled",
     reason: `Closed on an observed bid via ${reason.replace("_", " ")}.`,
