@@ -30,6 +30,11 @@ import {
   latestReadyAfterCloseSession,
 } from "../lib/research/afterCloseResearch";
 import { createServerSupabaseClient } from "./serverSupabase";
+import {
+  executableForceExitClockFromChannelSpec,
+  executableManagerFromChannelSpec,
+  executableMaxEntriesFromChannelSpec,
+} from "../lib/research/executableShadowManager";
 
 const arg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
@@ -59,6 +64,7 @@ const outputFile = resolve(arg("output")
 const sha256 = (value: unknown): string => `sha256:${createHash("sha256")
   .update(canonicalJson(value as never)).digest("hex")}`;
 const numeric = (value: unknown): number | null => {
+  if (value == null || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
@@ -206,8 +212,11 @@ async function main(): Promise<void> {
   const entryParameters = object(configObject.entryParameters);
   const riskLimits = object(configObject.riskLimits);
   const sourceStrategistConfig = object(configObject.sourceStrategistConfig ?? strategist.strategist_config);
-  const maxEntries = Math.max(1, Math.trunc(numeric(entryParameters.maxEntriesPerSession)
-    ?? numeric(entryParameters.max_entries_per_session) ?? 6));
+  const maxEntries = activeSpec
+    ? executableMaxEntriesFromChannelSpec(activeSpec)
+    : Math.max(1, Math.trunc(numeric(entryParameters.maxEntriesPerSession)
+      ?? numeric(entryParameters.max_entries_per_session)
+      ?? (text(configObject.reentryPolicy) === "disabled" ? 1 : 3)));
   const requestedQuantity = numeric(arg("quantity"));
   if (requestedQuantity != null && (!Number.isInteger(requestedQuantity) || requestedQuantity < 1)) {
     throw new Error("--quantity must be a positive integer");
@@ -225,7 +234,15 @@ async function main(): Promise<void> {
     ? configObject.symbolScope[0] : null) ?? String(strategist.underlying ?? "SPY")).toUpperCase();
   const familyId = text(configObject.familyId);
   const collisionDomain = text(configObject.collisionDomain);
-  const forceExitEt = arg("force-exit-et") ?? (slug === "fomc-follow" ? "15:25" : "15:55");
+  const forceExitOverrideEt = arg("force-exit-et");
+  const comparisonForceExitEt = forceExitOverrideEt
+    ?? (slug === "fomc-follow" ? "15:25" : "15:55");
+  const activeForceExitEt = activeSpec
+    ? forceExitOverrideEt ?? executableForceExitClockFromChannelSpec(
+      activeSpec,
+      comparisonForceExitEt,
+    )
+    : comparisonForceExitEt;
   const quotePolicy: ExecutableShadowRunPolicy = {
     maxEntryDelayMs: Number(arg("max-entry-delay-ms") ?? 75_000),
     maxQuoteAgeMs: Number(arg("max-quote-age-ms") ?? 15_000),
@@ -388,7 +405,12 @@ async function main(): Promise<void> {
         channelSpecVersionId: provenance.channelSpecVersionId ?? `local:${configurationHash}`,
         releaseManifestId: provenance.releaseManifestId ?? `local:${provenance.source}`,
         configurationEpochId: provenance.configurationEpochId ?? configurationHash,
-        manager: manager(managerName, session, forceExitEt),
+        manager: managerName === "active-native" && activeSpec
+          ? executableManagerFromChannelSpec(
+            activeSpec,
+            etWallMinuteUtc(session, minuteOf(activeForceExitEt)),
+          )
+          : manager(managerName, session, comparisonForceExitEt),
         quotes: occ ? quoteByOcc.get(occ) ?? [] : [],
         sourceRefs: [
           `supabase:signals:${signal.id}`,
