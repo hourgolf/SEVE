@@ -242,6 +242,7 @@
     "channel-epoch-evidence-runtime-selftest": "tsx worker/src/channelEpochEvidenceRuntime.selftest.ts",
     "receipt-bound-entry-policy-selftest": "tsx worker/src/receiptBoundEntryPolicy.selftest.ts",
     "single-flight-release-reload-selftest": "tsx worker/src/singleFlightReload.selftest.ts",
+    "channel-collection-bootstrap-selftest": "tsx scripts/channel-collection-bootstrap.selftest.ts",
     "temporary-rc54-runtime-adapter-selftest": "tsx worker/src/temporaryRc54RuntimeAdapter.selftest.ts",
     "channel-activation-persistence-selftest": "tsx lib/channels/channelActivationPersistence.selftest.ts",
     "channel-baseline-adoption-selftest": "tsx lib/channels/channelBaselineAdoption.selftest.ts",
