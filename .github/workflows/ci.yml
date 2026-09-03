@@ -47,6 +47,8 @@ jobs:
         run: npm run active-operational-contract-selftest
       - name: single-flight release reload selftest
         run: npm run single-flight-release-reload-selftest
+      - name: new-channel collection bootstrap selftest
+        run: npm run channel-collection-bootstrap-selftest
       - name: profitability ledger selftest
         run: npm run profitability-ledger-selftest
       - name: native review selftest
