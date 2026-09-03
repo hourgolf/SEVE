@@ -26,6 +26,22 @@ assert.equal(registry?.baselineMatches, true);
 assert.equal(registry?.executionAuthority, false);
 assert.equal(registry?.alternativeValue, 3);
 
+for (const channel of [
+  { slug: "pb-ride-itm", max: 10, stop: 30, target: 10 },
+  { slug: "grind-v3-2", max: 12, stop: 35, target: 7 },
+]) {
+  const capOne = boundedRetuneSignalStamp({
+    slug: channel.slug,
+    spec_json: null,
+    max_contracts: channel.max,
+    premium_stop_pct: channel.stop,
+    take_profit_pct: channel.target,
+  });
+  assert.equal(capOne?.baselineMatches, true);
+  assert.equal(capOne?.alternativeValue, 1);
+  assert.equal(capOne?.executionAuthority, false);
+}
+
 const drift = boundedRetuneSignalStamp({
   slug: "pb-ride-2",
   spec_json: null,

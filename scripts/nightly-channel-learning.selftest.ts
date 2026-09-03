@@ -15,7 +15,8 @@ assert.match(source, /buildExecutionResilienceReport/);
 assert.match(source, /buildPortfolioCapacityDecisionPacket/);
 assert.match(source, /buildChannelLifecycleDecisionPacket/);
 assert.match(source, /buildOperatorExperimentPacket/);
-assert.match(source, /buildNextSevenActionProgram/);
+assert.doesNotMatch(source, /buildNextSevenActionProgram/,
+  "the superseded fixed-control program must not be rebuilt nightly");
 assert.match(source, /trail-file/);
 assert.doesNotMatch(source, /createServerSupabaseClient|\.from\(|insert\(|upsert\(|fetch\(/);
 assert.match(source, /productionWrites: 0/);
@@ -33,5 +34,6 @@ assert.match(source, /operator-packet\.md/);
 assert.match(source, /next-seven-actions\.json/);
 assert.match(source, /next-seven-actions\.md/);
 assert.match(source, /trailsSha256: hash\(source\.trails\)/);
-assert.match(source, /nextSevenActionsSha256: nextSevenActions\.programSha256/);
+assert.match(source, /nextSevenActionsSha256: hash\(retiredSevenActionProgram\)/);
+assert.match(source, /fixed August seven-action narrative was superseded/);
 console.log("nightly-channel-learning-selftest: PASS");

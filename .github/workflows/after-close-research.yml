@@ -74,6 +74,9 @@ jobs:
           npm run entry-qualification-policy-selftest
           npm run manager-pattern-scan-selftest
           npm run entry-atlas-selftest
+          npm run executable-shadow-selftest
+          npm run event-day-spec-selftest
+          npm run fomc-executable-shadow-forks-selftest
       - name: Build and publish session research
         id: shadow-rebuild
         continue-on-error: true
@@ -147,6 +150,20 @@ jobs:
             --from 2026-07-14 \
             --through "$SESSION_DATE_ET" \
             --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET/manager-patterns"
+      - name: Build executable-shadow controls for registered FOMC forks
+        shell: bash
+        env:
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          args=(
+            --session "$SESSION_DATE_ET"
+            --out-dir "data/decision-atlas/runs/$SESSION_DATE_ET/executable-shadow"
+          )
+          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$DRY_RUN_INPUT" != "true" ]]; then
+            args+=(--publish)
+          fi
+          npm run nightly-executable-shadow -- "${args[@]}"
       - name: Verify Priority A experiment baselines
         id: priority-a-readiness
         continue-on-error: true
@@ -230,6 +247,8 @@ jobs:
                 "data/decision-atlas/runs/$PRIOR_SESSION_DATE_ET/exact-learning/receipt.json" \
                 "data/decision-atlas/runs/$PRIOR_SESSION_DATE_ET/exact-learning/publication-receipt.json"
             fi
+            find "data/decision-atlas/runs/$SESSION_DATE_ET/executable-shadow" \
+              -maxdepth 1 -type f -name '*.json' -print0 | sort -z | xargs -0 -r sha256sum
           } | tee after-close-sha256.txt
           {
             echo "## After-close research receipt"

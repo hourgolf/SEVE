@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { ChannelSpecVersion } from "../channels/channelControlPlane";
 import type { ChannelDecisionBriefBundle } from "./channelDecisionBrief";
 import { buildChannelExperimentPacket } from "./channelExperimentLifecycle";
 
@@ -118,4 +119,22 @@ const started = buildChannelExperimentPacket(startedBundle, [{
 assert.equal(started.plans["vb-macd-state"].startSession, "2026-08-20");
 assert.deepEqual(started.plans["vb-macd-state"].collection,
   { independentSessions: 1, logicalOpportunities: 1, contaminatedOpportunities: 0 });
+const receiptAwareSpecs = [
+  { slug: "qqq-thrust-trail-wd", managerProfileId: "QQQ-THRUST-ALL-OUT-13", quantity: 2, status: "active" },
+  { slug: "vb-macd-state", managerProfileId: "VB-MACD-WIDE20-50", quantity: 4, status: "active" },
+  { slug: "momo-shape-2", managerProfileId: "BANK30-R50-K67", quantity: 2, status: "active" },
+  { slug: "orb-ustop-ctl", managerProfileId: "ORB54-B30-A13", quantity: 2, status: "active" },
+  { slug: "vb-level-break", managerProfileId: "VB-LEVEL-ALL-OUT-30", quantity: 4, status: "active" },
+] as unknown as readonly ChannelSpecVersion[];
+const receiptAware = buildChannelExperimentPacket(bundle, [], [], receiptAwareSpecs);
+assert.notEqual(receiptAware.plans["qqq-thrust-trail-wd"].experimentId,
+  "qqq-thrust-trail-wd:tp20-vs-tp13:2026-08-18:v1");
+assert.notEqual(receiptAware.plans["vb-macd-state"].experimentId,
+  "vb-macd-state:tp18-vs-tp50:2026-08-20:v1");
+assert.notEqual(receiptAware.plans["momo-shape-2"].experimentId,
+  "momo-shape-2:tp27-vs-bank20-run50:2026-08-18:v1");
+assert.notEqual(receiptAware.plans["orb-ustop-ctl"].experimentId,
+  "orb-ustop-ctl:raw-vs-qualified-entry:2026-08-18:v1");
+assert.notEqual(receiptAware.plans["vb-level-break"].experimentId,
+  "vb-level-break:first-vs-confirmed-entry:2026-08-18:v1");
 console.log("channel-experiment-lifecycle-selftest: PASS");

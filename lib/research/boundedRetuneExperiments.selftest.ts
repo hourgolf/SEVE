@@ -6,12 +6,20 @@ import {
   buildBoundedRetuneSignalStamp,
 } from "./boundedRetuneRegistry";
 
-assert.equal(PRIORITY_A_BOUNDED_RETUNES.length, 24);
-assert.equal(new Set(PRIORITY_A_BOUNDED_RETUNES.map((row) => row.channel)).size, 24);
-assert.equal(PRIORITY_A_BOUNDED_RETUNES.filter((row) => row.variable === "max_entries_per_session").length, 18);
+assert.equal(PRIORITY_A_BOUNDED_RETUNES.length, 26);
+assert.equal(new Set(PRIORITY_A_BOUNDED_RETUNES.map((row) => row.channel)).size, 26);
+assert.equal(PRIORITY_A_BOUNDED_RETUNES.filter((row) => row.variable === "max_entries_per_session").length, 20);
 assert.equal(PRIORITY_A_BOUNDED_RETUNES.filter((row) => row.variable === "take_profit_pct").length, 6);
 assert(PRIORITY_A_BOUNDED_RETUNES.every((row) => row.executionAuthority === false
   && row.minimumEvidence.sessions === 5 && row.minimumEvidence.logicalOutcomes === 10));
+for (const channel of ["pb-ride-itm", "grind-v3-2"]) {
+  const capOne = PRIORITY_A_BOUNDED_RETUNES.find((row) => row.channel === channel)!;
+  assert.equal(capOne.experimentId, `priority-a:${channel}:max_entries_per_session:v2`);
+  assert.equal(capOne.cohortStartSession, "2026-09-03");
+  assert.equal(capOne.controlValue, null);
+  assert.equal(capOne.alternativeValue, 1);
+  assert.equal(capOne.executionAuthority, false);
+}
 
 const definition = PRIORITY_A_BOUNDED_RETUNES.find((row) => row.channel === "vb-ribbon-cross-iwm")!;
 const stamp = buildBoundedRetuneSignalStamp({

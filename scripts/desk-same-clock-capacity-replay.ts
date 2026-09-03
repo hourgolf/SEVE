@@ -43,6 +43,8 @@ const requestedRollbackChoices = arg(
   "rollback-choices",
   "gap-observe,level-two,gap-observe-level-two",
 ).split(",").map((value) => value.trim()).filter(Boolean);
+const observeChannels = new Set(arg("observe-channels", "")
+  .split(",").map((value) => value.trim()).filter(Boolean));
 
 interface SignalRow {
   id: string;
@@ -247,6 +249,7 @@ function markdown(packet: Record<string, any>): string {
   const priority = packet.priorityComparisons as Array<Record<string, any>>;
   const channelCapacity = packet.channelCapacityComparisons as Array<Record<string, any>>;
   const rollbacks = packet.rollbackComparisons as Array<Record<string, any>>;
+  const posture = packet.postureComparisons as Array<Record<string, any>>;
   return [
     `# Desk-wide distinct-OCC same-clock replay · through ${packet.throughSession ?? "no observed session"}`,
     "",
@@ -255,6 +258,16 @@ function markdown(packet: Record<string, any>): string {
       ? `\nFrozen historical cohort \`${packet.cohort}\` replayed under the currently active routing and admission policy. This is not exact-current execution evidence.\n`
       : "",
     "",
+    ...(posture.length ? [
+      "## Execute-to-observe posture comparison",
+      "",
+      "| Scenario | Chronological delta | Added peers | Removed channel paths | Development | Holdout | Without best session |",
+      "|---|---:|---:|---:|---:|---:|---:|",
+      ...posture.map((row) => `| ${row.variantId} | ${usd(row.modeledPnlDeltaUsd)} | ${row.added.length} | ${row.displaced.length} | ${usd(row.development.deltaUsd)} | ${usd(row.holdout.deltaUsd)} | ${usd(row.withoutBestSession.deltaUsd)} |`),
+      "",
+      "A posture comparison removes execution authority only. It preserves the channel's observer collection and leaves every peer entry, exit, size, route, priority, and collision rule unchanged.",
+      "",
+    ] : []),
     ...(rollbacks.length ? [
       "## Approved rollback-direction comparisons",
       "",
@@ -493,6 +506,48 @@ async function main(): Promise<void> {
   }));
   const baseline = results[0];
   const priorityBaseline = results[1];
+  const postureComparisons = observeChannels.size ? (() => {
+    const unknown = [...observeChannels].filter((slug) => !currentPaperSlugs.has(slug));
+    if (unknown.length) throw new Error(`observe-channel is not current paper: ${unknown.join(",")}`);
+    const transformed = currentCandidates.filter((row) => !observeChannels.has(row.slug));
+    const result = replayDeskSameClockCapacity({
+      candidates: transformed,
+      variant: { id: `observe-${[...observeChannels].sort().join("-")}`,
+        label: `Observe only: ${[...observeChannels].sort().join(", ")}`,
+        distinctOccAtSameClock: false, policies: currentPolicies },
+    });
+    const comparison = compareDeskReplay(baseline, result);
+    const sessions = [...new Set(currentCandidates.map((row) => row.session))].sort();
+    const holdoutSessions = new Set(sessions.slice(-2));
+    const developmentSessions = new Set(sessions.slice(0, -2));
+    const developmentBase = replayWindow({ candidates: currentCandidates,
+      policies: currentPolicies, sessions: developmentSessions, id: "posture-baseline-development" });
+    const developmentResult = replayWindow({ candidates: transformed,
+      policies: currentPolicies, sessions: developmentSessions, id: "posture-candidate-development" });
+    const holdoutBase = replayWindow({ candidates: currentCandidates,
+      policies: currentPolicies, sessions: holdoutSessions, id: "posture-baseline-holdout" });
+    const holdoutResult = replayWindow({ candidates: transformed,
+      policies: currentPolicies, sessions: holdoutSessions, id: "posture-candidate-holdout" });
+    const baseWithoutBest = withoutBestSession(baseline) ?? baseline.modeledPnlUsd;
+    const resultWithoutBest = withoutBestSession(result) ?? result.modeledPnlUsd;
+    return [{
+      ...summarizeDifference(baseline, result),
+      observedChannels: [...observeChannels].sort(),
+      baselineUsd: baseline.modeledPnlUsd,
+      candidateUsd: result.modeledPnlUsd,
+      actualPaths: result.actualPaths,
+      virtualPaths: result.virtualPaths,
+      development: { sessions: [...developmentSessions],
+        baselineUsd: developmentBase.modeledPnlUsd, candidateUsd: developmentResult.modeledPnlUsd,
+        deltaUsd: Math.round((developmentResult.modeledPnlUsd - developmentBase.modeledPnlUsd) * 100) / 100 },
+      holdout: { sessions: [...holdoutSessions],
+        baselineUsd: holdoutBase.modeledPnlUsd, candidateUsd: holdoutResult.modeledPnlUsd,
+        deltaUsd: Math.round((holdoutResult.modeledPnlUsd - holdoutBase.modeledPnlUsd) * 100) / 100 },
+      withoutBestSession: { baselineUsd: baseWithoutBest, candidateUsd: resultWithoutBest,
+        deltaUsd: Math.round((resultWithoutBest - baseWithoutBest) * 100) / 100 },
+      policyIdentityHeld: true,
+    }];
+  })() : [];
   let rollbackComparisons: Array<Record<string, unknown>> = [];
   let rollbackPacketSha256: string | null = null;
   if (rollbackPacketFile) {
@@ -621,6 +676,7 @@ async function main(): Promise<void> {
     channelCapacityComparisons: results.filter((row) =>
       row.variantId.startsWith("extra-slot-"))
       .map((row) => summarizeDifference(priorityBaseline, row)),
+    postureComparisons,
     rollbackComparisons,
     validation: {
       originalActed: actedIds.size,

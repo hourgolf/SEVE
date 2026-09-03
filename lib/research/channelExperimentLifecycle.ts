@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ChannelSpecVersion } from "../channels/channelControlPlane";
 import type { ChannelDecisionAxis, ChannelDecisionBrief, ChannelDecisionBriefBundle } from "./channelDecisionBrief";
 import type { AtlasManagerPath, AtlasOpportunity } from "./decisionAtlas";
 import type { BoundedRetuneSignalStamp } from "./boundedRetuneRegistry";
@@ -64,6 +65,7 @@ interface FrozenExperimentDefinition {
   managerId?: string;
   trailCandidateId?: string;
   collectionSource?: "decision";
+  expectedControl: { managerProfileId: string; quantity: number };
 }
 
 /**
@@ -81,6 +83,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
       control: "current all-out +20% / -30% stop",
       challenger: "shadow all-out +13% / -30% stop",
       trailCandidateId: "TP-13",
+      expectedControl: { managerProfileId: "QQQ-THRUST-ALL-OUT-20", quantity: 2 },
     }),
     "vb-macd-state": Object.freeze({
       experimentId: "vb-macd-state:tp18-vs-tp50:2026-08-20:v1",
@@ -90,6 +93,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
       control: "current all-out +18% / -30% stop",
       challenger: "LOCK50/30 displaced all-out +50% / -30% stop",
       managerId: "LOCK50/30",
+      expectedControl: { managerProfileId: "VB-MACD-ALL-OUT-18", quantity: 4 },
     }),
     "momo-shape-2": Object.freeze({
       experimentId: "momo-shape-2:tp27-vs-bank20-run50:2026-08-20:v1",
@@ -99,6 +103,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
       control: "current all-out +27% / -40% stop",
       challenger: "BANK20/RUN50 bank half +20% / runner +50% or breakeven",
       managerId: "BANK20/RUN50",
+      expectedControl: { managerProfileId: "MOMO2-ALL-OUT-27", quantity: 6 },
     }),
     "orb-ustop-ctl": Object.freeze({
       experimentId: "orb-ustop-ctl:raw-vs-qualified-entry:2026-08-18:v1",
@@ -108,6 +113,7 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
       control: "raw ORB signals retained in shadow",
       challenger: "current after-10:30 ET, non-CPI/OPEX paper entry gate",
       collectionSource: "decision",
+      expectedControl: { managerProfileId: "ORB54-B30-A13", quantity: 4 },
     }),
     "vb-level-break": Object.freeze({
       experimentId: "vb-level-break:first-vs-confirmed-entry:2026-08-18:v1",
@@ -117,11 +123,12 @@ const FROZEN_CHANNEL_EXPERIMENTS: Readonly<Record<string, FrozenExperimentDefini
       control: "current first eligible entry",
       challenger: "shadow skip-first / next-confirmed entry",
       collectionSource: "decision",
+      expectedControl: { managerProfileId: "VB-LEVEL-ALL-OUT-25", quantity: 2 },
     }),
   });
 
-function variableFor(brief: ChannelDecisionBrief): ChannelExperimentVariable | null {
-  const frozen = FROZEN_CHANNEL_EXPERIMENTS[brief.channel];
+function variableFor(brief: ChannelDecisionBrief,
+  frozen: FrozenExperimentDefinition | null): ChannelExperimentVariable | null {
   if (frozen) return { axis: frozen.axis, name: frozen.name,
     control: frozen.control, challenger: frozen.challenger };
   const axis = brief.recommendation.axis;
@@ -149,6 +156,18 @@ function variableFor(brief: ChannelDecisionBrief): ChannelExperimentVariable | n
     challenger: "reversible collection pause" };
 }
 
+function applicableFrozenExperiment(brief: ChannelDecisionBrief,
+  activeChannelSpecs: readonly ChannelSpecVersion[]): FrozenExperimentDefinition | null {
+  const frozen = FROZEN_CHANNEL_EXPERIMENTS[brief.channel] ?? null;
+  if (!frozen || activeChannelSpecs.length === 0) return frozen;
+  const active = activeChannelSpecs.find((row) => row.slug === brief.channel
+    && row.status === "active");
+  if (!active) return null;
+  return active.managerProfileId === frozen.expectedControl.managerProfileId
+      && active.quantity === frozen.expectedControl.quantity
+    ? frozen : null;
+}
+
 function stageFor(brief: ChannelDecisionBrief, variable: ChannelExperimentVariable | null): ChannelExperimentStage {
   if (!variable) return "control_only";
   const enough = brief.evidence.decisionSessions >= 5 && brief.evidence.decisionOpportunities >= 10;
@@ -161,8 +180,9 @@ function stageFor(brief: ChannelDecisionBrief, variable: ChannelExperimentVariab
 }
 
 function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOpportunity[],
-  managerPaths: readonly AtlasManagerPath[]): ChannelExperimentPlan {
-  const frozen = FROZEN_CHANNEL_EXPERIMENTS[brief.channel] ?? null;
+  managerPaths: readonly AtlasManagerPath[],
+  activeChannelSpecs: readonly ChannelSpecVersion[]): ChannelExperimentPlan {
+  const frozen = applicableFrozenExperiment(brief, activeChannelSpecs);
   const observed = observedRows.filter((row) => row.boundedRetuneStamp);
   const clean = observed.filter((row) => row.boundedRetuneStamp?.baselineMatches === true);
   const stamps = observed.map((row) => row.boundedRetuneStamp!).filter(Boolean);
@@ -176,7 +196,8 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
   // A frozen operator-selected experiment is authoritative for its own cohort.
   // Legacy bounded-retune stamps can remain on historical opportunities, but
   // they must never rename or contaminate a later one-variable experiment.
-  const variable = frozen ? variableFor(brief) : observedVariable ?? variableFor(brief);
+  const variable = frozen ? variableFor(brief, frozen)
+    : observedVariable ?? variableFor(brief, null);
   const frozenTrail = frozen?.trailCandidateId
     ? brief.trail?.compared.find((row) => row.candidateId === frozen.trailCandidateId) ?? null
     : null;
@@ -255,11 +276,12 @@ function buildPlan(brief: ChannelDecisionBrief, observedRows: readonly AtlasOppo
 
 export function buildChannelExperimentPacket(bundle: ChannelDecisionBriefBundle,
   opportunities: readonly AtlasOpportunity[] = [],
-  managerPaths: readonly AtlasManagerPath[] = []): ChannelExperimentPacket {
+  managerPaths: readonly AtlasManagerPath[] = [],
+  activeChannelSpecs: readonly ChannelSpecVersion[] = []): ChannelExperimentPacket {
   const plans = Object.fromEntries(Object.values(bundle.channels).sort((left, right) => left.channel.localeCompare(right.channel))
     .map((brief) => [brief.channel, buildPlan(brief,
       opportunities.filter((row) => row.channel === brief.channel),
-      managerPaths.filter((row) => row.channel === brief.channel))]));
+      managerPaths.filter((row) => row.channel === brief.channel), activeChannelSpecs)]));
   const stages: ChannelExperimentStage[] = ["control_only", "draft", "preregistered", "collecting", "ready_to_score"];
   const summary = Object.fromEntries(stages.map((stage) => [stage,
     Object.values(plans).filter((plan) => plan.stage === stage).length])) as Record<ChannelExperimentStage, number>;
