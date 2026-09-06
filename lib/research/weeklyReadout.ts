@@ -190,9 +190,11 @@ export function renderWeeklyReadout(readout: WeeklyReadout): string {
   const lines = [
     `# Weekly evidence · ${readout.fromSession} through ${readout.throughSession}`,
     "",
-    "Read-only decision evidence. Executed results use logical trades; virtual results are kept separate.",
+    "Read-only decision evidence. Counts use logical trades; P&L is recorded position-ledger attribution, not independently broker-reconciled P&L. Virtual results are kept separate.",
     "",
-    "## Latest executed evidence this week",
+    `Full window across original configuration eras: ${readout.executed.reduce((sum, row) => sum + row.logicalTrades, 0)} logical trades; recorded realized attribution ${usd(readout.executed.reduce((sum, row) => sum + row.totalResultUsd, 0))}. This accounting total is not a current-configuration performance estimate.`,
+    "",
+    "## Latest configuration subset for each channel",
     "",
     "| Channel | Era | Trades | Sessions | Positive | Typical | Total | Routed | Atlas |",
     "|---|---|---:|---:|---:|---:|---:|---:|---|",
