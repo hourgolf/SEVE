@@ -268,6 +268,8 @@ export async function backfillBars(symbol: string, lookbackDays: number): Promis
 export interface ChainQuote {
   occ: string; strike: number; optType: OptType; expiration: string;
   bid: number; ask: number; mid: number; last: number | null; delta: number | null;
+  // Observation-only provider fields; never inputs to quote admission.
+  providerQuoteAt?: string | null; bidSize?: number | null; askSize?: number | null; feed?: string | null;
 }
 const OCC_RE = /^([A-Z]+)(\d{6})([CP])(\d{8})$/;
 
@@ -293,6 +295,10 @@ export async function snapshotChain(symbol: string, spot: number, fromDate: stri
       optType: cp === "C" ? "call" : "put",
       expiration: `20${yymmdd.slice(0, 2)}-${yymmdd.slice(2, 4)}-${yymmdd.slice(4, 6)}`,
       bid, ask,
+      providerQuoteAt: typeof s.latestQuote?.t === "string" && Number.isFinite(Date.parse(s.latestQuote.t)) ? s.latestQuote.t : null,
+      bidSize: Number.isInteger(s.latestQuote?.bs) && s.latestQuote.bs >= 0 ? s.latestQuote.bs : null,
+      askSize: Number.isInteger(s.latestQuote?.as) && s.latestQuote.as >= 0 ? s.latestQuote.as : null,
+      feed: config.optFeed,
       mid: ask > 0 && bid > 0 ? (ask + bid) / 2 : ask || bid,
       last: s.latestTrade?.p != null ? Number(s.latestTrade.p) : null,
       delta: s.greeks?.delta != null ? Number(s.greeks.delta) : null,

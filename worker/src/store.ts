@@ -785,6 +785,9 @@ export async function insertObservedPositionPlan(row: PositionPlanDraft): Promis
 }
 
 let executionObservationTableAvailable: boolean | null = null;
+export function executionObservationWriteAvailability(): "available" | "noServiceRole" | "missingTable" {
+  return !config.hasServiceRole ? "noServiceRole" : executionObservationTableAvailable === false ? "missingTable" : "available";
+}
 
 /** Phase 1D append-only market/decision/order/fill evidence. Deterministic ids
  *  make retries idempotent. No execution path awaits this function. */

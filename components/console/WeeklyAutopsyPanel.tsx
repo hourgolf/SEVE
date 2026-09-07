@@ -63,9 +63,9 @@ export function WeeklyAutopsyBody({
       )}
 
       <div className="au-fund">
-        <span title={logicalEvidence ? "Immutable-route daily logical trades; tranche exit-efficiency is separately labeled." : "This stored weekly report predates logical-trade evidence; do not compare its count directly with current reports."}>{md(d.weekStart)}–{md(d.weekEnd)} · {d.days.length}d · {d.fund.trades} {observationLabel}</span>
-        <span className={d.fund.realized < 0 ? "neg" : "pos"}>{signedUsd(d.fund.realized)}</span>
-        {d.fund.navDelta != null && <span className={d.fund.navDelta < 0 ? "neg" : "pos"}>NAV {signedUsd(d.fund.navDelta)}</span>}
+        <span title={logicalEvidence ? "Logical trades with recorded position-ledger P&L attribution. Immutable account routing does not independently verify fill prices, fees or broker NAV. Tranche exit-efficiency is separately labeled." : "This stored weekly report predates logical-trade evidence; do not compare its count directly with current reports."}>{md(d.weekStart)}–{md(d.weekEnd)} · {d.days.length}d · {d.fund.trades} {observationLabel}</span>
+        <span className={d.fund.realized < 0 ? "neg" : "pos"}>{signedUsd(d.fund.realized)} recorded attribution</span>
+        {d.fund.navDelta != null && <span className={d.fund.navDelta < 0 ? "neg" : "pos"} title="Stored NAV change using this report's original snapshot endpoints; it is not independently broker reconciled and may not cover the full displayed week.">recorded NAV Δ {signedUsd(d.fund.navDelta)}</span>}
         {d.fund.maxDrawdown != null && <span className="neg" title="intraday peak-to-trough drawdown">maxDD −${Math.abs(d.fund.maxDrawdown).toFixed(0)}</span>}
         <span>positive {pct(d.fund.winRate)}</span>
       </div>
@@ -76,7 +76,10 @@ export function WeeklyAutopsyBody({
         </div>
       )}
 
-      {n?.weekSummary && <p className={`au-market${expanded ? "" : " au-market--clamp"}`}>{n.weekSummary}</p>}
+      {n?.weekSummary && <>
+        <div className="wk-ee-note">Stored narrative · current posture and broker reconciliation are unverified in this report.</div>
+        <p className={`au-market${expanded ? "" : " au-market--clamp"}`}>{n.weekSummary}</p>
+      </>}
 
       {/* regime ledger (detail — expanded only) */}
       {expanded && (
@@ -91,8 +94,8 @@ export function WeeklyAutopsyBody({
 
       {/* HEADLINE — exit efficiency / left on the table */}
       <div className="wk-ee">
-        <div className="au-sub">Exit efficiency — left on the table</div>
-        <div className="wk-ee-top">best-case upside unrealized this week: <b className="neg">{signedUsd(-ee.totalUpsideLeft)}</b></div>
+        <div className="au-sub">Observed price-peak diagnostic</div>
+        <div className="wk-ee-top">sampled peak upside before executable exit tests: <b className="neg">{signedUsd(-ee.totalUpsideLeft)}</b></div>
         {expanded && ee.redThatRanGreen.slice(0, 6).map((rr) => (
           <div className="wk-runner" key={`${rr.slug}-${rr.occ}`}>
             <span className="wk-arrow">⤴</span>
@@ -101,7 +104,7 @@ export function WeeklyAutopsyBody({
             <span className="wk-runner-txt">exited <span className="neg">{signedUsd(rr.actual)}</span> · ran to <span className="pos">{signedUsd(rr.couldHave)}</span></span>
           </div>
         ))}
-        {!ee.redThatRanGreen.length && <div className="wk-ee-note">no red trades left a big green runner — exits roughly tracked the moves</div>}
+        {!ee.redThatRanGreen.length && <div className="wk-ee-note">no qualifying red-to-green peak observation; this does not establish exit quality</div>}
       </div>
 
       {/* per-channel roll-up (expanded); collapsed shows top movers only */}
@@ -117,7 +120,7 @@ export function WeeklyAutopsyBody({
                 <span className="au-name">{c.name}</span>
                 {benched.has(c.slug) && <span className="au-chip au-benched" title="benched (draft) — no entries; this verdict predates the cull">86&apos;d</span>}
                 {cn?.verdict && <span className={`au-chip ${VERDICT_CLASS[cn.verdict] ?? "au-sev-low"}`}>{cn.verdict}</span>}
-                <span className="wk-cap" title="exit capture — share of the available move realized">cap {pct(cap)}</span>
+                <span className="wk-cap" title="recorded P&L divided by stored peak gain; not an executable capture estimate">cap {pct(cap)}</span>
                 <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(m.realizedPnl)}</span>
               </div>
               <div className="au-metrics">
