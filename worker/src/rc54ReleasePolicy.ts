@@ -1,3 +1,4 @@
+import { releaseTrace } from "./decisionTrace.js";
 // RC5.4 paper release candidate. Pure and default-off: no broker, database,
 // timer, environment, or execution access lives in this module.
 
@@ -1041,6 +1042,8 @@ export function prepareRc54ReleaseAdmissions(input: {
       qty: root.quantity,
       detail: {
         ...(next.detail ?? {}),
+        decisionTrace: releaseTrace(decision, { qty: root.quantity, premiumCap: root.premiumCap,
+          debitCapUsd: root.aggregateDebitCap, observedAtMs: input.observedAtMs }),
         rc54Quantity: root.quantity,
         rc54AggregateDebit: debit,
       },

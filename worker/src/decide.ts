@@ -11,6 +11,7 @@
 //  Live order placement is Phase B (see README), deliberately not wired here.
 // ============================================================================
 
+import { startEntryTrace, quoteObservation } from "./decisionTrace.js";
 import { computeFeatures } from "../../engine/engine";
 import { macdAt } from "../../engine/macd";
 import { getStrategy } from "../../engine/registry";
@@ -530,9 +531,15 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     }
 
     let ask = 0, bid = 0, roundTrip = 0, expectedMove = 0, qty = 0;
+    let quoteAtMs: number | null = null;
+    let selectedQuote: Record<string, unknown> | null = null;
+    let sizingVisited = false;
+    let effectiveSizingStopFraction = 0;
     let delta: number = atmDeltaProxy(dir, f.close, strike); // moneyness proxy (no BS) — replaces the flat 0.55 placeholder
     if (!blocked) {
       const q = ctx.chain.byOcc(occ);
+      quoteAtMs = Date.now();
+      selectedQuote = quoteObservation(ctx.chain, occ, quoteAtMs);
       ask = q?.ask ?? 0;
       bid = q?.bid ?? 0;
       if (q?.delta != null && q.delta !== 0) delta = Math.abs(q.delta); // real chain delta when present (≈1DTE; feed nulls 0DTE)
@@ -564,6 +571,8 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       // trades, audit H1a). Size such a channel off the policy default risk fraction instead.
       const stopPctForSizing = ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT;
       const stopFrac = (stopPctForSizing > 0 ? stopPctForSizing : policy.PREMIUM_STOP_PCT) / 100;
+      sizingVisited = true;
+      effectiveSizingStopFraction = stopFrac;
       const riskPerContract = stopFrac * ask * 100;
       qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor((ch.capital_pct * boost) / riskPerContract), ch.max_contracts * boost)) : 0;
       if (qty === 0) blocked = "insufficient_capital";
@@ -587,6 +596,10 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
         // forensics entry context (per-trade dataset, matches the historical backfill) — read-only, not gate inputs:
         vwap: +f.vwap.toFixed(3), vwapDist: +(f.close - f.vwap).toFixed(3), macd: fm?.macd ?? null, macdSignal: fm?.signal ?? null, macdHist: fm?.hist ?? null, mom: +f.mom.toFixed(3), orHi: f.openRangeHi != null ? +f.openRangeHi.toFixed(3) : null, orLo: f.openRangeLo != null ? +f.openRangeLo.toFixed(3) : null,
         // shadow awareness levers (log-only) — raw metrics + which tripped at the brief's thresholds:
+        decisionTrace: startEntryTrace({ chain: ctx.chain, occ, sourceBarAtMs: ctx.sessionBars[ctx.sessionBars.length - 1].ts,
+          quoteQueried: quoteAtMs != null, quoteAtMs, quote: selectedQuote, sizingVisited, qty,
+          sizingInputUsd: ch.capital_pct * boost, stopFraction: effectiveSizingStopFraction,
+          nativeStopPct: ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT, blocked }),
         dirVwapAtr: +dirVwapAtr.toFixed(2), histRel: +histRel.toFixed(3), whipZone, orDepthAtr: orDepthAtr != null ? +orDepthAtr.toFixed(2) : null, aware },
     };
   }

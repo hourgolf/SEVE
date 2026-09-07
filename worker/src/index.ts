@@ -1,3 +1,4 @@
+import { observedCandidate, finalDecisionEvidence } from "./decisionTrace.js";
 // ============================================================================
 //  SEVE streaming worker — entrypoint (Phase A · SHADOW).
 //
@@ -21,7 +22,7 @@ import {
   WORKER_RUNTIME_VERSION,
   WORKER_VERSION,
 } from "./config.js";
-import { BOOT_ID, INSTANCE_ID } from "./runId.js";
+import { BOOT_ID, INSTANCE_ID, GIT_SHA } from "./runId.js";
 import { info, warn, error, shadow } from "./log.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
@@ -531,7 +532,7 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
       evidenceBlocked = "position_row_missing";
     captureDecisionObservation({
       channel: ch,
-      decision: evidenceBlocked === (d.blocked ?? null) ? d : { ...d, blocked: evidenceBlocked },
+      decision: finalDecisionEvidence(evidenceBlocked === (d.blocked ?? null) ? d : { ...d, blocked: evidenceBlocked }, evidenceBlocked),
       accountId: g.account.id,
       decisionAtMs: lastSession.ts,
       observedAtMs: Date.now(),
@@ -557,7 +558,7 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
       }
       else if (d.action === "add" && row && !d.blocked && barFresh) await executeAdd(d, ch, row, exec);
       else if (d.action === "enter" && barFresh) {
-        await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+        await executeEntry(finalDecisionEvidence(d, d.blocked ?? null), ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
         if (d.occ && !d.blocked) {
           const k = `${ch.underlying.toUpperCase()}:${d.occ.slice(-9, -8) === "C" ? "call" : "put"}`;
           deskStack.set(k, (deskStack.get(k) ?? 0) + 1);
@@ -1132,7 +1133,7 @@ async function cycle(trigger: string): Promise<void> {
         };
         const evaluatedDecisions: ShadowDecision[] = [];
         for (const ch of symChannels) {
-          try { evaluatedDecisions.push(await decideChannel(ch, ctx)); }
+          try { evaluatedDecisions.push(observedCandidate(await decideChannel(ch, ctx), Date.now(), { bootId: BOOT_ID, gitSha: GIT_SHA })); }
           catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
         }
         const familyObservedAtMs = Date.now();
@@ -1243,7 +1244,7 @@ async function cycle(trigger: string): Promise<void> {
               evidenceBlocked = "position_row_missing";
             captureDecisionObservation({
               channel: ch,
-              decision: evidenceBlocked === (d.blocked ?? null) ? d : { ...d, blocked: evidenceBlocked },
+              decision: finalDecisionEvidence(evidenceBlocked === (d.blocked ?? null) ? d : { ...d, blocked: evidenceBlocked }, evidenceBlocked),
               accountId: g.account.id,
               decisionAtMs: lastSession.ts,
               observedAtMs: Date.now(),
@@ -1278,7 +1279,7 @@ async function cycle(trigger: string): Promise<void> {
               }
               else if (d.action === "add" && row && !d.blocked && barFresh) await executeAdd(d, ch, row, exec); // PYRAMID (pyramid_adds>0)
               else if (d.action === "enter" && barFresh) {
-                await executeEntry(d, ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
+                await executeEntry(finalDecisionEvidence(d, d.blocked ?? null), ch, Number(d.detail?.spotClose ?? lastSession.close), exec);
                 // C1 within-cycle increment: count this entry toward the desk-wide stack so a
                 // later same-cycle channel sees it. Conservative over-count if the order 0-filled
                 // (rebuilt from DB truth next cycle); only LIVE executed entries count — shadow

@@ -31,6 +31,10 @@ assert.equal(result.evidence.runnerRowsCollapsed, 2);
 assert.equal(result.virtual[0].configurationEra, "prospective:unstamped");
 assert.equal(result.gates.impliedMoveSessions, null, "unavailable evidence must not render as zero");
 assert.match(renderWeeklyReadout(result), /Decision-relevant historical virtual evidence/);
+assert.match(renderWeeklyReadout(result), /Full window across original configuration eras: 2 logical trades; recorded realized attribution \+\$80/,
+  "full-window accounting must include both original eras, collapse runners, and exclude virtual profit");
+assert.match(renderWeeklyReadout(result), /Latest configuration subset for each channel/,
+  "a latest-era table must not imply that it represents the entire week");
 const script = readFileSync(new URL("../../scripts/weekly-readout.ts", import.meta.url), "utf8");
 assert.doesNotMatch(script, /serverSupabase|createServerSupabaseClient|\.from\(|insert\(/);
 assert.match(script, /productionWrites: 0/);

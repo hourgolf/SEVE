@@ -49,13 +49,32 @@ export class BarStore {
 export class ChainStore {
   private q = new Map<string, ChainQuote>();
   private updatedMs = 0;
+  private refreshId = 0;
+  private latestCount = 0;
+  private provenance = new Map<string, { seenAtMs: number; refreshId: number }>();
 
-  seed(qs: ChainQuote[]): void { this.q.clear(); this.update(qs); }
+  seed(qs: ChainQuote[]): void { this.q.clear(); this.provenance.clear(); this.update(qs); }
   update(qs: ChainQuote[]): void {
     for (const x of qs) this.q.set(x.occ, x);
     this.updatedMs = Date.now();
+    this.refreshId++;
+    this.latestCount = qs.length;
+    for (const x of qs) this.provenance.set(x.occ, { seenAtMs: this.updatedMs, refreshId: this.refreshId });
   }
   byOcc(occ: string): ChainQuote | undefined { return this.q.get(occ); }
+  /** Copies a per-contract observation without refreshing or filtering the chain. */
+  quoteObservation(occ: string, atMs: number): Record<string, unknown> {
+    const q = this.q.get(occ), seen = this.provenance.get(occ);
+    const providerAt = q?.providerQuoteAt ?? null;
+    const providerMs = providerAt == null ? NaN : Date.parse(providerAt);
+    return { occ, lookupStatus: q ? "found" : "missing", provider: "alpaca_snapshot", feed: q?.feed ?? null,
+      providerQuoteAt: providerAt, providerAgeMs: Number.isFinite(providerMs) ? atMs - providerMs : null,
+      providerClockInFuture: Number.isFinite(providerMs) ? providerMs > atMs : null,
+      locallyObservedAtMs: seen?.seenAtMs ?? null, localAgeMs: seen ? atMs - seen.seenAtMs : null,
+      latestRefreshId: this.refreshId, latestRefreshCount: this.latestCount,
+      lastSeenRefreshId: seen?.refreshId ?? null, presentInLatestRefresh: seen ? seen.refreshId === this.refreshId : false,
+      bid: q?.bid ?? null, ask: q?.ask ?? null, bidSize: q?.bidSize ?? null, askSize: q?.askSize ?? null };
+  }
   get size(): number { return this.q.size; }
   get ageMs(): number { return this.updatedMs ? Date.now() - this.updatedMs : Infinity; }
 

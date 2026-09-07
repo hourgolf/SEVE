@@ -1,3 +1,6 @@
+import { ObservationQueue } from "./observationQueue.js";
+import { traceHealth, TRACE_MAX_BYTES } from "./decisionTrace.js";
+import { executionObservationWriteAvailability } from "./store.js";
 // Phase 1D runtime adapter. Observation writes are serialized, best-effort, and
 // never awaited by the order path. Failure can lose evidence only; it cannot
 // block, resize, delay, duplicate, or create an order.
@@ -19,42 +22,73 @@ import {
   type ManagerShadowObservationInput,
 } from "./managerShadowObservationModel.js";
 
-const seen = new Set<string>();
-const pending = new Set<string>();
-let seenDate = "";
-let queue: Promise<void> = Promise.resolve();
-
+const queue = new ObservationQueue<ExecutionObservationDraft>(async (row) => {
+  const available = executionObservationWriteAvailability();
+  if (available !== "available") return available;
+  const written = await insertExecutionObservation(row);
+  const after = executionObservationWriteAvailability();
+  return written ? "written" : after === "available" ? "writeFailed" : after;
+});
+let lastLogAt = 0;
+function healthLog(): void {
+  const now = Date.now();
+  if (now - lastLogAt < 60_000) return;
+  lastLogAt = now;
+  warn(`execution-observation health ${JSON.stringify({ ...queue.counters, ...traceHealth })}`);
+}
+const healthTimer = setInterval(() => { try { healthLog(); } catch { /* telemetry only */ } }, 60_000);
+healthTimer.unref();
 function enqueue(row: ExecutionObservationDraft | null): string | null {
   if (!row) return null;
-  const day = row.event_at.slice(0, 10);
-  if (day !== seenDate) { seenDate = day; seen.clear(); pending.clear(); }
-  if (seen.has(row.id) || pending.has(row.id)) return row.trace_id;
-  pending.add(row.id);
-  queue = queue.then(async () => {
-    if (await insertExecutionObservation(row)) seen.add(row.id);
-  }).catch((e) => warn(`execution-observation: persistence failed — ${(e as Error).message}`))
-    .finally(() => pending.delete(row.id));
-  return row.trace_id;
+  const detail = row.payload.decisionDetail as Record<string, unknown> | undefined;
+  const trace = detail?.decisionTrace as { clocks?: Record<string, unknown> } | undefined;
+  if (trace) {
+    if (Buffer.byteLength(JSON.stringify(trace), "utf8") > TRACE_MAX_BYTES) {
+      traceHealth.oversized++;
+      row = { ...row, payload: { ...row.payload, decisionDetail: { ...detail, decisionTrace: undefined, decisionTraceOmitted: "oversized" } } };
+    } else {
+      row = { ...row, payload: { ...row.payload, decisionDetail: { ...detail, decisionTrace: {
+        ...trace, clocks: { ...trace.clocks, persistenceEnqueuedAtMs: Date.now() },
+      } } } };
+    }
+  }
+  return queue.enqueue(row) ? row.trace_id : null;
 }
 
 export function captureDecisionObservation(input: DecisionObservationInput): string | null {
-  try { return enqueue(buildDecisionObservation(input)); }
-  catch (e) { warn(`execution-observation: decision draft rejected — ${(e as Error).message}`); return null; }
+  try {
+    const row = buildDecisionObservation(input);
+    if (!row && input.decision.action !== "hold" && input.decision.action !== "skip") queue.counters.validationFailed++;
+    return enqueue(row);
+  }
+  catch (e) { queue.counters.validationFailed++; warn(`execution-observation: decision draft rejected — ${(e as Error).message}`); return null; }
 }
 
 export function captureBrokerObservation(input: BrokerObservationInput): string | null {
-  try { return enqueue(buildBrokerObservation(input)); }
-  catch (e) { warn(`execution-observation: broker draft rejected — ${(e as Error).message}`); return null; }
+  try {
+    const row = buildBrokerObservation(input);
+    if (!row) queue.counters.validationFailed++;
+    return enqueue(row);
+  }
+  catch (e) { queue.counters.validationFailed++; warn(`execution-observation: broker draft rejected — ${(e as Error).message}`); return null; }
 }
 
 export function capturePositionRouteObservation(input: PositionRouteObservationInput): string | null {
-  try { return enqueue(buildPositionRouteObservation(input)); }
-  catch (e) { warn(`execution-observation: position route draft rejected — ${(e as Error).message}`); return null; }
+  try {
+    const row = buildPositionRouteObservation(input);
+    if (!row) queue.counters.validationFailed++;
+    return enqueue(row);
+  }
+  catch (e) { queue.counters.validationFailed++; warn(`execution-observation: position route draft rejected — ${(e as Error).message}`); return null; }
 }
 
 export function captureManagerShadowObservation(input: ManagerShadowObservationInput): string | null {
-  try { return enqueue(buildManagerShadowObservation(input)); }
-  catch (e) { warn(`execution-observation: manager shadow draft rejected — ${(e as Error).message}`); return null; }
+  try {
+    const row = buildManagerShadowObservation(input);
+    if (!row) queue.counters.validationFailed++;
+    return enqueue(row);
+  }
+  catch (e) { queue.counters.validationFailed++; warn(`execution-observation: manager shadow draft rejected — ${(e as Error).message}`); return null; }
 }
 
 export type { ChannelConfig, ShadowDecision };

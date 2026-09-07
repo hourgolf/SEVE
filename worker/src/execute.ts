@@ -1,3 +1,4 @@
+import { brokerTrace, quoteObservation } from "./decisionTrace.js";
 // ============================================================================
 //  Phase B execution core — the streaming worker as a REAL order-placer for
 //  channels marked strategists.executor='stream'.
@@ -202,16 +203,19 @@ async function placeFill(
   slug: string, occ: string, side: "buy" | "sell", qty: number, coidBase: string, reason: string, ctx: ExecCtx,
   positionId: string | null = null,
   quality: ExitQualityContext | null = null,
+  entryEvidence?: ShadowDecision,
 ): Promise<{ id: string; fill: number; filledQty: number; status: string; crossedQty: number }> {
   const q = ctx.chain.byOcc(occ);
   const direction = occ.slice(-9, -8) === "P" ? "put" : "call";
   const observedAtMs = Date.now();
   const snapshotAgeAtTriggerMs = ctx.chain.ageMs;
+  const submissionQuote = entryEvidence ? quoteObservation(ctx.chain, occ, observedAtMs) : undefined;
   const observationBase = {
     channel: { id: strategistId, slug, underlying },
     decision: {
       slug, status: "armed", action, reason, direction, occ, qty, blocked: null,
-      detail: { bid: q?.bid ?? null, ask: q?.ask ?? null, mid: q?.mid ?? null, delta: q?.delta ?? null },
+      detail: { ...(entryEvidence?.detail ?? {}), bid: q?.bid ?? null, ask: q?.ask ?? null, mid: q?.mid ?? null, delta: q?.delta ?? null,
+        ...(entryEvidence ? { decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, observedAtMs, "ready", null, undefined, submissionQuote) } : {}) },
     } as ShadowDecision,
     accountId: ctx.accountId,
     decisionAtMs: ctx.decisionAtMs,
@@ -226,6 +230,11 @@ async function placeFill(
   // Deterministic ids make this a harmless no-op when that loop already wrote it.
   captureDecisionObservation(observationBase);
   if (!orderSubmissionGuard.claim(coidBase)) {
+    if (entryEvidence) captureBrokerObservation({ ...observationBase,
+      decision: { ...observationBase.decision, detail: { ...observationBase.decision.detail,
+        decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, Date.now(), "not_submitted", null, undefined, submissionQuote) } },
+      clientOrderId: coidBase, brokerStatus: "submission_deduped", filledQty: 0, fillPrice: 0,
+      executionGuardVersion: ORDER_SUBMISSION_GUARD_VERSION });
     await store.journal("WARN",
       `${slug}: suppressed duplicate broker submission ${coidBase} (${action}/${reason})`,
       { kind: "order-submission-deduped", slug, occ, action, reason, client_order_id: coidBase,
@@ -255,6 +264,8 @@ async function placeFill(
       clientOrderId: coidBase,
       brokerOrderId: result.id,
       brokerStatus: result.status,
+      ...(entryEvidence ? { decision: { ...observationBase.decision, detail: { ...observationBase.decision.detail,
+        decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, Date.now(), "result", submittedAtMs, result, submissionQuote) } } } : {}),
       filledQty: result.filledQty,
       fillPrice: result.fill,
       positionId,
@@ -309,6 +320,8 @@ async function placeFill(
       clientOrderId: coidBase,
       brokerOrderId: null,
       brokerStatus: "request_error",
+      ...(entryEvidence ? { decision: { ...observationBase.decision, detail: { ...observationBase.decision.detail,
+        decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, Date.now(), "error", submittedAtMs, undefined, submissionQuote) } } } : {}),
       filledQty: 0,
       fillPrice: 0,
       positionId,
@@ -925,7 +938,7 @@ export async function executeEntry(
   if (blocked || qty <= 0) { if (blocked !== d.blocked) info(`entry ${d.slug} blocked: ${blocked}`); return; }
 
   try {
-    const o = await placeFill(ch.id, ch.underlying, "enter", d.slug, occ, "buy", qty, `${d.slug}-${occ}-${ctx.etMin}`, d.reason, ctx);
+    const o = await placeFill(ch.id, ch.underlying, "enter", d.slug, occ, "buy", qty, `${d.slug}-${occ}-${ctx.etMin}`, d.reason, ctx, null, null, d);
     const ask = (d.detail?.ask as number) ?? 0;
     const entryPx = o.fill > 0 ? o.fill : ask;
     // 09c fix 1: row mirrors the REAL fill — and ONLY the real fill. 1b #3 (audit
