@@ -5,6 +5,7 @@ import type { IndependentShadowVerification } from "./evidenceReconciliation";
 import { atlasEvidenceEligibility, evidenceJsonHash } from "./atlasEvidenceEligibility";
 import { etDateOf } from "../profitability/profitabilityLedger";
 import { REVIEWED_ATLAS_SCOPE_EXCLUSIONS } from "./reviewedAtlasScopeExclusions";
+import { assertReviewedVirtualTradeRepairs } from "./reviewedVirtualTradeRepairGuard";
 
 const stable=(v:unknown):string=>v===null||typeof v!=="object"?JSON.stringify(v):Array.isArray(v)
   ?`[${v.map(stable).join(",")}]`:`{${Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>JSON.stringify(k)+":"+stable(x)).join(",")}}`;
@@ -24,6 +25,7 @@ export function prepareAtlasReportScope(input:{snapshot:DecisionAtlasSourceSnaps
   const rows=[...snapshot.virtualTrades,...(prior?.excludedRows??[])].sort((a,b)=>
     Date.parse(a.signal_at)-Date.parse(b.signal_at)||a.signal_id.localeCompare(b.signal_id));
   if(new Set(rows.map(r=>r.signal_id)).size!==rows.length)throw new Error("Duplicate raw/report-exclusion signal identity");
+  assertReviewedVirtualTradeRepairs({...snapshot,virtualTrades:rows});
   const historical=input.historical??REVIEWED_ATLAS_SCOPE_EXCLUSIONS;
   const history=new Map(historical.map(r=>[r.signalId,r]));
   if(history.size!==historical.length)throw new Error("Duplicate reviewed historical scope identity");
