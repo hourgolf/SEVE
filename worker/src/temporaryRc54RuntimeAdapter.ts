@@ -1,3 +1,4 @@
+import { isFixedContractAdmissionPolicy } from "../../lib/channels/fixedContractAdmission.js";
 import { MANAGER_SHADOW_BOOK_VERSION } from "./managerShadowBookModel.js";
 import {
   rc54ManagerProfileFromRow,
@@ -129,6 +130,8 @@ export function validateReceiptBoundRc54Topology(
         || root.riskLimits.maxRiskUsd > root.riskLimits.maxDebitUsd) {
       errors.push(`temporary_rc54_adapter:${root.slug}:risk_envelope`);
     }
+    if (root.fixedContractAdmission !== undefined && (!isFixedContractAdmissionPolicy(root.fixedContractAdmission)
+        || root.slug !== "vb-macd-state" || root.quantity !== 4)) errors.push(`temporary_rc54_adapter:${root.slug}:fixed_contract_policy`);
     if (root.reentryPolicy === "disabled" && root.maxEntriesPerSession !== 1) {
       errors.push(`temporary_rc54_adapter:${root.slug}:reentry`);
     } else if (root.reentryPolicy === "bounded"
@@ -234,6 +237,7 @@ export function buildReceiptBoundRc54StartupReceipt(input: {
       configurationEpochId: root.configuration.configurationEpochId,
       quantity: root.quantity,
       maxEntriesPerSession: root.maxEntriesPerSession,
+      ...(root.fixedContractAdmission ? { fixedContractAdmission: root.fixedContractAdmission } : {}),
     })),
     rootCount: input.runtime.roots.length,
     entryLimits: Object.fromEntries(
@@ -262,6 +266,7 @@ function admissionRootFromReceipt(
     familyId: root.familyId,
     underlying: root.underlying,
     maxEntriesPerSession: root.maxEntriesPerSession,
+    ...(root.fixedContractAdmission ? { fixedContractAdmission: root.fixedContractAdmission } : {}),
     quantity: root.quantity,
     premiumCap: root.premiumCap,
     aggregateDebitCap: root.aggregateDebitCap,

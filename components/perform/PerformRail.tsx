@@ -129,7 +129,7 @@ export function PositionsSection({
                 <span className="pfp-pklbl">best <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span>
               </div>
               {write.canWrite && <div className="pfp-actions">
-                {closeFlow.closingId === p.id ? <span className="pfp-closing">CLOSING…</span>
+                {(closeFlow.closingId === p.id || closeFlow.pendingPrompts.some(prompt => prompt.id === p.id)) ? <span className="pfp-closing">CLOSING…</span>
                   : closeFlow.confirmId === p.id ? <>
                     <button type="button" className="confirm" onClick={() => closeFlow.confirmClose(p)}>CONFIRM MARKET CLOSE</button>
                     <button type="button" onClick={closeFlow.cancelClose}>CANCEL</button>
@@ -139,6 +139,7 @@ export function PositionsSection({
           );
         })}
       </div>
+      {closeFlow.pendingPrompts.map(prompt => <div key={prompt.id} role="status">{prompt.label} · Exit requested. Waiting for verified completion.</div>)}
       {closeFlow.error && <div className="pfp-close-error" role="alert">POSITION ACTION FAILED · {closeFlow.error}</div>}
       {closeFlow.tagPrompt && <div className="pfp-close-reasons">
         <header><b>{closeFlow.tagPrompt.label} CLOSED</b><span>WHY DID YOU EXIT?</span></header>

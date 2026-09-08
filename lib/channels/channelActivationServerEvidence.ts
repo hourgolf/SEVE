@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createFixedEntryServiceClient } from "../../worker/src/fixedEntryServiceClient";
+import { readFixedCustodyBoundary } from "../../worker/src/fixedEntryCustodyBoundary";
 import {
   collectFreshSafeBoundary,
   type PaperAccountEvidenceRow,
@@ -193,6 +195,15 @@ export async function collectChannelActivationPreviewServerEvidence(input: {
     nowMs,
     fetchImpl: input.fetchImpl ?? fetch,
   });
+  const fixedCustody = await readFixedCustodyBoundary(createFixedEntryServiceClient(
+    (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL)!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  ));
+  if (!fixedCustody.allSettled) {
+    throw new ChannelActivationServerEvidenceError(
+      "fixed custody remains unresolved; configuration activation requires verified original-intent settlement",
+    );
+  }
   const protocolEvidenceRef = contentHash({
     kind: "channel-activation-protocol-simulation",
     activeManifestContentHash: input.active.manifest.contentHash,
@@ -361,7 +372,7 @@ export async function collectChannelActivationPreviewServerEvidence(input: {
     capacityCollisionImpact,
     captureObservations,
     safeBoundary: boundary.boundary,
-    safeBoundaryProof: boundary.proof,
+    safeBoundaryProof: { ...boundary.proof, fixedCustody } as unknown as JsonObject,
     worker,
   };
 }

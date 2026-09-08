@@ -34,6 +34,8 @@ import {
   renderDecisionAtlasProposalPacket,
 } from "../lib/research/decisionAtlasReport";
 import { createServerSupabaseClient } from "./serverSupabase";
+import { createFixedEntryServiceClient } from "../worker/src/fixedEntryServiceClient";
+import { readFixedManagerComparisonEvidence } from "../worker/src/fixedEntryManagerComparisonEvidence";
 import { etSessionCloseUtc } from "../lib/research/afterCloseResearch";
 
 const arg = (name: string): string | null => {
@@ -191,7 +193,7 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
       .select(["id", "position_id", "channel_slug", "manager_id", "manager_policy_version", "shadow_book_version",
         "configuration_epoch_id", "status", "evidence_state", "entry_at", "entry_price", "original_qty",
         "economic_mode", "peak_return_pct", "terminal_at", "terminal_return_pct", "terminal_pnl", "censored_at",
-        "censor_code"].join(","), options)
+        "censor_code", "account_id", "strategist_id", "admitted_at", "admission_source", "first_quote_at"].join(","), options)
       .gte("entry_at", evidenceWindow.start).lt("entry_at", evidenceWindow.end).order("entry_at").order("id")),
     timed("equity_snapshots", async () => {
       const result = await sb.from("equity_snapshots")
@@ -223,6 +225,9 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
   if (!control.compiled) throw new Error(`active control plane unavailable: ${control.error ?? control.state}`);
   return {
     snapshot: {
+      fixedManagerComparison: await timed("fixed_manager_comparison", () => readFixedManagerComparisonEvidence(
+        createFixedEntryServiceClient(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+          process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""))),
       ledger, strategists, positions, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
       vbCandidateReceipts, vbExactPathReceipts, vbExactManagerPathReceipts,
       activeChannelSpecs: control.compiled.channelSpecs,

@@ -10,7 +10,7 @@ import {
 import type { ChannelStatus, FundState, PmColor, StrategistConfig } from "@/lib/desk/types";
 import type { StrategySpec } from "@/lib/desk/strategySpec";
 
-export interface DeskWriteResult { ok: boolean; error?: string }
+export interface DeskWriteResult { ok: boolean; error?: string; pending?: boolean; intentId?: string; canTag?: boolean }
 
 const PROPOSAL_REQUIRED = legacyConfigurationWriteFact();
 
@@ -285,7 +285,7 @@ export function useDeskWrite() {
   // the Alpaca keys + service role). Sends the session token so the route can
   // verify the operator is signed in. Returns the booked realized P&L on success.
   const closePosition = useCallback(
-    async (id: string): Promise<{ ok: boolean; error?: string; realized?: number }> => {
+    async (id: string): Promise<DeskWriteResult & { realized?: number }> => {
       if (!session || !operator) return { ok: false, error: "operator authorization required" };
       try {
         const r = await fetch("/api/close-position", {
@@ -294,13 +294,30 @@ export function useDeskWrite() {
           body: JSON.stringify({ id }),
         });
         const j = await r.json().catch(() => ({}));
-        return r.ok && j.ok ? { ok: true, realized: j.realized } : { ok: false, error: j.error ?? `close failed (${r.status})` };
+        return r.ok && j.ok ? { ok: true, realized: j.realized,
+          pending: r.status === 202 || j.pending === true, intentId: j.intentId, canTag: j.canTag }
+          : { ok: false, error: j.error ?? `close failed (${r.status})` };
       } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : "close failed" };
       }
     },
     [session, operator]
   );
+
+  const closePositionStatus = useCallback(async (id: string): Promise<DeskWriteResult> => {
+    if (!session || !operator) return { ok: false, error: "operator authorization required" };
+    try {
+      const response = await fetch(`/api/close-position?id=${encodeURIComponent(id)}`, {
+        headers: { authorization: `Bearer ${session.access_token}` }, cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok || typeof result.pending !== "boolean"
+          || result.positionId !== id || (!result.pending && typeof result.settlementId !== "string")) {
+        return { ok: false, error: result.error ?? "Close completion is not yet verifiable." };
+      }
+      return { ok: true, pending: result.pending, intentId: result.intentId, canTag: result.canTag === true };
+    } catch { return { ok: false, error: "Close status is unavailable; the exit remains pending." }; }
+  }, [session, operator]);
 
   // Post-close tag (close-reason chips, 31_close_reason.sql): refine an operator
   // close to 'manual:<tag>'. The close already booked — tagging is optional context,
@@ -356,6 +373,7 @@ export function useDeskWrite() {
     setChannelExecutor,
     deleteChannel,
     closePosition,
+    closePositionStatus,
     tagClose,
     reorderChannels,
   };

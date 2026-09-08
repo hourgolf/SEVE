@@ -210,6 +210,18 @@ function fixture(overrides: Partial<ProfitabilityLedgerInput> = {}): Profitabili
 }
 
 const baseline = buildProfitabilityLedger(fixture());
+check("recovery protocol records never lend account routes or change ordinary totals", () => {
+  const protocol = route({ id: "fixed-protocol", account_id: "wrong-account",
+    reason: "fixed_entry_protocol:intent", payload: { fixed_entry_protocol: "fixed-entry-intent-v1" } });
+  const input = fixture();
+  assert.deepEqual(buildProfitabilityLedger({ ...input, executionRoutes: [...input.executionRoutes, protocol] }), baseline);
+  const emptyRoutes = fixture({ executionRoutes: [] });
+  assert.deepEqual(buildProfitabilityLedger({ ...emptyRoutes, executionRoutes: [protocol] }), buildProfitabilityLedger(emptyRoutes));
+  // Keep genuine reconcile route receipts; filtering all reconcile actions would
+  // erase the original production route evidence along with protocol records.
+  const routeOnly = fixture({ executionRoutes: [route({ reason: "position_account_route_bound" })] });
+  assert.equal(buildProfitabilityLedger(routeOnly).evidence.sourceRows.executionRoutes, 1);
+});
 const first = baseline.logicalTrades.find((trade) => trade.rootPositionId === "root-1")!;
 const second = baseline.logicalTrades.find((trade) => trade.rootPositionId === "root-2")!;
 

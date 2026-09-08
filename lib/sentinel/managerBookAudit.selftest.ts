@@ -71,5 +71,12 @@ assert.equal(duplicate.duplicateRequiredArms, 1);
 const empty = auditSentinelManagerBook([], []);
 assert.equal(empty.complete, true);
 assert.equal(empty.requiredArms, 0);
+const fixedIds=[...BASE_MANAGER_IDS.filter(id=>id!=="WIDE20/50"),"VB-MACD-NATIVE-FIXTURE"];
+const fixedRoot={...root,expectedManagerIds:fixedIds};
+const fixedPaths=fixedIds.map(managerId=>({positionId:root.id,managerId,status:"terminal",censorCode:null}));
+assert.equal(auditSentinelManagerBook([fixedRoot],fixedPaths).complete,true);
+assert.equal(auditSentinelManagerBook([fixedRoot],fixedPaths.slice(1)).missingRequiredArms,1);
+assert.equal(auditSentinelManagerBook([fixedRoot],fixedPaths.map(path=>({...path,status:"censored",
+  censorCode:"fixed_partial_or_multiple_coverage_generations"}))).complete,false);
 
 console.log("sentinel-manager-book-selftest: 26/26 passed");

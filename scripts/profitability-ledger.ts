@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { createHash } from "node:crypto";
+import { isFixedEntryProtocolObservation } from "../lib/research/fixedEntryProtocolEvidence";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pageAll } from "../engine/pageAll";
@@ -25,6 +26,8 @@ import {
 import { buildProfitabilityReport } from "../lib/profitability/profitabilityMetrics";
 import { renderProfitabilityMarkdown } from "../lib/profitability/profitabilityReport";
 import { createServerSupabaseClient } from "./serverSupabase";
+import { createFixedEntryServiceClient } from "../worker/src/fixedEntryServiceClient";
+import { readFixedManagerComparisonEvidence } from "../worker/src/fixedEntryManagerComparisonEvidence";
 
 const arg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
@@ -90,7 +93,7 @@ async function readRoutes(
     if (!batch.length) continue;
     rows.push(...await pageAll<ProfitabilityExecutionRouteRow>((from) => sb
       .from("execution_observations")
-      .select("id,position_id,opportunity_id,account_id,event_at")
+      .select("id,position_id,opportunity_id,account_id,event_at,reason,payload")
       .in(column, batch)
       .not("account_id", "is", null)
       .order("event_at", { ascending: true })
@@ -99,7 +102,7 @@ async function readRoutes(
       max: 50_000,
     }));
   }
-  return rows;
+  return rows.filter(row => !isFixedEntryProtocolObservation(row));
 }
 
 async function main(): Promise<void> {
@@ -185,6 +188,8 @@ async function main(): Promise<void> {
         "id", "position_id", "manager_id", "manager_policy_version",
         "shadow_book_version", "status", "terminal_at", "terminal_pnl",
         "actual_realized_pnl", "censored_at", "censor_code",
+        "account_id", "strategist_id", "configuration_epoch_id", "entry_at", "entry_price", "original_qty", "admitted_at", "admission_source",
+        "evidence_state", "first_quote_at",
       ].join(","))
       .order("id", { ascending: true }), {
       ...READ_OPTIONS,
@@ -220,6 +225,9 @@ async function main(): Promise<void> {
     }, timings);
 
     input = {
+      fixedManagerComparison: await timed("fixed_manager_comparison", () => readFixedManagerComparisonEvidence(
+        createFixedEntryServiceClient(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+          process.env.SUPABASE_SERVICE_ROLE_KEY ?? "")), timings),
       accounts,
       positions,
       outcomes,

@@ -1,3 +1,4 @@
+import { assertLegacyExecutableShadowBudget } from "../lib/channels/fixedContractAdmission";
 // SELECT-only pilot for the executable-shadow ledger.
 //
 // It never writes Supabase, never places an order, and never converts an
@@ -217,6 +218,7 @@ async function main(): Promise<void> {
     : Math.max(1, Math.trunc(numeric(entryParameters.maxEntriesPerSession)
       ?? numeric(entryParameters.max_entries_per_session)
       ?? (text(configObject.reentryPolicy) === "disabled" ? 1 : 3)));
+  assertLegacyExecutableShadowBudget({ slug, entryParameters }, "executable shadow pilot");
   const requestedQuantity = numeric(arg("quantity"));
   if (requestedQuantity != null && (!Number.isInteger(requestedQuantity) || requestedQuantity < 1)) {
     throw new Error("--quantity must be a positive integer");

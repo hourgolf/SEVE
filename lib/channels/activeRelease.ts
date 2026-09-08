@@ -1,3 +1,4 @@
+import { FIXED_CONTRACT_WORKER_COMPATIBILITY } from "./fixedContractAdmission";
 import type { MarketEvent } from "@/lib/types";
 import {
   DAY1_CONFIG_HASH,
@@ -347,7 +348,7 @@ function receiptBoundRootBindings(
       || manifestHash !== receipt.configHash
       || !epoch?.match(SHA256)
       || !activationReceiptId
-      || workerVersion !== RC54_WORKER_VERSION) {
+      || (workerVersion !== RC54_WORKER_VERSION && workerVersion !== FIXED_CONTRACT_WORKER_COMPATIBILITY)) {
     return { bindings: {}, issue: "receipt-bound startup identity is incomplete or internally inconsistent" };
   }
   if (!Array.isArray(meta.roots)

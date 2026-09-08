@@ -1,3 +1,4 @@
+import { validateCapacityContract } from "./channelPortfolioCapacity";
 import {
   canonicalJson,
   contentHash,
@@ -205,6 +206,9 @@ export function prepareRosterBundleDraftWrite(input: {
     throw new Error("bundle reason is invalid");
   }
   const candidate = input.preview.candidate;
+  const capacityBlockers = validateCapacityContract({ specs: candidate.channelSpecs,
+    admissionPolicies: candidate.manifest.admissionPolicies, capacity: input.preview.capacity });
+  if (capacityBlockers.length) throw new Error(capacityBlockers.join(","));
   const evidenceRefs = refs(input.preview.evidenceRefs);
   const args: ChannelRosterBundleDraftWrite["args"] = {
     p_bundle_id: input.draft.id.toLowerCase(),

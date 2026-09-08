@@ -1,3 +1,4 @@
+import { FIXED_CONTRACT_ADMISSION_MODE } from "../../../../lib/channels/fixedContractAdmission";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -61,7 +62,7 @@ function changes(value: unknown): ChannelRosterTarget[] {
       throw new Error("each roster target must be an object");
     }
     const row = item as Record<string, unknown>;
-    const allowed = ["executionPosture", "maxRiskUsd", "membership", "quantity", "slug"];
+    const allowed = ["admissionSizingMode", "executionPosture", "maxRiskUsd", "membership", "quantity", "slug"];
     if (Object.keys(row).some((key) => !allowed.includes(key))) {
       throw new Error("roster target contains an unknown field");
     }
@@ -78,6 +79,10 @@ function changes(value: unknown): ChannelRosterTarget[] {
         throw new Error("executionPosture must be paper or observe-only");
       }
       target.executionPosture = row.executionPosture;
+    }
+    if (row.admissionSizingMode !== undefined) {
+      if (row.admissionSizingMode !== FIXED_CONTRACT_ADMISSION_MODE && row.admissionSizingMode !== "legacy-risk-budget") throw new Error("admission sizing mode is invalid");
+      target.admissionSizingMode = row.admissionSizingMode;
     }
     if (row.quantity != null) target.quantity = Number(row.quantity);
     if (row.maxRiskUsd != null) target.maxRiskUsd = Number(row.maxRiskUsd);

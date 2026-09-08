@@ -80,13 +80,14 @@ export function MobilePositions({ props, strategists, compact = false, onOpenCha
           </div>
           <div className="m2-p-pk">{peakPct != null ? <Ring pct={peakPct} color={pm} /> : null}<span className="lbl">best <b>{peakPct != null ? `+${Math.round(peakPct)}%` : "—"}</b></span></div>
           {write.canWrite && <div className="m2-pos-actions">
-            {closeFlow.closingId === position.id ? <span className="m2-pos-closing">CLOSING…</span>
+            {(closeFlow.closingId === position.id || closeFlow.pendingPrompts.some(prompt => prompt.id === position.id)) ? <span className="m2-pos-closing">CLOSING…</span>
               : closeFlow.confirmId === position.id ? <><button type="button" className="confirm" onClick={() => closeFlow.confirmClose(position)}>CONFIRM CLOSE</button><button type="button" onClick={closeFlow.cancelClose}>CANCEL</button></>
               : <button type="button" className="arm" onClick={() => closeFlow.armClose(position.id)}>CLOSE POSITION</button>}
           </div>}
         </div>;
       })}
     </div>
+    {closeFlow.pendingPrompts.map(prompt => <div key={prompt.id} role="status">{prompt.label} · Exit requested. Waiting for verified completion.</div>)}
     {closeFlow.error && <div className="m2-close-error">position action failed — {closeFlow.error}</div>}
     {closeFlow.tagPrompt && <div className="m2-close-reasons">
       <header><b>{closeFlow.tagPrompt.label} CLOSED</b><span>WHY DID YOU EXIT?</span></header>

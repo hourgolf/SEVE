@@ -31,6 +31,11 @@ import {
   managerShadowSessionPhase,
 } from "./managerShadowRuntimeModel.js";
 import { SHADOW_MANAGER_COHORT_FROM } from "./managerShadowObservationModel.js";
+import { fixedEntryOwnershipPresent } from "../../lib/channels/fixedEntryOwnership.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { FixedEntryIntent } from "./fixedEntryLedgerModel.js";
+import type { FixedReportingPlan } from "./fixedEntryReporting.js";
+import { persistFixedManagerEnrollment } from "./fixedEntryManagerEnrollment.js";
 
 type RuntimeRun = { run: ManagerShadowRun; sourceBootId: string };
 export interface ManagerShadowBookContext {
@@ -52,6 +57,24 @@ let lastCaptureCapWarnMs = 0;
 const pendingTerminalReceipts = new Set<string>();
 const admissionInFlight = new Set<string>();
 const admissionHealthWarned = new Set<string>();
+/** Serialized with ordinary observer ticks, independently of real management.
+ * In-memory registration uses only the database rows actually read back. */
+export async function replayFixedManagerCohorts(client:Pick<SupabaseClient,"from">,intent:FixedEntryIntent,
+  cohorts:FixedReportingPlan["cohorts"]):Promise<boolean> {
+  if (!config.managerShadowBookEnabled || disabled || !config.hasServiceRole || config.optFeed !== "opra" || ticking) return false;
+  ticking = true;
+  try {
+    if (!await hydrate()) return false;
+    const persisted = await persistFixedManagerEnrollment(client,BOOT_ID,intent,cohorts,
+      {nowMs:Date.now(),quoteMaxAgeMs:config.managerShadowQuoteMaxAgeMs});
+    for (const item of persisted) {
+      runs.set(item.run.id,item);enrolledPositions.add(item.run.positionId);
+      if (item.run.status === "terminal") pendingTerminalReceipts.add(item.run.id);
+    }
+    return true;
+  } catch { return false; }
+  finally { ticking = false; }
+}
 
 const ET_CLOCK = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
@@ -164,6 +187,10 @@ async function attributeActualCloses(): Promise<void> {
   const byId = new Map(positions.map((position) => [position.id, position]));
   for (const item of pending) {
     const actual = byId.get(item.run.positionId);
+    // A fixed physical row may be closed while its original buy can still
+    // fill. Only the fixed whole-intent reporter may attach its final actual
+    // comparator; current per-position PnL is merely booked-to-date evidence.
+    if (actual && fixedEntryOwnershipPresent(actual)) continue;
     if (!actual || actual.status !== "closed" || !actual.closed_at) continue;
     const next = attachActualClose(item.run, {
       atMs: Date.parse(actual.closed_at), reason: actual.close_reason ?? "unattributed_close", realizedPnl: actual.realized_pnl,
@@ -247,6 +274,10 @@ async function enrollRecoveryPositions(
   const channels = new Map(ctx.channels.map((channel) => [channel.id, channel]));
   const defaultAccount = ctx.accounts.find((account) => !account.cred_ref) ?? ctx.accounts[0];
   for (const row of rows) {
+    // Fixed cohorts require original account/policy, first materialization and
+    // quantity-history eligibility. Current strategist routing and mutable row
+    // quantity cannot enroll them through the legacy recovery shortcut.
+    if (fixedEntryOwnershipPresent(row)) continue;
     if (!row.opened_at || Date.parse(row.opened_at) < Date.parse(SHADOW_MANAGER_COHORT_FROM)) continue;
     const channel = channels.get(row.strategist_id);
     const accountId = channel?.account_id ?? defaultAccount?.id;

@@ -155,6 +155,7 @@ export function rc54ManagerProfileId(slug: string): Rc54ManagerProfileId | null 
  * prevents the generic control plane from importing RC5.4.
  */
 export interface Rc54AdmissionRoot {
+  fixedContractAdmission?: import("../../lib/channels/fixedContractAdmission").FixedContractAdmissionPolicy;
   slug: string;
   domainId: string;
   familyId: string;
@@ -1042,8 +1043,8 @@ export function prepareRc54ReleaseAdmissions(input: {
       qty: root.quantity,
       detail: {
         ...(next.detail ?? {}),
-        decisionTrace: releaseTrace(decision, { qty: root.quantity, premiumCap: root.premiumCap,
-          debitCapUsd: root.aggregateDebitCap, observedAtMs: input.observedAtMs }),
+        decisionTrace: releaseTrace(decision, { qty: root.quantity, premiumCap: root.fixedContractAdmission ? null : root.premiumCap,
+          debitCapUsd: root.fixedContractAdmission ? null : root.aggregateDebitCap, observedAtMs: input.observedAtMs }),
         rc54Quantity: root.quantity,
         rc54AggregateDebit: debit,
       },
@@ -1066,7 +1067,8 @@ export function prepareRc54ReleaseAdmissions(input: {
       return block(next, entryQualification.blockedReason);
     }
     if (!(ask > 0)) return block(next, "rc54_unproven_entry_ask");
-    if (ask > root.premiumCap || debit > root.aggregateDebitCap + 1e-9) {
+    if (root.fixedContractAdmission && (!Number.isFinite(ask) || !Number.isFinite(debit))) return block(next, "rc54_unproven_entry_ask");
+    if (!root.fixedContractAdmission && (ask > root.premiumCap || debit > root.aggregateDebitCap + 1e-9)) {
       return block(next, "rc54_premium_debit_cap", {
         rc54PremiumCap: root.premiumCap,
         rc54AggregateDebitCap: root.aggregateDebitCap,

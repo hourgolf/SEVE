@@ -9,6 +9,10 @@
 // reconcile and a double-click.
 
 import { NextResponse } from "next/server";
+import { fixedEntryOwnershipPresent,LEGACY_POSITION_FIXED_ABSENT_FILTERS,LEGACY_POSITION_POLICY_FILTER } from "@/lib/channels/fixedEntryOwnership";
+import { makeFixedEntryLegacyOwnershipGuard } from "@/worker/src/fixedEntryLegacyOwnership";
+import { createFixedEntryServiceClient } from "@/worker/src/fixedEntryServiceClient";
+import { readFixedManualCloseStatus, requestFixedManualClose } from "@/lib/positions/fixedManualCloseServer";
 import { createClient } from "@supabase/supabase-js";
 import { isDeskOperator } from "@/lib/auth/operator";
 import { normalizeManualCloseTag } from "@/lib/positions/manualClose";
@@ -29,6 +33,25 @@ const SB_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SB_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const AK = process.env.ALPACA_KEY;
 const AS = process.env.ALPACA_SECRET;
+let legacyFixedOrderGuard:ReturnType<typeof makeFixedEntryLegacyOwnershipGuard>|null=null;
+
+/** Authenticated read only. A closed partial row alone cannot certify that its
+ * original intent has no pending orders or late fills. */
+export async function GET(req: Request) {
+  if (!SB_URL || !SB_ANON || !SB_SERVICE) return NextResponse.json({ ok: false, error: "close status is not configured" }, { status: 503 });
+  const authz = req.headers.get("authorization") ?? "";
+  const token = authz.startsWith("Bearer ") ? authz.slice(7) : "";
+  if (!token) return NextResponse.json({ ok: false, error: "not signed in" }, { status: 401 });
+  const auth = await createClient(SB_URL, SB_ANON).auth.getUser(token);
+  if (auth.error || !auth.data.user) return NextResponse.json({ ok: false, error: "invalid session" }, { status: 401 });
+  if (!isDeskOperator(auth.data.user)) return NextResponse.json({ ok: false, error: "operator authorization required" }, { status: 403 });
+  try {
+    const result = await readFixedManualCloseStatus(createFixedEntryServiceClient(SB_URL, SB_SERVICE), new URL(req.url).searchParams.get("id") ?? "");
+    return NextResponse.json(result, { status: result.pending ? 202 : 200 });
+  } catch {
+    return NextResponse.json({ ok: false, error: "Close completion is not yet verifiable." }, { status: 503 });
+  }
+}
 
 export async function POST(req: Request) {
   if (!SB_URL || !SB_ANON) return NextResponse.json({ ok: false, error: "supabase env missing" }, { status: 500 });
@@ -41,7 +64,6 @@ export async function POST(req: Request) {
   if (authErr || !userData?.user) return NextResponse.json({ ok: false, error: "invalid session" }, { status: 401 });
   if (!isDeskOperator(userData.user)) return NextResponse.json({ ok: false, error: "operator authorization required" }, { status: 403 });
   if (!SB_SERVICE) return NextResponse.json({ ok: false, error: "manual close is not configured" }, { status: 503 });
-  if (!AK || !AS) return NextResponse.json({ ok: false, error: "paper broker is not configured" }, { status: 503 });
 
   let id: string | undefined, tag: string | undefined;
   try { const b = await req.json(); id = b?.id; tag = b?.tag; } catch { /* */ }
@@ -62,7 +84,24 @@ export async function POST(req: Request) {
     if (row.close_reason && !String(row.close_reason).startsWith("manual")) {
       return NextResponse.json({ ok: false, error: `machine close (${row.close_reason}) — not taggable` }, { status: 409 });
     }
-    const { data: taggedRows, error: tagErr } = await sb.from("positions").update({ close_reason: `manual:${t}` }).eq("id", id).eq("status", "closed").select("id");
+    if (fixedEntryOwnershipPresent(row)) {
+      try {
+        const complete = await readFixedManualCloseStatus(createFixedEntryServiceClient(SB_URL, SB_SERVICE), id);
+        if (complete.pending || !complete.canTag) return NextResponse.json({ ok: false, error: "Wait for verified close completion before tagging." }, { status: 409 });
+        const annotation = buildPositionOutcome({ eventKind: "manual_reason_tagged", eventAtMs: Date.now(), positionId: id,
+          opportunityId: typeof row.entry_features?.opportunity_id === "string" ? row.entry_features.opportunity_id : null,
+          closeReason: `manual:${t}`, payload: { annotation_only: true, fixed_intent_id: complete.intentId } });
+        if (!annotation) throw new Error("invalid_annotation");
+        const result = await sb.from("position_outcome_events").insert(annotation);
+        if (result.error && result.error.code !== "23505") throw new Error("annotation_unconfirmed");
+        return NextResponse.json({ ok: true, tagged: t });
+      } catch {
+        return NextResponse.json({ ok: false, error: "Reason annotation could not be verified." }, { status: 503 });
+      }
+    }
+    let tagUpdate=sb.from("positions").update({ close_reason: `manual:${t}` }).eq("id", id).eq("status", "closed");
+    for(const filter of LEGACY_POSITION_FIXED_ABSENT_FILTERS)tagUpdate=tagUpdate.is(filter,null);
+    const { data: taggedRows, error: tagErr } = await tagUpdate.or(LEGACY_POSITION_POLICY_FILTER).select("id");
     if (tagErr) return NextResponse.json({ ok: false, error: tagErr.message }, { status: 500 });
     if (!taggedRows?.length) return NextResponse.json({ ok: false, error: "position changed before tag was saved" }, { status: 409 });
     const tagged = buildPositionOutcome({ eventKind: "manual_reason_tagged", eventAtMs: Date.now(), positionId: id,
@@ -74,7 +113,18 @@ export async function POST(req: Request) {
 
   const { data: pos, error: posErr } = await sb.from("positions").select("*").eq("id", id).maybeSingle();
   if (posErr || !pos) return NextResponse.json({ ok: false, error: "position not found" }, { status: 404 });
+  if (fixedEntryOwnershipPresent(pos)) {
+    try {
+      const result = await requestFixedManualClose(createFixedEntryServiceClient(SB_URL, SB_SERVICE), {
+        positionId: id, nowMs: Date.now(),
+      });
+      return NextResponse.json(result, { status: result.pending ? 202 : 200 });
+    } catch {
+      return NextResponse.json({ ok: false, error: "Exit request could not be verified; close remains unconfirmed." }, { status: 503 });
+    }
+  }
   if (pos.status !== "open") return NextResponse.json({ ok: false, error: `position already ${pos.status}` }, { status: 409 });
+  if (!AK || !AS) return NextResponse.json({ ok: false, error: "paper broker is not configured" }, { status: 503 });
 
   const occ = String(pos.occ_symbol);
   const qty = Math.max(1, Math.round(Number(pos.qty)));
@@ -143,6 +193,8 @@ export async function POST(req: Request) {
   let submittedAtMs = triggerAtMs;
   if (sellQty > 0) {
     try {
+      legacyFixedOrderGuard??=makeFixedEntryLegacyOwnershipGuard(createFixedEntryServiceClient(SB_URL,SB_SERVICE));
+      await legacyFixedOrderGuard(effectiveAccountId,occ);
       clientOrderId = `${slug}-${occ}-${Date.now()}`;
       submittedAtMs = Date.now();
       const r = await fetch(`${PAPER}/v2/orders`, {
@@ -207,12 +259,13 @@ export async function POST(req: Request) {
 
   // ---- book the row closed (status-guarded → idempotent) ----
   // close_reason 'manual' = operator close (the post-close chips refine it to 'manual:<tag>').
-  const { data: closedRows, error: upErr } = await sb
+  let closeUpdate = sb
     .from("positions")
     .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: fill, unrealized_pnl: 0, realized_pnl: realized, close_reason: "manual" })
     .eq("id", id)
-    .eq("status", "open")
-    .select("id");
+    .eq("status", "open");
+  for(const filter of LEGACY_POSITION_FIXED_ABSENT_FILTERS)closeUpdate=closeUpdate.is(filter,null);
+  const { data: closedRows, error: upErr } = await closeUpdate.or(LEGACY_POSITION_POLICY_FILTER).select("id");
   if (upErr) return NextResponse.json({ ok: false, error: `db update: ${upErr.message}` }, { status: 500 });
   if (!closedRows?.length) return NextResponse.json({ ok: false, error: "position closed elsewhere before booking" }, { status: 409 });
 

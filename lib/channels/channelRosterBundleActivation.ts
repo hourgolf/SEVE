@@ -1,3 +1,4 @@
+import { validateCapacityContract } from "./channelPortfolioCapacity";
 import {
   contentHash,
   type JsonObject,
@@ -216,6 +217,8 @@ export function reviewRosterBundleActivation(input: {
       || input.preview.orderAuthority !== false) {
     blockers.push("bundle-activation:preview_posture_invalid");
   }
+  if (candidate && input.preview.capacity) blockers.push(...validateCapacityContract({
+    specs: candidate.channelSpecs, admissionPolicies: candidate.manifest.admissionPolicies, capacity: input.preview.capacity }));
   if (!acknowledgement) {
     blockers.push("bundle-activation:worker_ack_missing");
   } else {

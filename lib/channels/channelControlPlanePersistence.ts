@@ -1,3 +1,4 @@
+import { validateCapacityContract, type PortfolioCapacityEvaluation } from "./channelPortfolioCapacity";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   canonicalJson,
@@ -399,6 +400,10 @@ export function reconstructStoredRosterBundleActivationAuthority(
       || !Array.isArray(exactDiffs)
       || exactDiffs.length === 0
       || capacity?.state !== "pass"
+      || ((compiled.channelSpecs.some(spec => spec.entryParameters.admissionSizingMode !== undefined)
+          || capacity?.version === "channel-portfolio-capacity-v2")
+        && validateCapacityContract({ specs: compiled.channelSpecs, admissionPolicies: compiled.manifest.admissionPolicies,
+          capacity: capacity as unknown as PortfolioCapacityEvaluation }).length > 0)
       || !safeBoundary
       || safeBoundary.globalFlat !== true
       || !acknowledgement

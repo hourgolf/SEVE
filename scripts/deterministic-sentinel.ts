@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { etDayRangeUtc } from "@/lib/research/afterCloseResearch";
 import { nextTradingDay } from "@/engine/market-calendar";
+import { managerIdsForChannel } from "@/engine/managerPolicy";
 import {
   DETERMINISTIC_SENTINEL_PUBLISHER_VERSION,
   deterministicSentinelRunId,
@@ -37,6 +38,10 @@ import {
   CHANNEL_DECISION_PACKET_VERSION,
 } from "@/lib/channels/channelDecisionEvidence";
 import { contentHash } from "@/lib/channels/channelControlPlane";
+import { createFixedEntryServiceClient } from "@/worker/src/fixedEntryServiceClient";
+import { readFixedManagerComparisonEvidence } from "@/worker/src/fixedEntryManagerComparisonEvidence";
+import { applyFixedManagerComparison,constrainFixedManagerEvidence,projectFixedLogicalPositionRows,
+  type FixedManagerRunLike } from "@/lib/research/fixedManagerComparison";
 
 const WORKER_FRESH_MS = 150_000;
 const arg = (name: string, fallback = ""): string => {
@@ -61,6 +66,9 @@ const sha256 = (bytes: string | Buffer): string => createHash("sha256").update(b
 const dollars = (value: number): string => `${value >= 0 ? "+" : "-"}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
 
 interface PositionRow {
+  entry_features?:unknown;
+  qty?:number|string;
+  avg_entry_price?:number|string;
   id: string;
   status: "open" | "closed";
   opened_at: string;
@@ -71,7 +79,7 @@ interface PositionRow {
   channel_spec_version_id?: string | null;
   configuration_epoch_id?: string | null;
 }
-interface ManagerRow {
+interface ManagerRow extends FixedManagerRunLike {
   id: string;
   position_id: string;
   manager_id: string;
@@ -224,18 +232,21 @@ async function main(): Promise<void> {
     positionsRead,
     managersRead,
     operationalAuthority,
+    fixedEvidence,
   ] = await Promise.all([
     sb.from("events").select("id,level,strategist_id,message,meta,created_at")
       .ilike("message", "%release ACTIVE%").order("created_at", { ascending: false }).limit(50),
     sb.from("worker_runs").select("version,started_at,last_heartbeat_at,last_phase,last_error")
       .is("ended_at", null).order("started_at", { ascending: false }).limit(20),
-    sb.from("positions").select("id,status,opened_at,closed_at,realized_pnl,close_reason,runner_of", { count: "exact" })
+    sb.from("positions").select("id,status,opened_at,closed_at,realized_pnl,close_reason,runner_of,entry_features,qty,avg_entry_price", { count: "exact" })
       .gte("opened_at", range.start).lt("opened_at", range.end).order("opened_at").order("id").limit(100),
-    sb.from("manager_shadow_runs").select("id,position_id,manager_id,status,evidence_state,censor_code,entry_at", { count: "exact" })
+    sb.from("manager_shadow_runs").select("id,position_id,manager_id,status,evidence_state,censor_code,entry_at,account_id,strategist_id,configuration_epoch_id,entry_price,original_qty,admitted_at,admission_source,first_quote_at", { count: "exact" })
       .gte("entry_at", range.start).lt("entry_at", range.end).order("entry_at").order("id").limit(1_000),
     loadActiveRc54OperationalAuthority(
       sb as unknown as Parameters<typeof loadActiveRc54OperationalAuthority>[0],
     ),
+    readFixedManagerComparisonEvidence(createFixedEntryServiceClient(
+      (process.env.SUPABASE_URL??process.env.NEXT_PUBLIC_SUPABASE_URL)!,process.env.SUPABASE_SERVICE_ROLE_KEY!)),
   ]);
   for (const [label, read] of [["release", releaseRead], ["workers", workerRead], ["positions", positionsRead], ["managers", managersRead]] as const) {
     if (read.error) throw new Error(`${label} read failed: ${read.error.message}`);
@@ -263,8 +274,21 @@ async function main(): Promise<void> {
     nowMs: Date.parse(generatedAt),
     workerFreshMs: WORKER_FRESH_MS,
   });
-  const positions = (positionsRead.data ?? []) as PositionRow[];
-  const managers = (managersRead.data ?? []) as ManagerRow[];
+  const originalPositions = (positionsRead.data ?? []) as PositionRow[];
+  const positions = projectFixedLogicalPositionRows(originalPositions,fixedEvidence);
+  const fixedComparison=constrainFixedManagerEvidence(originalPositions,fixedEvidence);
+  const projectedManagers=((managersRead.data??[]) as ManagerRow[]).map(row=>applyFixedManagerComparison(row,fixedComparison));
+  const groupedManagers=new Map<string,ManagerRow>();
+  for(const row of projectedManagers){
+    const proof=fixedComparison.evidence[row.position_id];
+    const positionId=proof?.rootPositionId??row.position_id;
+    const key=proof?`${positionId}:${row.manager_id}`:row.id;
+    const previous=groupedManagers.get(key);
+    const status=previous && (previous.status!=="terminal"||row.status!=="terminal")
+      ? previous.status==="censored"||row.status==="censored"?"censored":"active":row.status;
+    groupedManagers.set(key,{...row,position_id:positionId,status,censor_code:previous?.censor_code??row.censor_code});
+  }
+  const managers=[...groupedManagers.values()];
   const closed = positions.filter((row) => row.status === "closed" || row.closed_at != null);
   const logicalBook = summarizeLogicalTradeCohort(positions);
   if (logicalBook.issues.length) {
@@ -274,7 +298,8 @@ async function main(): Promise<void> {
   const realizedPnl = logicalBook.realizedPnl;
   const manualCloses = logicalBook.manualCloses;
   const managerAudit = auditSentinelManagerBook(
-    positions.map((row) => ({ id: row.id, runnerOf: row.runner_of })),
+    positions.map((row) => ({ id: row.id, runnerOf: row.runner_of,
+      ...(fixedComparison.evidence[row.id]?{expectedManagerIds:managerIdsForChannel("vb-macd-state")}:{} )})),
     managers.map((row) => ({
       positionId: row.position_id,
       managerId: row.manager_id,

@@ -10,6 +10,9 @@ import type {
   ReceiptBoundRuntimeRoot,
 } from "./channelConfigurationRuntimeAdapter.js";
 
+import { isFixedContractAdmissionPolicy, type FixedContractAdmissionPolicy } from "../../lib/channels/fixedContractAdmission.js";
+
+export const FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION = "receipt-bound-entry-policy-v3" as const;
 export const RECEIPT_BOUND_ENTRY_POLICY_VERSION =
   "receipt-bound-entry-policy-v2" as const;
 export const LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION =
@@ -20,12 +23,13 @@ export const RECEIPT_BOUND_ENTRY_POLICY_FIELD =
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
 
 export interface ReceiptBoundEntryPolicy {
-  policyVersion: typeof RECEIPT_BOUND_ENTRY_POLICY_VERSION
+  fixedContractAdmission?: FixedContractAdmissionPolicy;
+  policyVersion: typeof FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION | typeof RECEIPT_BOUND_ENTRY_POLICY_VERSION
     | typeof LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION;
   configuration: Readonly<ConfigurationEpochIdentity>;
   quantity: number;
-  premiumCap: number;
-  aggregateDebitCap: number;
+  premiumCap: number | null;
+  aggregateDebitCap: number | null;
   takeProfit: Readonly<ChannelTakeProfitPolicy>;
   stopLoss: Readonly<ChannelStopLossPolicy>;
   ratchetParameters: Readonly<ChannelRatchetPolicy>;
@@ -130,11 +134,12 @@ export function buildReceiptBoundEntryPolicy(
   root: Readonly<ReceiptBoundRuntimeRoot>,
 ): Readonly<ReceiptBoundEntryPolicy> {
   const policy: ReceiptBoundEntryPolicy = {
-    policyVersion: RECEIPT_BOUND_ENTRY_POLICY_VERSION,
+    policyVersion: root.fixedContractAdmission ? FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION : RECEIPT_BOUND_ENTRY_POLICY_VERSION,
+    ...(root.fixedContractAdmission ? { fixedContractAdmission: root.fixedContractAdmission } : {}),
     configuration: root.configuration,
     quantity: root.quantity,
-    premiumCap: root.premiumCap,
-    aggregateDebitCap: root.aggregateDebitCap,
+    premiumCap: root.fixedContractAdmission ? null : root.premiumCap,
+    aggregateDebitCap: root.fixedContractAdmission ? null : root.aggregateDebitCap,
     takeProfit: root.takeProfit,
     stopLoss: root.stopLoss,
     ratchetParameters: root.ratchetParameters,
@@ -161,20 +166,26 @@ export function parseReceiptBoundEntryPolicy(
   value: unknown,
 ): Readonly<ReceiptBoundEntryPolicy> | null {
   const row = record(value);
+  const fixed = row?.policyVersion === FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION;
   if (!row
       || ![
+        FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION,
         RECEIPT_BOUND_ENTRY_POLICY_VERSION,
         LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION,
       ].includes(row.policyVersion as typeof RECEIPT_BOUND_ENTRY_POLICY_VERSION)
       || !validConfiguration(row.configuration)
       || !Number.isInteger(row.quantity)
       || Number(row.quantity) < 1
-      || !finite(row.premiumCap)
-      || row.premiumCap <= 0
-      || !finite(row.aggregateDebitCap)
-      || row.aggregateDebitCap <= 0
-      || Number(row.quantity) * Number(row.premiumCap) * 100
-        > Number(row.aggregateDebitCap) + 1e-9
+      || (fixed
+        ? (!isFixedContractAdmissionPolicy(row.fixedContractAdmission)
+          || row.quantity !== 4 || row.premiumCap !== null || row.aggregateDebitCap !== null
+          || row.configuration.channelSlug !== "vb-macd-state"
+          || row.managerProfileId !== "VB-MACD-WIDE20-50"
+          || record(row.takeProfit)?.targetPct !== 20 || record(row.takeProfit)?.fraction !== 0
+          || record(row.stopLoss)?.catastrophePct !== 50)
+        : (row.fixedContractAdmission !== undefined || !finite(row.premiumCap)
+          || row.premiumCap <= 0 || !finite(row.aggregateDebitCap) || row.aggregateDebitCap <= 0
+          || Number(row.quantity) * Number(row.premiumCap) * 100 > Number(row.aggregateDebitCap) + 1e-9))
       || !validTakeProfit(row.takeProfit)
       || !validStopLoss(row.stopLoss)
       || !validRatchet(row.ratchetParameters)
@@ -183,7 +194,7 @@ export function parseReceiptBoundEntryPolicy(
           || record(row.takeProfit)?.fraction !== 0.5))
       || row.managerProfileId !== row.configuration.managerProfileId
       || row.managerVersion !== row.configuration.managerVersion
-      || (row.policyVersion === RECEIPT_BOUND_ENTRY_POLICY_VERSION
+      || ((row.policyVersion === RECEIPT_BOUND_ENTRY_POLICY_VERSION || fixed)
         && (!["disabled", "bounded"].includes(String(row.reentryPolicy))
           || !Number.isInteger(row.maxEntriesPerSession)
           || Number(row.maxEntriesPerSession) < 1

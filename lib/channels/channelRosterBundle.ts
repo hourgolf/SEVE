@@ -1,3 +1,5 @@
+import { FIXED_CONTRACT_ADMISSION_MODE, FIXED_CONTRACT_WORKER_COMPATIBILITY, LEGACY_RC54_WORKER_COMPATIBILITY } from "./fixedContractAdmission";
+import { validateCapacityContract } from "./channelPortfolioCapacity";
 import {
   canonicalJson,
   compileReleaseManifest,
@@ -22,6 +24,7 @@ export const CHANNEL_ROSTER_BUNDLE_VERSION =
 
 export interface ChannelRosterTarget {
   slug: string;
+  admissionSizingMode?: typeof FIXED_CONTRACT_ADMISSION_MODE | "legacy-risk-budget";
   membership?: "include" | "exclude";
   executionPosture?: "paper" | "observe-only";
   priority?: number;
@@ -141,6 +144,8 @@ function applyTarget(input: {
     createdBy: `operator:${input.bundle.operatorId}`,
     status: "draft",
   };
+  if (input.target.admissionSizingMode === "legacy-risk-budget") delete candidate.entryParameters.admissionSizingMode;
+  else if (input.target.admissionSizingMode !== undefined) candidate.entryParameters.admissionSizingMode = input.target.admissionSizingMode;
   const posture = input.target.executionPosture ?? input.source.executionPosture;
   if (posture != null) candidate.executionPosture = posture;
   else delete candidate.executionPosture;
@@ -214,7 +219,7 @@ export function buildChannelRosterBundlePreview(input: {
       if (!active) blockers.push(`bundle:exclude_not_active:${target.slug}`);
       else if (target.executionPosture != null || target.priority != null
           || target.quantity != null || target.maxEntriesPerSession != null
-          || target.maxRiskUsd != null || target.collisionDomain != null) {
+          || target.maxRiskUsd != null || target.collisionDomain != null || target.admissionSizingMode != null) {
         blockers.push(`bundle:exclude_must_be_standalone:${target.slug}`);
       } else {
         removals.add(active.id);
@@ -232,9 +237,13 @@ export function buildChannelRosterBundlePreview(input: {
     }
     if (target.executionPosture == null && target.priority == null
         && target.quantity == null && target.maxEntriesPerSession == null
-        && target.maxRiskUsd == null && target.collisionDomain == null) {
+        && target.maxRiskUsd == null && target.collisionDomain == null && target.admissionSizingMode == null) {
       blockers.push(`bundle:empty_change:${target.slug}`);
       continue;
+    }
+    if (target.admissionSizingMode !== undefined
+        && (target.slug !== "vb-macd-state" || ![FIXED_CONTRACT_ADMISSION_MODE, "legacy-risk-budget"].includes(target.admissionSizingMode))) {
+      blockers.push(`bundle:admission_sizing_mode_invalid:${target.slug}`); continue;
     }
     const quantity = target.quantity ?? source.quantity;
     const priority = target.priority ?? source.priority;
@@ -265,6 +274,12 @@ export function buildChannelRosterBundlePreview(input: {
           || target.maxRiskUsd <= 0)) {
       blockers.push(`bundle:risk_invalid:${target.slug}`);
       continue;
+    }
+    if ((source.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE
+          || target.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE)
+        && target.admissionSizingMode !== "legacy-risk-budget"
+        && (target.maxRiskUsd !== undefined || target.quantity !== undefined)) {
+      blockers.push(`bundle:fixed_contract_budget_controls_inapplicable:${target.slug}`); continue;
     }
     const candidate = applyTarget({
       source,
@@ -356,6 +371,10 @@ export function buildChannelRosterBundlePreview(input: {
     id: `manifest:bundle:${input.draft.id}`,
     releaseId: `release:bundle:${input.draft.id}`,
     cohortId: `operator-bundle:${input.draft.id}`,
+    workerCompatibilityVersion: specs.some(spec => spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE)
+      ? FIXED_CONTRACT_WORKER_COMPATIBILITY
+      : input.active.manifest.workerCompatibilityVersion === FIXED_CONTRACT_WORKER_COMPATIBILITY
+        ? LEGACY_RC54_WORKER_COMPATIBILITY : input.active.manifest.workerCompatibilityVersion,
     rollbackTargetManifestId: input.active.manifest.id,
     parentManifestId: input.active.manifest.id,
     createdBy: `operator:${input.draft.operatorId}`,
@@ -393,7 +412,8 @@ export function buildChannelRosterBundlePreview(input: {
   const validationBlockers = candidate.validationResults
     .filter((result) => result.state !== "pass")
     .map((result) => `bundle:validation:${result.code}`);
-  blockers.push(...validationBlockers, ...capacity.blockers);
+  blockers.push(...validationBlockers, ...capacity.blockers, ...validateCapacityContract({
+    specs: candidate.channelSpecs, admissionPolicies: candidate.manifest.admissionPolicies, capacity }));
   // Runtime identity is canonical for the compiled manifest. Bundle identity
   // remains separately immutable in the draft and activation receipts and
   // must not fork the epoch reconstructed by a restarted worker.

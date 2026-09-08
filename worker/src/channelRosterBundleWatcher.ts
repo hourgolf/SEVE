@@ -1,3 +1,4 @@
+import { validateCapacityContract } from "../../lib/channels/channelPortfolioCapacity.js";
 import {
   canonicalJson,
   compileReleaseManifest,
@@ -211,6 +212,8 @@ function storedPreview(input: {
       || capacity.orderAuthority !== false) {
     blockers.push("bundle:capacity_invalid");
   }
+  if (candidate && capacity) blockers.push(...validateCapacityContract({
+    specs: candidate.channelSpecs, admissionPolicies: candidate.manifest.admissionPolicies, capacity }));
   if (!diffs.length || !evidenceRefs.length) {
     blockers.push("bundle:diff_or_evidence_missing");
   }

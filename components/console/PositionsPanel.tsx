@@ -1,12 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useState } from "react";
 import { useFold } from "@/hooks/useFold";
 import { signedUsd } from "@/lib/format";
 import { useTradeInsight } from "@/hooks/useTradeInsight";
 import { useTradeTriggers } from "@/hooks/useTradeTriggers";
 import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
+import { usePositionCloseFlow } from "@/hooks/usePositionCloseFlow";
 import { MANUAL_CLOSE_REASONS } from "@/lib/positions/manualClose";
 import { useChangeFlash } from "@/hooks/useChangeFlash";
 import type { Position, StrategistState } from "@/lib/desk/types";
@@ -104,49 +105,14 @@ export function PositionsPanel({
   const openTrade = recentTrades.find((t) => t.id === openId) ?? null;
   const { insight, loading } = useTradeInsight(openTrade);
 
-  // Manual close (signed-in only). Tapping ✕ ARMS a confirm (✓ + a cancel ✕); you
-  // can always back out — explicit cancel, OR it auto-disarms after 4s. Only the
-  // explicit ✓ sells. The row drops from `positions` on the next feed refresh.
-  const { canWrite, closePosition, tagClose } = useDeskWrite();
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [closingId, setClosingId] = useState<string | null>(null);
-  const [closeErr, setCloseErr] = useState<string | null>(null);
-  // Close-reason chips (31_close_reason.sql): offered AFTER a successful close —
-  // the fill is already booked, so tagging adds zero friction to the exit itself.
-  // Untagged stays 'manual'; a tap refines it to 'manual:<tag>'. The vocabulary is
-  // the exit-study's: target (banked the pop) / reversal (tape turned) / risk
-  // (defensive cut) / stall (no follow-through), plus non-strategy test and
-  // execution-correction tags so those rows never receive native edge credit.
-  const [tagPrompt, setTagPrompt] = useState<{ id: string; label: string } | null>(null);
-  const [tagging, setTagging] = useState(false);
-  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearDisarm = () => { if (disarmTimer.current) { clearTimeout(disarmTimer.current); disarmTimer.current = null; } };
-  useEffect(() => () => clearDisarm(), []); // clear on unmount
-  const arm = (id: string) => {
-    setCloseErr(null);
-    setConfirmId(id);
-    clearDisarm();
-    disarmTimer.current = setTimeout(() => setConfirmId((cur) => (cur === id ? null : cur)), 4000);
-  };
-  const cancelClose = () => { clearDisarm(); setConfirmId(null); };
+  const write = useDeskWrite();
+  const canWrite = write.canWrite;
+  const closeFlow = usePositionCloseFlow(write);
+  const { confirmId, closingId, error: closeErr, tagPrompt, tagging,
+    armClose: arm, cancelClose, tagClose: applyTag } = closeFlow;
   const confirmClose = async (id: string) => {
-    clearDisarm();
-    setConfirmId(null);
-    setClosingId(id);
-    setCloseErr(null);
-    const p = positions.find((x) => x.id === id); // capture before the row leaves the feed
-    const res = await closePosition(id);
-    setClosingId(null);
-    if (!res.ok) setCloseErr(res.error ?? "close failed");
-    else setTagPrompt({ id, label: p ? `${p.strike.toFixed(0)}${p.opt_type === "call" ? "C" : "P"}` : "position" });
-  };
-  const applyTag = async (tag: string) => {
-    if (!tagPrompt) return;
-    setTagging(true);
-    const result = await tagClose(tagPrompt.id, tag);
-    setTagging(false);
-    if (!result.ok) { setCloseErr(result.error ?? "reason tag failed"); return; }
-    setTagPrompt(null);
+    const position = positions.find(row => row.id === id);
+    if (position) await closeFlow.confirmClose(position);
   };
 
   return (
@@ -238,7 +204,7 @@ export function PositionsPanel({
                 <PnlCell unreal={unreal} />
                 {canWrite && (
                   <td className="pos-act">
-                    {closingId === p.id ? (
+                    {(closingId === p.id || closeFlow.pendingPrompts.some(prompt => prompt.id === p.id)) ? (
                       <span className="pos-closing" title="closing…">…</span>
                     ) : confirmId === p.id ? (
                       <span className="pos-confirm">
@@ -285,6 +251,7 @@ export function PositionsPanel({
           </tbody>
         </table>
       </div>
+      {closeFlow.pendingPrompts.map(prompt => <div key={prompt.id} role="status">{prompt.label} · Exit requested. Waiting for verified completion.</div>)}
       {closeErr && <div className="pos-close-err">close failed — {closeErr}</div>}
       {tagPrompt && (
         <div className="pos-tagbar">
@@ -292,7 +259,7 @@ export function PositionsPanel({
           {MANUAL_CLOSE_REASONS.map((reason) => (
             <button key={reason.value} className="tb-chip" disabled={tagging} title={reason.hint} onClick={() => applyTag(reason.value)}>{reason.label}</button>
           ))}
-          <button className="tb-x" onClick={() => setTagPrompt(null)} title="skip — stays untagged" aria-label="dismiss tag chips">✕</button>
+          <button className="tb-x" onClick={closeFlow.dismissTag} title="skip — stays untagged" aria-label="dismiss tag chips">✕</button>
         </div>
       )}
 

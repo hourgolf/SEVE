@@ -38,6 +38,8 @@ export interface FleetSignalReceipt {
 }
 
 export interface FleetPositionReceipt {
+  rawClosedAt?:string|null;
+  rawRealizedPnl?:number|null;
   id: string;
   strategistId: string;
   openedAt: string;
@@ -64,6 +66,9 @@ export interface FleetOutcomeReceipt {
 }
 
 export interface FleetManagerReceipt {
+  censorCode?: string | null;
+  rawTerminalPnl?: number | null;
+  rawActualRealizedPnl?: number | null;
   strategistId: string;
   positionId: string;
   status: "active" | "terminal" | "censored" | string;

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { pageAll } from "@/engine/pageAll";
 import { requireDeskOperator } from "@/lib/auth/serverOperator";
+import { createFixedEntryServiceClient } from "@/worker/src/fixedEntryServiceClient";
+import { readFixedManagerComparisonEvidence } from "@/worker/src/fixedEntryManagerComparisonEvidence";
 import {
   deriveChannelManagerEvidenceBook,
   type ChannelManagerPositionRow,
@@ -31,24 +33,28 @@ export async function GET(req: Request) {
     const sb = createClient(SB_URL, SB_SERVICE, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
-    const [managerRuns, positions] = await Promise.all([
+    const [managerRuns, positions, fixedManagerComparison] = await Promise.all([
       pageAll<ChannelManagerRunRow>((from) => sb.from("manager_shadow_runs")
         .select([
           "id", "position_id", "channel_slug", "manager_id", "manager_policy_version",
           "shadow_book_version", "configuration_epoch_id", "status", "evidence_state",
           "entry_at", "entry_price", "original_qty", "economic_mode", "peak_return_pct",
           "terminal_at", "terminal_return_pct", "terminal_pnl", "censored_at", "censor_code",
+          "account_id", "strategist_id", "admitted_at", "admission_source",
+          "first_quote_at",
         ].join(","))
         .gte("entry_at", COHORT_ISO)
         .order("entry_at", { ascending: true })
         .order("id", { ascending: true }), READ_OPTIONS),
       pageAll<ChannelManagerPositionRow>((from) => sb.from("positions")
-        .select("id,runner_of,realized_pnl")
+        .select("id,runner_of,realized_pnl,entry_features,qty,avg_entry_price,status,closed_at")
         .order("id", { ascending: true }), READ_OPTIONS),
+      readFixedManagerComparisonEvidence(createFixedEntryServiceClient(SB_URL,SB_SERVICE)),
     ]);
     const book = deriveChannelManagerEvidenceBook({
       managerRuns,
       positions,
+      fixedManagerComparison,
       generatedAt: new Date().toISOString(),
       cohortFrom: COHORT_FROM,
     });

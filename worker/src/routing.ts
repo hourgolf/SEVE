@@ -16,6 +16,8 @@
 // ============================================================================
 
 import type { AccountRow, ChannelConfig } from "./store.js";
+import { fixedEntryOwnershipPresent } from "../../lib/channels/fixedEntryOwnership.js";
+import { receiptBoundEntryPolicyFromRow } from "./receiptBoundEntryPolicy.js";
 
 export const SYNTH_DEFAULT: AccountRow = { id: "__default__", name: "default", mode: "unknown", cred_ref: null, is_armed: true, is_halted: false, master_daily_stop_usd: 0 };
 
@@ -87,7 +89,12 @@ export function groupChannelsByAccount(channels: ChannelConfig[], accounts: Acco
  *  account_id keeps its own id — the row lands in the fail-closed group (where
  *  nothing executes), not the default's (where a zero-held Alpaca read would
  *  phantom-reconcile it closed while the real lot rides on). */
-export function rowAccountIdOf(row: { strategist_id: string }, byChannelId: Map<string, ChannelConfig>, accounts: AccountRow[]): string {
+export function rowAccountIdOf(row: { strategist_id: string; entry_features?: Record<string, unknown> | null }, byChannelId: Map<string, ChannelConfig>, accounts: AccountRow[]): string {
+  if (fixedEntryOwnershipPresent(row)) {
+    const original = receiptBoundEntryPolicyFromRow(row);
+    return original?.policyVersion === "receipt-bound-entry-policy-v3" && original.configuration.accountId === "56daa293-e6bc-447d-83ac-2bfafb4d0ac1"
+      ? original.configuration.accountId : "__fixed_unresolved__";
+  }
   const ch = byChannelId.get(row.strategist_id);
   return ch?.account_id ? ch.account_id : resolveDefaultAccount(accounts).id;
 }

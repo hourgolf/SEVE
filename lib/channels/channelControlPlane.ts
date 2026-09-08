@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { FIXED_CONTRACT_ADMISSION_MODE, FIXED_CONTRACT_WORKER_COMPATIBILITY, fixedContractAdmissionPolicy, fixedContractScopeValid, type FixedContractAdmissionPolicy } from "./fixedContractAdmission";
 
 export const CHANNEL_CONTROL_PLANE_SCHEMA_VERSION = 1 as const;
 export const CHANNEL_CONTROL_PLANE_COMPILER_VERSION = "channel-control-plane-compiler-v1" as const;
@@ -427,6 +428,9 @@ function validateSpecShape(spec: ChannelSpecVersion): string[] {
   if (!spec.symbolScope.length || spec.symbolScope.some((symbol) => !/^[A-Z]{1,8}$/.test(symbol))) {
     errors.push(`${spec.slug}:symbol_scope`);
   }
+  if (spec.entryParameters.admissionSizingMode !== undefined
+      && (spec.entryParameters.admissionSizingMode !== FIXED_CONTRACT_ADMISSION_MODE
+        || !fixedContractScopeValid(spec))) errors.push(`${spec.slug}:admission_sizing_policy`);
   const entryDte = Number(spec.entryParameters.entryDte);
   const strikeOffset = Number(spec.entryParameters.strikeOffset);
   const premiumCap = Number(spec.entryParameters.premiumCap);
@@ -483,6 +487,7 @@ export interface DynamicReadinessEvidence {
 }
 
 export interface WorkerChannelProjection {
+  fixedContractAdmission?: FixedContractAdmissionPolicy;
   slug: string;
   cohort: "control" | "lab";
   domainId: string;
@@ -549,7 +554,7 @@ export function projectAdmissionPolicyReentry(
 
 export interface DashboardChannelProjection extends WorkerChannelProjection {
   accountName: string;
-  riskBudgetUsd: number;
+  riskBudgetUsd: number | null;
   premiumStopPct: number;
   bankTargetPct: number | null;
   runner: "none" | "a13" | "fixed-50" | "native-atr";
@@ -608,6 +613,10 @@ function compileValidation(
   if (new Set(specs.map((spec) => spec.id)).size !== specs.length) schemaErrors.push("spec:duplicate_id");
   if (new Set(specs.map((spec) => spec.slug)).size !== specs.length) schemaErrors.push("spec:duplicate_slug");
 
+  if (specs.some(spec => spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE)
+      && manifest.workerCompatibilityVersion !== FIXED_CONTRACT_WORKER_COMPATIBILITY) {
+    schemaErrors.push("manifest:fixed_contract_worker_compatibility");
+  }
   const riskErrors = specs.flatMap((spec) => {
     const errors: string[] = [];
     if (!Number.isInteger(spec.riskLimits.maxContracts) || spec.riskLimits.maxContracts < spec.quantity) {
@@ -827,6 +836,8 @@ export function compileReleaseManifest(
   const validationResults = compileValidation(manifest, channelSpecs, readiness);
   const validationReady = validationResults.every((result) => result.state === "pass");
   const workerRoots: WorkerChannelProjection[] = channelSpecs.map((spec) => ({
+    ...(spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE
+      ? { fixedContractAdmission: fixedContractAdmissionPolicy() } : {}),
     slug: spec.slug,
     cohort: spec.cohort,
     domainId: spec.collisionDomain,
@@ -872,7 +883,8 @@ export function compileReleaseManifest(
   const dashboardRoots: DashboardChannelProjection[] = channelSpecs.map((spec, index) => ({
     ...workerRoots[index],
     accountName: String(spec.exitParameters.accountName),
-    riskBudgetUsd: spec.riskLimits.maxRiskUsd,
+    riskBudgetUsd: spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE
+      ? null : spec.riskLimits.maxRiskUsd,
     premiumStopPct: spec.stopLoss.catastrophePct,
     bankTargetPct: spec.takeProfit.targetPct,
     runner: runtimeRunner(spec),

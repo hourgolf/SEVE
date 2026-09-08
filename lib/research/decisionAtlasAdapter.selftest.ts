@@ -108,7 +108,7 @@ assert.equal(logicalPaths[0]?.resultPerContractUsd, 10,
 assert.equal(logicalPaths[0]?.returnPct, 7.5,
   "logical manager return must use summed P&L over summed entry debit");
 
-const bounded = adaptDecisionAtlasSnapshot({
+const boundedInput: Parameters<typeof adaptDecisionAtlasSnapshot>[0] = {
   generatedAt: "2026-08-24T20:00:00.000Z",
   throughSession: "2026-08-24",
   snapshot: {
@@ -137,7 +137,14 @@ const bounded = adaptDecisionAtlasSnapshot({
     vbExactPathReceipts: [], vbExactManagerPathReceipts: [], activeChannelSpecs: [],
     activeChannelSpecDatabaseIdsByVersionKey: {}, currentConfigurationEpochId: "epoch-a",
   } as never,
-});
+};
+const bounded = adaptDecisionAtlasSnapshot(boundedInput);
+const originalExecution = boundedInput.snapshot.executionObservations[0];
+const protocolEvidence = { ...originalExecution, id: "recovery-protocol", account_id: "wrong-account",
+  reason: "fixed_entry_protocol:command", action: "reconcile", payload: { fixed_entry_protocol: "fixed-entry-intent-v1" } };
+assert.deepEqual(adaptDecisionAtlasSnapshot({ ...boundedInput, snapshot: { ...boundedInput.snapshot,
+  executionObservations: [...boundedInput.snapshot.executionObservations, protocolEvidence] } }), bounded,
+  "recovery records cannot establish ordinary execution facts or change any Atlas opportunity");
 assert.equal(bounded.opportunities.some((row) => row.session > "2026-08-24"), false,
   "a historical Atlas replay must not ingest evidence after its declared through-session");
 assert.equal(bounded.sourceNormalization?.rawSignalRows, 1,

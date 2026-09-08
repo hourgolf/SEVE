@@ -17,13 +17,14 @@ export function useChannelConfigDraft(
 ) {
   const [drafts, setDrafts] = useState<Record<string, ChannelConfigDraftPatch>>({});
   const slug = channel?.slug ?? "";
-  const active = !!slug && Object.prototype.hasOwnProperty.call(drafts, slug);
+  const active = !!slug && !activeSpec?.fixedContractAdmission && Object.prototype.hasOwnProperty.call(drafts, slug);
   const patch = active ? drafts[slug] : {};
   const baseConfig = channel
     ? passport?.release.state === "verified" && activeSpec
       ? {
         ...channel.config,
-        capital_pct: activeSpec.maxRiskUsd,
+        // Retained only for the legacy numeric draft type; fixed-policy controls are unavailable.
+        capital_pct: activeSpec.maxRiskUsd ?? channel.config.capital_pct,
         max_contracts: activeSpec.quantity,
         premium_stop_pct: activeSpec.stopLoss.catastrophePct,
         take_profit_pct: activeSpec.takeProfit.kind === "bank"
@@ -35,7 +36,7 @@ export function useChannelConfigDraft(
         : channel.config
     : undefined;
   const proposed = baseConfig ? { ...baseConfig, ...patch } : undefined;
-  const model = useMemo(() => channel && passport ? deriveChannelConfigDraft({
+  const model = useMemo(() => channel && passport && !activeSpec?.fixedContractAdmission ? deriveChannelConfigDraft({
     slug: channel.slug,
     baseConfig: baseConfig ?? channel.config,
     patch,
@@ -48,6 +49,7 @@ export function useChannelConfigDraft(
       ?? null,
   }) : null, [
     activeConfigurationEpochId,
+    activeSpec?.fixedContractAdmission,
     baseConfig,
     channel,
     passport,
@@ -55,7 +57,7 @@ export function useChannelConfigDraft(
   ]);
 
   const begin = () => {
-    if (!slug) return;
+    if (!slug || activeSpec?.fixedContractAdmission) return;
     setDrafts((current) => Object.prototype.hasOwnProperty.call(current, slug) ? current : { ...current, [slug]: {} });
   };
   const update = (next: ChannelConfigDraftPatch) => {

@@ -1,3 +1,4 @@
+import { fixedEntryExecutionDriver, fixedEntryOwnershipPresent, fixedEntryRequested } from "./fixedEntryExecutionDispatch.js";
 import { brokerTrace, quoteObservation } from "./decisionTrace.js";
 // ============================================================================
 //  Phase B execution core — the streaming worker as a REAL order-placer for
@@ -102,6 +103,7 @@ const reconcileConfirmed = (rowId: string): boolean => {
 };
 
 export interface ExecCtx {
+  fixedManagementSource?: "cycle" | "sweep";
   api: alpaca.Api;                        // cockpit P3: the account this channel's orders route to (default acct 1)
   accountId: string;                      // resolved routing identity stamped into Phase 1C evidence
   paperMode: boolean;                     // explicit observer admission safety gate
@@ -425,6 +427,7 @@ export async function executeExit(
   d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx, runner?: RunnerCfg,
   qualityPolicy?: ExitQualityPolicy,
 ): Promise<void> {
+  if (fixedEntryOwnershipPresent(row)) return fixedEntryExecutionDriver().exit(d, row, ctx);
   const occ = row.occ_symbol;
   const alp = ctx.alpacaByOcc.get(occ);
   const heldQty = ctx.remainingByOcc.get(occ) ?? (alp ? Math.max(0, Math.round(alp.qty)) : 0);
@@ -733,6 +736,7 @@ async function executeTranche(
 
 // ---- RECONCILE (desk row open, Alpaca flat) -------------------------------------
 export async function executeReconcile(d: ShadowDecision, row: store.PositionRow, ctx: ExecCtx): Promise<void> {
+  if (fixedEntryOwnershipPresent(row)) return fixedEntryExecutionDriver().reconcile(row, ctx);
   // 2-CYCLE GATE: Alpaca read flat for this row. A SINGLE empty/eventually-consistent getPositions read
   // must not book-and-close (it reappears next cycle → 09d re-rows → double-count). Require the orphan to
   // persist 2 consecutive cycles before booking; a row seen held again resets the count (noteRowHeld).
@@ -779,6 +783,7 @@ export async function executeReconcile(d: ShadowDecision, row: store.PositionRow
 export async function executeEntry(
   d: ShadowDecision, ch: store.ChannelConfig, spotClose: number, ctx: ExecCtx,
 ): Promise<void> {
+  if (fixedEntryRequested(ch, ctx)) return fixedEntryExecutionDriver().enter(d, ch, spotClose, ctx);
   const occ = d.occ!;
   const dir = d.direction!;
   // Strike from the OCC we actually trade — the SINGLE source of truth (audit 2026-07-10):
@@ -1039,6 +1044,7 @@ export async function executeEntry(
 export async function executeAdd(
   d: ShadowDecision, ch: store.ChannelConfig, row: store.PositionRow, ctx: ExecCtx,
 ): Promise<void> {
+  if (fixedEntryOwnershipPresent(row) || fixedEntryRequested(ch, ctx)) throw new Error("fixed_execution:pyramiding_prohibited");
   const occ = row.occ_symbol;
   const want = d.qty ?? 0;
   if (want <= 0) return;

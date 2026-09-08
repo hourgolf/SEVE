@@ -11,19 +11,20 @@
 //  Live order placement is Phase B (see README), deliberately not wired here.
 // ============================================================================
 
+import { isFixedContractAdmissionPolicy } from "../../lib/channels/fixedContractAdmission.js";
 import { startEntryTrace, quoteObservation } from "./decisionTrace.js";
 import { computeFeatures } from "../../engine/engine";
 import { macdAt } from "../../engine/macd";
 import { getStrategy } from "../../engine/registry";
 import { specToStrategyDef, specPremiumExit } from "../../engine/specEvaluate";
-import { roundTripCostUsd as engineRoundTrip, type CostModel } from "../../engine/cost";
+import { nativeEntryBeforeQuote, nativeEntryCost } from "./nativeEntryGuards.js";
 import type { Bar, Evaluate, Features, OptType, Position } from "../../engine/types";
 import { decidePyramidAdd } from "../../engine/pyramid"; // shared add-gate (pyramid shadow Phase A → no engine drift)
 import { specTrail, type StrategySpec } from "../../lib/desk/strategySpec";
 import { policy } from "./config.js";
 import { warn } from "./log.js";
 import { inEventWindow, dayTags } from "../../engine/market-events";
-import { isLastSessionBeforeHoliday, sessionCloseMin } from "../../engine/market-calendar";
+import { sessionCloseMin } from "../../engine/market-calendar";
 import { etParts, occSymbol, type AlpacaPosition, type AlpacaOrder } from "./alpaca.js";
 import { peakBidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
@@ -69,17 +70,6 @@ const PYRAMID_MAX_ADDS = 3; // shadow-detect default (the executor uses ch.pyram
 // count (maxAdds) + maxStack + never-average-down gate are the limiters, so it adds on each fresh leg.
 const pyramidShadowLogged = new Set<string>();
 
-// Cost-gate model: real bid/ask ("option_bars" source) + the worker's calibrated
-// slippage/commission. Mirrors the cron dispatcher's roundTripCostUsd, but via
-// the engine's own function so there's one cost definition.
-const COST_MODEL: CostModel = {
-  spreadSource: "option_bars",
-  modeledSpreadPct: 0.03,
-  modeledSpreadFloorUsd: 0.03,
-  slippageTicksPerSide: policy.SLIPPAGE_TICKS_PER_SIDE,
-  commissionPerContract: policy.COMMISSION_PER_CONTRACT,
-  crossSpread: true,
-};
 
 export interface ShadowDecision {
   slug: string;
@@ -482,53 +472,9 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
     // channel's symbol (the cycle builds one ctx per symbol).
     const occ = occSymbol(ch.underlying, entryExpiry ?? ctx.todayET, strike, dir);
 
-    let blocked: string | null = entryGuard;
-    if (!blocked && ch.status !== "armed") blocked = "not_armed";
-    if (!blocked && !entryExpiry) blocked = "no_1dte_chain";
-    // GAP_MIN knob (62_gap_min_knob.sql): the validated overnight-gap regime gate as per-channel
-    // CONFIG, so builtins can carry what the V3/ALT specs already do. 0 = off (byte-identical).
-    // FAIL-CLOSED like the spec condition: no computable gap → a gated channel stands down
-    // (self-heals next session). Blocked signals stamp 'gap_min' → gate-shadow scores them (A2).
-    if (!blocked && ch.gap_min > 0 && (ctx.gap == null || Math.abs(ctx.gap) < ch.gap_min)) blocked = "gap_min";
-    // C1 STACK CAP (64_stack_cap.sql, pre-registered): block the (N+1)th same-underlying+direction
-    // entry DESK-WIDE. fund.stack_cap_n 0 = OFF (dark until the post-A6 arming; registered value 4).
-    // Entries-only, never forces exits. Blocked signals stamp 'stack_cap' → gate-shadow scores their
-    // would-haves automatically — the C1 kill criterion's own data feed.
-    if (!blocked && (ctx.fund?.stack_cap_n ?? 0) > 0
-        && (ctx.deskStack?.get(`${ch.underlying.toUpperCase()}:${dir}`) ?? 0) >= ctx.fund!.stack_cap_n) {
-      blocked = "stack_cap";
-    }
-    // EVENT STAND-DOWN entry block (incl. twins — a machine entry into the FOMC
-    // window is a machine decision either way). event_policy='ignore' opts out.
-    if (!blocked && policy.EVENT_STANDDOWN && ch.event_policy !== "ignore"
-        && inEventWindow(ctx.todayET, ctx.rthCloseMin - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
-      blocked = "event_window";
-    }
-    // HOLIDAY-EVE cutoff block (2026-06-19, the Juneteenth strand fix): a late entry that rolls
-    // to the NEXT session's expiry on the last session before a market holiday can't honor the
-    // "swing the final 20 min, close same-day" premise — and a flatten miss strands it over the
-    // multi-day closure (06-18: 747C held Thu→Mon). Fail-safe: no calendar entry → no block.
-    if (!blocked && inCutoff && isLastSessionBeforeHoliday(ctx.todayET)) blocked = "holiday_eve_cutoff";
-    // EOD hard-flatten window (wall-clock): don't OPEN what the wall-clock backstop is about to
-    // force-flatten (the fast-exit sweep flattens same-session positions within EOD_HARD_FLATTEN_MIN).
-    if (!blocked && ctx.wallMinutesToClose <= policy.EOD_HARD_FLATTEN_MIN) blocked = "eod_flatten_window";
-    // BOOST (54_boost.sql): a boosted channel runs 2× for the day — RISK budget, the
-    // max_contracts ceiling, AND the daily-stop floor all double (auto-cleared nightly by
-    // the seve-clear-boosts cron). Replaces the inert SOLO. boost=1 when off → no change.
-    const boost = ch.boosted ? 2 : 1;
-    if (!blocked && (ch.daily_stop_usd > 0 || ch.daily_target_usd > 0)) {
-      try {
-        const realizedToday = await realizedTodayByChannel(ch.id, ctx.todayET);
-        if (ch.daily_stop_usd > 0 && realizedToday <= -ch.daily_stop_usd * boost) blocked = "daily_stop";
-        else if (ch.daily_target_usd > 0 && realizedToday >= ch.daily_target_usd * boost) blocked = "daily_target"; // win-and-done (A15)
-      } catch {
-        // FAIL CLOSED (audit 2026-07-10): a swallowed read error used to return 0 → both the
-        // daily_stop loss floor AND the win-and-done target no-oped (fail-open) and a bled-out
-        // channel kept adding risk through the outage. Can't read the floor → don't add risk;
-        // self-heals next cycle. The blocked signal row keeps the outage visible.
-        blocked = "daily_gate_unreadable";
-      }
-    }
+    const nativeGate = await nativeEntryBeforeQuote({ ch, ctx, dir, entryExpiry, inCutoff, realizedTodayByChannel });
+    let blocked = nativeGate.blocked;
+    const boost = nativeGate.boost;
 
     let ask = 0, bid = 0, roundTrip = 0, expectedMove = 0, qty = 0;
     let quoteAtMs: number | null = null;
@@ -550,13 +496,11 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       // on the next successful refresh).
       if (!blocked && ctx.chain.ageMs > 120_000) blocked = "stale_chain";
     }
-    if (!blocked && !policy.COST_GATE_EXEMPT.has(ch.slug)) {
-      roundTrip = engineRoundTrip({ strike, optType: dir, bid, ask, mid: ask > 0 && bid > 0 ? (ask + bid) / 2 : ask }, COST_MODEL);
-      expectedMove = delta * Math.max(0, f.atr) * 100; // informational (logged) — est. option $-move; NOT the gate input
-      // post-BS cost gate: the expected UNDERLYING move (atr × 100) must clear the round-trip
-      // cost by the optimized factor K. No option greek — K folds the old delta×ratio into one
-      // empirical knob == the engine gate every probe backtested (K=6.0). [[no-black-scholes]]
-      if (Math.max(0, f.atr) * 100 < policy.COST_GATE_K * roundTrip) blocked = "cost_gate";
+    if (!blocked) {
+      const cost = nativeEntryCost({ slug: ch.slug, strike, dir, bid, ask, delta, atr: f.atr });
+      roundTrip = cost.roundTrip;
+      expectedMove = cost.expectedMove;
+      blocked = cost.blocked;
     }
     if (!blocked) {
       // RISK-BASED sizing (two-dial model): capital_pct holds RISK $/trade; risk per contract =
@@ -574,8 +518,15 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       sizingVisited = true;
       effectiveSizingStopFraction = stopFrac;
       const riskPerContract = stopFrac * ask * 100;
-      qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor((ch.capital_pct * boost) / riskPerContract), ch.max_contracts * boost)) : 0;
-      if (qty === 0) blocked = "insufficient_capital";
+      if (ch.fixedContractAdmission !== undefined) {
+        // This intent comes from the verified receipt, before any provisional risk sizing.
+        const valid = ch.slug === "vb-macd-state" && isFixedContractAdmissionPolicy(ch.fixedContractAdmission);
+        qty = valid && Number.isFinite(ask) && Number.isFinite(bid) && ask > 0 && bid > 0 && bid <= ask ? 4 : 0;
+        if (qty === 0) blocked = valid ? "invalid_executable_quote" : "invalid_fixed_contract_policy";
+      } else {
+        qty = riskPerContract > 0 ? Math.max(0, Math.min(Math.floor((ch.capital_pct * boost) / riskPerContract), ch.max_contracts * boost)) : 0;
+      }
+      if (qty === 0 && !blocked) blocked = "insufficient_capital";
     }
     // ---- shadow "awareness" levers (forensics brief 2026-06-24) — LOG-ONLY, never block. ----
     // Computed for EVERY entry on EVERY channel so the shallow-VWAP / against-histogram / whipsaw-zone
@@ -598,7 +549,9 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
         // shadow awareness levers (log-only) — raw metrics + which tripped at the brief's thresholds:
         decisionTrace: startEntryTrace({ chain: ctx.chain, occ, sourceBarAtMs: ctx.sessionBars[ctx.sessionBars.length - 1].ts,
           quoteQueried: quoteAtMs != null, quoteAtMs, quote: selectedQuote, sizingVisited, qty,
-          sizingInputUsd: ch.capital_pct * boost, stopFraction: effectiveSizingStopFraction,
+          sizingInputUsd: ch.fixedContractAdmission ? null : ch.capital_pct * boost,
+          fixedContractMode: ch.fixedContractAdmission?.mode,
+          stopFraction: ch.fixedContractAdmission ? null : effectiveSizingStopFraction,
           nativeStopPct: ch.premium_stop_pct ?? policy.PREMIUM_STOP_PCT, blocked }),
         dirVwapAtr: +dirVwapAtr.toFixed(2), histRel: +histRel.toFixed(3), whipZone, orDepthAtr: orDepthAtr != null ? +orDepthAtr.toFixed(2) : null, aware },
     };
