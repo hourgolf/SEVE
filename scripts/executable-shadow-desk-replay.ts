@@ -1,3 +1,4 @@
+import { assertLegacyExecutableShadowBudget } from "../lib/channels/fixedContractAdmission";
 // SELECT-only incident/desk replay for the exact active paper roster. It uses
 // observed asks for entries, observed bids for exits, immutable active manager
 // specs, and chronological account/family/OCC occupancy. It never writes to
@@ -135,6 +136,7 @@ async function main(): Promise<void> {
   }
   const specs = control.compiled.channelSpecs.filter((spec) =>
     spec.executionPosture !== "observe-only");
+  for (const spec of specs) assertLegacyExecutableShadowBudget(spec, "desk replay");
   const specByChannel = new Map(specs.map((spec) => [spec.channelId, spec]));
   const range = etDayRangeUtc(session);
   const signals = await pageAll<SignalRow>((from, to) => sb.from("signals")

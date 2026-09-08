@@ -289,7 +289,7 @@ export function MobileRackRow({
                 <button type="button" disabled={!canTune} onClick={() => stepStop(250)} aria-label="increase stop per day">+</button>
               </div>
             </div>
-            <div className="m2-riskwrap">
+            {activeSpec?.fixedContractAdmission ? <div className="m2-riskwrap">4 contracts · broker affordability<br />No fixed dollar risk ceiling</div> : <div className="m2-riskwrap">
               <div
                 ref={faderRef}
                 className="m2-hfader"
@@ -302,7 +302,7 @@ export function MobileRackRow({
                 <div className="m2-hf-cap" style={{ left: `${riskFrac * 100}%` }} />
               </div>
               <div className="m2-dial-cap"><span className="m2-dial-lbl">risk</span><b className="num">{usd0(config.capital_pct)}</b></div>
-            </div>
+            </div>}
           </div>
 
           <div className="m2-padrow">

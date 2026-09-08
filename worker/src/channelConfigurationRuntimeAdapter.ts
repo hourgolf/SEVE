@@ -1,3 +1,5 @@
+import { supportsManifestCompatibility } from "./version.js";
+import { isFixedContractAdmissionPolicy, FIXED_CONTRACT_WORKER_COMPATIBILITY } from "../../lib/channels/fixedContractAdmission.js";
 import type {
   AdmissionPolicySpec,
   ChannelScalePolicy,
@@ -70,7 +72,7 @@ export interface NextSafeEntryEvaluation {
   channelSlug: string;
   accountId: string;
   quantity: number;
-  premiumCap: number;
+  premiumCap: number | null;
   aggregateDebit: number;
   configuration: Readonly<ConfigurationEpochIdentity> | null;
   orderAuthority: false;
@@ -199,6 +201,7 @@ function overlayRoot(channel: ChannelConfig, root: Readonly<ReceiptBoundRuntimeR
       : root.ratchetParameters.givebackPct ?? 0;
   return {
     ...channel,
+    ...(root.fixedContractAdmission ? { fixedContractAdmission: root.fixedContractAdmission } : {}),
     status: root.executionPosture === "paper" ? "armed" : "draft",
     is_active: true,
     executor: "stream",
@@ -253,7 +256,9 @@ export function applyReceiptBoundRuntimeFleetOverlay(input: {
     throw new Error(`receipt-bound runtime source has duplicate channels: ${[...new Set(duplicateSlugs)].sort().join(",")}`);
   }
   const roots = new Map(input.runtime.roots.map((root) => [root.slug, root]));
-  return input.channels.map((channel) => {
+  return input.channels.map((inputChannel) => {
+    // Never carry a previous runtime-only admission mode across rollback or removal.
+    const { fixedContractAdmission: _priorAdmission, ...channel } = inputChannel;
     const root = roots.get(channel.slug);
     if (!root) return {
       ...channel,
@@ -328,8 +333,13 @@ export function validateReceiptBoundRuntimeStartup(input: {
     blockers.push("runtime_configuration:duplicate_root");
   }
   if (input.runtime
-      && input.runtime.workerCompatibilityVersion !== input.workerCompatibilityVersion) {
+      && !supportsManifestCompatibility(input.runtime.workerCompatibilityVersion, input.workerCompatibilityVersion)) {
     blockers.push("runtime_configuration:worker_compatibility_mismatch");
+  }
+  if (input.runtime?.roots.some(root => root.fixedContractAdmission !== undefined
+    && (!isFixedContractAdmissionPolicy(root.fixedContractAdmission) || root.slug !== "vb-macd-state"
+      || root.quantity !== 4 || input.runtime?.workerCompatibilityVersion !== FIXED_CONTRACT_WORKER_COMPATIBILITY))) {
+    blockers.push("runtime_configuration:fixed_contract_policy_invalid");
   }
   try {
     if (input.runtime) {
@@ -379,8 +389,8 @@ export function evaluateNextSafeEntry(input: {
   }
   if (!(input.ask > 0)) blockers.push("runtime_configuration:ask_unavailable");
   const aggregateDebit = root && input.ask > 0 ? root.quantity * input.ask * 100 : 0;
-  if (root && input.ask > root.premiumCap) blockers.push("runtime_configuration:premium_cap");
-  if (root && aggregateDebit > root.aggregateDebitCap + 1e-9) {
+  if (root && !root.fixedContractAdmission && input.ask > root.premiumCap) blockers.push("runtime_configuration:premium_cap");
+  if (root && !root.fixedContractAdmission && aggregateDebit > root.aggregateDebitCap + 1e-9) {
     blockers.push("runtime_configuration:aggregate_debit_cap");
   }
   if (root && root.quantity > root.riskLimits.maxContracts) {
@@ -392,7 +402,7 @@ export function evaluateNextSafeEntry(input: {
     channelSlug: input.channelSlug,
     accountId: root?.accountId ?? input.routedAccountId,
     quantity: root?.quantity ?? 0,
-    premiumCap: root?.premiumCap ?? 0,
+    premiumCap: root?.fixedContractAdmission ? null : root?.premiumCap ?? 0,
     aggregateDebit,
     configuration: root?.configuration ?? null,
     orderAuthority: false,

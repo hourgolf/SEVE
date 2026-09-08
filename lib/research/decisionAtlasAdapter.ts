@@ -1,3 +1,7 @@
+import { FIXED_CONTRACT_ADMISSION_MODE } from "../channels/fixedContractAdmission";
+import { isFixedEntryProtocolObservation } from "./fixedEntryProtocolEvidence";
+import { fixedEntryOwnershipPresent } from "../channels/fixedEntryOwnership";
+import { applyFixedManagerComparison, type FixedManagerComparisonIndex } from "./fixedManagerComparison";
 import type { ChannelSpecVersion } from "@/lib/channels/channelControlPlane";
 import { buildOperatorPaperCapacityEnvelope } from "@/lib/channels/channelPortfolioCapacityPolicy";
 import { etDateOf, type LogicalTrade, type ProfitabilityLedger } from "@/lib/profitability/profitabilityLedger";
@@ -169,6 +173,7 @@ export interface AtlasPositionContextRow {
 }
 
 export interface DecisionAtlasSourceSnapshot {
+  fixedManagerComparison?: import("./fixedManagerComparison").FixedManagerComparisonIndex;
   ledger: ProfitabilityLedger;
   /**
    * Minimal position context used by downstream entry-cohort research. Older
@@ -260,6 +265,7 @@ export function buildVirtualEpisodeIds(
 export function buildLogicalManagerPaths(
   managerRuns: readonly ChannelManagerRunRow[],
   tradeByPosition: ReadonlyMap<string, LogicalTrade>,
+  fixed?: {positionIds:ReadonlySet<string>;evidence?:FixedManagerComparisonIndex},
 ): AtlasManagerPath[] {
   interface Group {
     trade: LogicalTrade;
@@ -268,7 +274,14 @@ export function buildLogicalManagerPaths(
     runs: ChannelManagerRunRow[];
   }
   const groups = new Map<string, Group>();
-  for (const run of managerRuns) {
+  for (const original of managerRuns) {
+    const tradeIdentity = tradeByPosition.get(original.position_id);
+    const fixedPositionIds = new Set([...fixed?.positionIds ?? [],...Object.keys(fixed?.evidence ?? {})]);
+    const inferredFixed = tradeIdentity && Object.prototype.hasOwnProperty.call(tradeIdentity,"fixedIntentSettlementId");
+    const run = applyFixedManagerComparison(original,{fixedPositionIds:inferredFixed
+      ? new Set([...fixedPositionIds,original.position_id]) : fixedPositionIds,
+      evidence:!inferredFixed || tradeIdentity?.censorCodes.includes("fixed_intent_evidence_unavailable_or_drifted")
+        ? undefined : fixed?.evidence});
     const trade = tradeByPosition.get(run.position_id);
     if (!trade) continue;
     const opportunityId = tradeLogicalId(trade);
@@ -365,7 +378,9 @@ function tradeOpportunity(trade: LogicalTrade, layer: AtlasOpportunity["evidence
     maePct: trade.maePct,
     captureRatio: trade.mfeCaptureRatio,
     stopExposurePerContractUsd: matchingActiveSpec
-      ? matchingActiveSpec.riskLimits.maxRiskUsd / matchingActiveSpec.quantity : null,
+      ? matchingActiveSpec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE
+        ? (trade.entryDebitUsd != null && trade.quantity > 0 ? trade.entryDebitUsd / trade.quantity * matchingActiveSpec.stopLoss.catastrophePct / 100 : null)
+        : matchingActiveSpec.riskLimits.maxRiskUsd / matchingActiveSpec.quantity : null,
     sourceRefs: [`profitability-ledger:${trade.id}`, `configuration:${trade.configuration.key}`],
   };
 }
@@ -515,6 +530,7 @@ export function adaptDecisionAtlasSnapshot(input: {
   const logicalBySignal = new Map<string, string>();
   const executionByLogical = new Map<string, AtlasExecutionRow[]>();
   for (const row of snapshot.executionObservations) {
+    if (isFixedEntryProtocolObservation(row)) continue;
     const trade = row.position_id ? tradeByPosition.get(row.position_id) : row.opportunity_id
       ? tradeByOpportunity.get(row.opportunity_id) : undefined;
     const signalId = payloadSignalId(row);
@@ -642,19 +658,25 @@ export function adaptDecisionAtlasSnapshot(input: {
       sourceRefs: [`virtual_trades:${virtual.signal_id}`, "limitation:signal-row-missing"],
     });
   }
-  const managerPaths = buildLogicalManagerPaths(snapshot.managerRuns, tradeByPosition);
+  const managerPaths = buildLogicalManagerPaths(snapshot.managerRuns, tradeByPosition, {
+    positionIds:new Set((snapshot.positions ?? []).filter(fixedEntryOwnershipPresent).map(r => r.id)),
+    evidence:snapshot.fixedManagerComparison });
   return {
     generatedAt: input.generatedAt,
     throughSession: input.throughSession,
     opportunities,
     managerPaths,
     accountBudgets: budgets(snapshot),
+    ...(snapshot.activeChannelSpecs.some(spec => (spec.executionPosture ?? "paper") === "paper"
+      && spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE)
+      ? { portfolioReplayUnavailableReason: "The current roster contains fixed-contract broker-affordability admission. Historical broker options capacity is not verified for this replay; legacy percentage envelopes and retired MACD dollar caps cannot establish current-roster sizing or displacement results." }
+      : {}),
     activeChannels: snapshot.activeChannelSpecs.map((spec) => spec.slug),
     catalogChannels: snapshot.strategists.map((row) => row.slug),
     currentChannelConfigurationEras: Object.fromEntries([...currentChannelSpecIdBySlug]
       .map(([slug, id]) => [slug, `channel-spec:${id}`])),
     channelPremiumCaps: Object.fromEntries(snapshot.activeChannelSpecs.map((spec) =>
-      [spec.slug, spec.maxDebitUsd / spec.quantity])),
+      [spec.slug, spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE ? null : spec.maxDebitUsd / spec.quantity])),
     channelMaxEntriesPerSession: Object.fromEntries(snapshot.activeChannelSpecs.map((spec) => {
       const configured = number(spec.entryParameters.maxEntriesPerSession);
       return [spec.slug, configured != null && configured >= 1 ? Math.floor(configured) : 1];

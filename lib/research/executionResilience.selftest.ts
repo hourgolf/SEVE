@@ -22,6 +22,14 @@ assert.equal(clean.traces.partialFills, 1);
 assert.equal(clean.traces.positionRoutes, 1);
 assert.equal(clean.traces.guardedBrokerResults, 0);
 assert.equal(clean.orderAuthority, false);
+const protocol = { ...decision, id: "protocol", trace_id: "new-protocol-trace", action: "reconcile",
+  reason: "fixed_entry_protocol:intent", payload: { fixed_entry_protocol: "fixed-entry-intent-v1" } };
+const withProtocol = { ...base, executionObservations: [...base.executionObservations, protocol,
+  { ...protocol, id: "protocol-shared-trace", trace_id: decision.trace_id }] } as unknown as DecisionAtlasSourceSnapshot;
+assert.deepEqual(buildExecutionResilienceReport({ snapshot: withProtocol,
+  generatedAt: "2026-08-07T20:01:00Z", throughSession: "2026-08-07" }), clean);
+assert.ok(buildExecutionResilienceReport({ snapshot: { ...base, executionObservations: [broker, { ...protocol, trace_id: broker.trace_id }] },
+  generatedAt: "2026-08-07T20:01:00Z", throughSession: "2026-08-07" }).issues.some(i => i.code === "BROKER_WITHOUT_DECISION"));
 
 const overfill = buildExecutionResilienceReport({ snapshot: { ...base,
   executionObservations: [decision, { ...broker, filled_qty: 3 }] } as unknown as DecisionAtlasSourceSnapshot,

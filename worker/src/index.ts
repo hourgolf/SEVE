@@ -50,7 +50,7 @@ import { makeExitGuard, sweepExitAllowed } from "./exitGuard.js";
 import { captureDecisionObservation, captureManagerShadowObservation } from "./executionObservation.js";
 import { advanceManager, MANAGER_IDS, managerIdsForChannel, PB_RIDE_2_MANAGER_ID, recoverManagerState, type ManagerState } from "../../engine/managerPolicy.js";
 import { specPremiumExit } from "../../engine/specEvaluate";
-import { shadowManagerBookTick } from "./managerShadowBook.js";
+import { shadowManagerBookTick,replayFixedManagerCohorts } from "./managerShadowBook.js";
 import { captureFamilyAdmissionObservations } from "./familyAdmission.js";
 import type { FamilyAdmissionInput } from "./familyAdmissionModel.js";
 import type { StrategySpec } from "../../lib/desk/strategySpec";
@@ -142,12 +142,38 @@ import {
   channelControlMutationWindow,
 } from "../../lib/channels/channelControlMutationWindow.js";
 import { SingleFlightReload } from "./singleFlightReload.js";
+import { createFixedEntryServiceClient } from "./fixedEntryServiceClient.js";
+import { fixedEntryOwnershipPresent } from "../../lib/channels/fixedEntryOwnership.js";
+import { makeFixedEntryLegacyOwnershipGuard, fixedLegacyProtectionScope, FixedEntryOwnershipError } from "./fixedEntryLegacyOwnership.js";
+import { makeFixedEntryRuntimeDriver } from "./fixedEntryRuntimeDriver.js";
+import { makeFixedEntryLiveAuthority } from "./fixedEntryLiveAuthority.js";
+import { makeFixedEntryLiveManagement } from "./fixedEntryLiveManagement.js";
+import { makeFixedEntryReportingReplay } from "./fixedEntryReportingReplay.js";
+import { installFixedEntryExecutionDriver } from "./fixedEntryExecutionDispatch.js";
+import { makeFixedEntryRuntimeClock } from "./fixedEntryRuntimeClock.js";
+import { makeFixedManagementQuoteCache } from "./fixedEntryManagementQuoteCache.js";
+import { fixedStartupRecoveryNeeded } from "./fixedEntryStartupRecovery.js";
 
 const RTH_OPEN = 570, RTH_CLOSE = 960;
 const releaseMode = (): boolean => config.day1ReleaseEnabled || config.rc54ReleaseEnabled;
 let releaseStartupReceipt: Record<string, unknown> | null = null;
 let currentStartupReceipt: Record<string, unknown> | null = null;
 let releaseSourceExecutorBoundaryReady = !releaseMode();
+let fixedCaptureReady = false;
+let fixedStopping = false;
+let fixedRecoveryOnly = false;
+const nonFixedStartupCleanup:Array<()=>unknown>=[];
+function setMainInterval(callback:()=>void,delay:number):ReturnType<typeof setInterval>{
+  const timer=setInterval(()=>{if(!fixedRecoveryOnly&&!fixedStopping)callback();},delay);
+  nonFixedStartupCleanup.push(()=>clearInterval(timer));return timer;
+}
+function stopNonFixedStartupResources():void{
+  for(const stop of nonFixedStartupCleanup.splice(0)){
+    try{void Promise.resolve(stop()).catch(()=>{});}catch{/* Original recovery remains independent. */}
+  }
+}
+const fixedBuyInfrastructureReady=()=>!fixedRecoveryOnly && releaseSourceExecutorBoundaryReady
+  && fixedCaptureReady && currentStartupReceipt!==null;
 let receiptBoundRuntime: Readonly<ReceiptBoundRuntimeConfiguration> | null = null;
 let receiptBoundAdmissionRootResolver: Rc54AdmissionRootResolver | null = null;
 let receiptBoundAdmissionPolicies:
@@ -158,6 +184,9 @@ let activationPreviewWatchBusy = false;
 // Phase B posture: ALL of (DRY_RUN=false, LIVE_TRADING=true, service role) — the
 // two-key turn plus credentials. Anything less = shadow, exactly as Phase A.
 const liveMode = (): boolean => !config.dryRun && config.liveTrading && config.hasServiceRole;
+const fixedServiceClient = config.hasServiceRole
+  ? createFixedEntryServiceClient(config.supabaseUrl, config.supabaseServiceKey) : null;
+const fixedLegacyOwnershipGuard = fixedServiceClient ? makeFixedEntryLegacyOwnershipGuard(fixedServiceClient) : null;
 const operatorAccountLabel = (account: Pick<store.AccountRow, "id">): string =>
   paperAccountLabel(account.id, "PAPER ACCOUNT");
 // A channel this instance EXECUTES: stream-owned + one of THIS worker's symbols.
@@ -269,7 +298,7 @@ let reloadPending = false;
 let cycling = false;
 
 async function acknowledgePendingChannelActivationPreviews(): Promise<void> {
-  if (!config.channelActivationPreviewWatcherEnabled
+  if (fixedRecoveryOnly || fixedStopping || !config.channelActivationPreviewWatcherEnabled
       || activationPreviewWatchBusy) return;
   // The worker is an independent service-role writer, so it must enforce the
   // same session boundary as the dashboard instead of trusting route guards.
@@ -318,6 +347,7 @@ async function acknowledgePendingChannelActivationPreviews(): Promise<void> {
         );
         continue;
       }
+      if(fixedRecoveryOnly||fixedStopping)return;
       const write = await store.acknowledgeChannelActivationPreview(
         stage.acknowledgementRpcArgs,
       );
@@ -363,6 +393,7 @@ async function acknowledgePendingChannelActivationPreviews(): Promise<void> {
         );
         continue;
       }
+      if(fixedRecoveryOnly||fixedStopping)return;
       const write = await store.acknowledgeChannelRosterBundle(
         stage.acknowledgementRpcArgs,
       );
@@ -429,9 +460,54 @@ function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout
  *  absent from env — null = SHADOW ONLY (decide+log, never route an order to the
  *  wrong account). The default account always resolves to ACCT1_API. */
 function apiForAccount(acct: store.AccountRow): alpaca.Api | null {
-  if (!acct.cred_ref) return alpaca.ACCT1_API;
-  const creds = config.altAccounts[acct.cred_ref];
-  return creds ? alpaca.makeApi(creds.key, creds.secret) : null;
+  const creds = acct.cred_ref ? config.altAccounts[acct.cred_ref] : null;
+  const api = !acct.cred_ref ? alpaca.ACCT1_API : creds ? alpaca.makeApi(creds.key, creds.secret) : null;
+  if (!api || !fixedLegacyProtectionScope(acct.id, "SPY")) return api;
+  return { ...api, beforeOrder: async symbol => {
+    if (!fixedLegacyProtectionScope(acct.id, symbol)) return;
+    if (!fixedLegacyOwnershipGuard) throw new FixedEntryOwnershipError();
+    await fixedLegacyOwnershipGuard(acct.id, symbol);
+  } };
+}
+// Original-intent recovery has its own clock and exact-OCC quote cache. It
+// never inherits current-row/roster filters or locks from legacy execution.
+const fixedManagementQuote = makeFixedManagementQuoteCache({now:Date.now,read:alpaca.snapshotOptionsTargeted});
+const fixedStatusSeen = new Map<string,number>();
+const fixedRuntime = fixedServiceClient ? makeFixedEntryRuntimeDriver(fixedServiceClient,BOOT_ID,{
+  now:Date.now,
+  submissionEnabled:side=>liveMode()&&!fixedStopping && (side!=="buy" || fixedBuyInfrastructureReady()),
+  ...makeFixedEntryLiveAuthority(fixedServiceClient,{now:Date.now,liveMode:()=>liveMode()&&!fixedStopping,
+    infrastructureReady:fixedBuyInfrastructureReady,
+    workerCompatibilityVersion:RC54_WORKER_VERSION,apiForAccount,
+    bars:symbol=>barsBySym.get(symbol)?.all()??[],chain:symbol=>chainBySym.get(symbol)??null}),
+  ...makeFixedEntryLiveManagement(fixedServiceClient,{now:Date.now,liveMode:()=>liveMode()&&!fixedStopping,
+    apiForAccount,quote:fixedManagementQuote,eventPolicy:{enabled:policy.EVENT_STANDDOWN,
+      beforeMinutes:policy.EVENT_FLATTEN_MIN_BEFORE,afterMinutes:policy.EVENT_RESUME_MIN_AFTER}}),
+  executionSettings:()=>({spreadCapture:config.spreadCapture,ladder:{...config.spreadCaptureLadder}}),
+  onCommand:async()=>{fixedClock?.kick("sweep");},
+  onCoverage:async()=>{fixedClock?.kick("sweep");},
+  onReporting:makeFixedEntryReportingReplay(fixedServiceClient,BOOT_ID,{
+    cohorts:(intent,cohorts)=>replayFixedManagerCohorts(fixedServiceClient,intent,cohorts)}),
+  status:async(intentId,state,reasons)=>{
+    const key=JSON.stringify([intentId,state,reasons]),now=Date.now();
+    if(now-(fixedStatusSeen.get(key)??-Infinity)<60_000)return;
+    fixedStatusSeen.set(key,now);
+    // Informational telemetry cannot await/hold the next native exit pass.
+    void store.journal(state==="unresolved"||state==="reporting-unconfirmed"?"WARN":"EXEC",
+      `fixed-entry ${state}`,{intent_id:intentId,reasons:[...reasons],boot_id:BOOT_ID}).catch(()=>{});
+  },
+}) : null;
+const fixedClock = fixedRuntime ? makeFixedEntryRuntimeClock({now:Date.now,
+  recoverAll:source=>fixedRuntime.recoverAll(source),failure:()=>warn("fixed-entry global recovery unavailable")}) : null;
+let fixedTimer:ReturnType<typeof setInterval>|null=null;
+function startFixedRecovery():void {
+  if(!liveMode()||!fixedRuntime||!fixedClock||fixedTimer)return;
+  installFixedEntryExecutionDriver(fixedRuntime);
+  fixedClock.kick("cycle");void fixedClock.poll();
+  fixedTimer=setInterval(()=>{void fixedClock.poll();},250);
+}
+function stopFixedRecovery():void {
+  fixedStopping=true;fixedClock?.stop();if(fixedTimer)clearInterval(fixedTimer);fixedTimer=null;
 }
 type AccountGroup = { account: store.AccountRow; api: alpaca.Api | null; channels: store.ChannelConfig[] };
 /** Group channels by their effective account (cockpit P3). */
@@ -530,7 +606,10 @@ async function executeDecisionBatch(batch: DecisionExecutionBatch, deskStack: Ma
       evidenceBlocked = "account_manage_only";
     else if (!evidenceBlocked && (d.action === "exit" || d.action === "add" || d.action === "reconcile") && !row)
       evidenceBlocked = "position_row_missing";
-    captureDecisionObservation({
+    // Fixed management reports the immutable first exit latch and original
+    // entry epoch. A legacy bar-time receipt would invent a second exit trace
+    // on every recovery pass, including after the current roster changes.
+    if (!(row && fixedEntryOwnershipPresent(row) && (d.action === "exit" || d.action === "reconcile"))) captureDecisionObservation({
       channel: ch,
       decision: finalDecisionEvidence(evidenceBlocked === (d.blocked ?? null) ? d : { ...d, blocked: evidenceBlocked }, evidenceBlocked),
       accountId: g.account.id,
@@ -937,6 +1016,8 @@ async function orphanSweep(
 }
 
 async function cycle(trigger: string): Promise<void> {
+  fixedClock?.kick("cycle");
+  if(fixedRecoveryOnly||fixedStopping)return;
   if (cycling) { return; } // never overlap cycles
   cycling = true;
   try {
@@ -1467,6 +1548,8 @@ function report(trigger: string, equity: number, ds: ShadowDecision[]): void {
 // PRICE BASIS (audit 2026-07-11, 1b #6): every price trigger + the MFE/MAE peak
 // state evaluates the fresh EXECUTABLE BID (we sell to close); mid = diagnostic.
 async function fastExitSweep(): Promise<void> {
+  fixedClock?.kick("sweep");
+  if(fixedRecoveryOnly||fixedStopping)return;
   // audit 2026-07-11 (1b #8): OWN mutex — the sweep used to bail on (and hold) the full-cycle
   // `cycling` flag, so a slow or HUNG bar-close cycle silenced every backstop below (halt/EOD/
   // event flatten + premium stops), and a wedged sweep blocked cycles right back. Now the sweep
@@ -1553,6 +1636,7 @@ async function fastExitSweep(): Promise<void> {
         r.entry_features?.release_evidence,
       );
       const exec: ExecCtx = {
+        fixedManagementSource: "sweep",
         api,
         accountId: g.account.id,
         paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
@@ -1818,6 +1902,8 @@ async function onReconnect(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  void store.openRun(WORKER_RUNTIME_VERSION);
+  startFixedRecovery();
   info(`SEVE streaming worker ${WORKER_RUNTIME_VERSION} · sealed strategy ${ACTIVE_WORKER_VERSION} — the third engine driver`);
   const writeMode = config.hasServiceRole
     ? (config.shadowWriteEvents ? "events" : "none (service role, events off)")
@@ -1825,16 +1911,16 @@ async function main(): Promise<void> {
   info(`feeds: stock=${config.stockFeed} opt=${config.optFeed} · dryRun=${config.dryRun} · liveTrading=${config.liveTrading} · writes=${writeMode}`);
   if (config.day1ReleaseEnabled && config.rc54ReleaseEnabled) {
     error("DAY1_RELEASE_ENABLED and RC54_RELEASE_ENABLED are mutually exclusive. Refusing to stack two release overlays.");
-    process.exit(1);
+    throw new Error("worker_startup_validation_refused");
   }
   if (config.day1ReleaseEnabled && config.day1ReleaseExpectedSha256 !== DAY1_RELEASE_CONFIGURATION_SHA256) {
     error(`Day 1 release checksum mismatch: expected env ${config.day1ReleaseExpectedSha256 || "<missing>"}, code ${DAY1_RELEASE_CONFIGURATION_SHA256}. Refusing to start.`);
-    process.exit(1);
+    throw new Error("worker_startup_validation_refused");
   }
   if (config.rc54ReleaseEnabled
       && config.rc54ReleaseExpectedSha256 !== RC54_RELEASE_CONFIGURATION_SHA256) {
     error(`RC5.4 release checksum mismatch: expected env ${config.rc54ReleaseExpectedSha256 || "<missing>"}, code ${RC54_RELEASE_CONFIGURATION_SHA256}. Refusing to start.`);
-    process.exit(1);
+    throw new Error("worker_startup_validation_refused");
   }
   if (config.labCanaryEnabled) {
     const errors = validateLabCanaryReleaseDraft({
@@ -1843,7 +1929,7 @@ async function main(): Promise<void> {
       release: null,
     });
     error(`LAB canary activation refused (${errors.join(", ")}). Foundation ${LAB_CANARY_FOUNDATION_ID} is prepared but tomorrow's roster/configuration is not sealed.`);
-    process.exit(1);
+    throw new Error("worker_startup_validation_refused");
   }
   // Boot flags → the DB journal (2026-07-06): env-gated safety switches were previously
   // invisible outside Railway logs — an operator flipping ORPHAN_FLATTEN had no in-band
@@ -1851,7 +1937,6 @@ async function main(): Promise<void> {
   void store.journal("EXEC", `boot: ${WORKER_RUNTIME_VERSION} · sealedStrategy=${ACTIVE_WORKER_VERSION} · orphanFlatten=${config.orphanFlatten ? "ARMED" : "detect-only"} · symbols=${SYMBOLS.join(",")}`, { boot_id: BOOT_ID, instance_id: INSTANCE_ID });
   // Crash-attribution ledger (external-review P4): open this run + close any prior un-ended run
   // as abrupt. Fail-open, off the trade path. See store.openRun / worker_runs / 67_worker_runs.sql.
-  void store.openRun(WORKER_RUNTIME_VERSION);
 
   // Phase B posture — the TWO-KEY turn. Going live requires DRY_RUN=false AND
   // LIVE_TRADING=true AND the service role, together; a partial flip refuses to
@@ -1860,7 +1945,7 @@ async function main(): Promise<void> {
   // cron keeps everything else, and defers via the worker_heartbeat dead-man.
   if (!config.dryRun && !(config.liveTrading && config.hasServiceRole)) {
     error("DRY_RUN=false requires LIVE_TRADING=true AND the service role (the two-key turn). Refusing to start.");
-    process.exit(1);
+    throw new Error("worker_startup_validation_refused");
   }
   if (config.liveTrading && config.dryRun) {
     warn("LIVE_TRADING=true but DRY_RUN=true — staying in SHADOW (set DRY_RUN=false to complete the two-key turn).");
@@ -1876,25 +1961,25 @@ async function main(): Promise<void> {
   catch (e) {
     if (releaseMode()) {
       error(`config: sealed RC5 initial validation failed — ${(e as Error).message}; refusing to start`);
-      process.exit(1);
+      throw new Error("worker_startup_validation_refused");
     }
     warn(`config: initial load failed — ${(e as Error).message}; will retry via realtime/poll`);
   }
   if (config.day1ReleaseEnabled && (!cfg.fund || DAY1_ROOTS.some((root) => !cfg.channels.some((channel) => channel.slug === root.slug)))) {
     error("Day 1 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
-    process.exit(1);
+    throw new Error("worker_startup_validation_refused");
   }
   if (config.rc54ReleaseEnabled
       && (!cfg.fund || (receiptBoundRuntime?.roots ?? RC54_ROOTS).some((root) =>
         !cfg.channels.some((channel) => channel.slug === root.slug)))) {
     error("RC5.4 release configuration is incomplete after the initial read. Refusing to start rather than running an unsealed roster.");
-    process.exit(1);
+    throw new Error("worker_startup_validation_refused");
   }
   if (config.rc54ReleaseEnabled) {
     const openAtBoot = await store.getOpenPositionsStrict();
     if (openAtBoot == null) {
       error("RC5.4 cannot prove the open-position policy state at startup. Refusing to establish runtime authority on unknown desk state.");
-      process.exit(1);
+      throw new Error("worker_startup_validation_refused");
     }
     if (receiptBoundRuntime) {
       const restart = validateReceiptBoundRc54RestartRows({
@@ -1904,11 +1989,11 @@ async function main(): Promise<void> {
       });
       if (!restart.ok) {
         error(`Receipt-bound RC5.4 restart validation failed: ${restart.errors.join(";")}. Refusing current-config fallback for open positions.`);
-        process.exit(1);
+        throw new Error("worker_startup_validation_refused");
       }
     } else if (openAtBoot.length) {
       error(`RC5.4 requires a flat era boundary; ${openAtBoot.length} position row(s) were already open. Refusing to mix prior-era management or occupancy into the new release.`);
-      process.exit(1);
+      throw new Error("worker_startup_validation_refused");
     }
   }
 
@@ -1925,15 +2010,17 @@ async function main(): Promise<void> {
   }
   if (releaseMode() && !heldContractCapture) {
     error("Sealed RC5 required held-contract capture is not runtime-ready before the boot decision. Refusing to start.");
-    process.exit(1);
+    throw new Error("worker_startup_validation_refused");
   }
   heldContractCapture?.start();
+  if(heldContractCapture)nonFixedStartupCleanup.push(()=>heldContractCapture!.stop());
+  fixedCaptureReady=!!heldContractCapture;
 
   info(`config: ${cfg.fund ? `fund cap $${cfg.fund.total_capital_usd} mode=${cfg.fund.mode} halted=${cfg.fund.is_halted}` : "fund MISSING"}, ${cfg.channels.length} channels [${cfg.channels.map((c) => `${c.slug}:${c.status}`).join(", ")}]`);
   if (config.day1ReleaseEnabled) {
     if (!releaseStartupReceipt) {
       error("Day 1 active-settings receipt is unavailable after validation. Refusing to start.");
-      process.exit(1);
+      throw new Error("worker_startup_validation_refused");
     }
     const receipt = {
       ...releaseStartupReceipt,
@@ -1947,7 +2034,7 @@ async function main(): Promise<void> {
   } else if (config.rc54ReleaseEnabled) {
     if (!releaseStartupReceipt) {
       error("RC5.4 active-settings receipt is unavailable after validation. Refusing to start.");
-      process.exit(1);
+      throw new Error("worker_startup_validation_refused");
     }
     const receipt = {
       ...releaseStartupReceipt,
@@ -2017,18 +2104,18 @@ async function main(): Promise<void> {
   try { await seed(); }
   catch (e) { error(`seed failed after retries — continuing; the websocket will populate bars live (${(e as Error).message})`); }
 
-  store.subscribeConfig(() => { reloadPending = true; });
-  setInterval(() => { reloadPending = true; }, 30_000); // poll fallback if realtime is off
+  nonFixedStartupCleanup.push(store.subscribeConfig(() => { if(!fixedRecoveryOnly&&!fixedStopping)reloadPending = true; }));
+  setMainInterval(() => { reloadPending = true; }, 30_000); // poll fallback if realtime is off
   if (config.channelActivationPreviewWatcherEnabled) {
     void acknowledgePendingChannelActivationPreviews();
-    setInterval(() => {
+    setMainInterval(() => {
       void acknowledgePendingChannelActivationPreviews();
     }, 30_000); // one-shot draft acknowledgement; operator window is five minutes
   }
   // Run-liveness beat (external-review P4): freshens worker_runs.last_heartbeat_at + memory_rss
   // every 60s REGARDLESS of live/shadow, so a crash gap and an RSS climb are both visible even
   // when the trading heartbeat is silent (shadow / outside RTH). Fail-open telemetry.
-  setInterval(() => { void store.runHeartbeat(); }, 60_000);
+  setMainInterval(() => { void store.runHeartbeat(); }, 60_000);
 
   // Decide once against the latest known bar at boot (validates the pipeline + is
   // useful when booting mid-session); thereafter every bar-close drives it.
@@ -2045,16 +2132,18 @@ async function main(): Promise<void> {
     });
   }
   const stream = new StockBarStream(SYMBOLS, onBar, onReconnect, intraminuteCapture?.observer());
+  nonFixedStartupCleanup.push(()=>stream.stop());
+  if(intraminuteCapture)nonFixedStartupCleanup.push(()=>intraminuteCapture!.stop());
   intraminuteCapture?.start();
   stream.start();
 
   // Phase B: the fast premium-exit sweep (no-op in shadow / outside RTH / flat).
-  setInterval(() => { void fastExitSweep(); }, Math.max(5, config.fastExitSec) * 1000);
+  setMainInterval(() => { void fastExitSweep(); }, Math.max(5, config.fastExitSec) * 1000);
 
   // Phase 1G-B portable-manager shadow book: a separate, observation-only
   // clock which keeps running after the actual position closes. DARK unless the
   // explicit env flag is enabled; it owns no execution or broker-order imports.
-  setInterval(() => { void shadowManagerBookTick({
+  setMainInterval(() => { void shadowManagerBookTick({
     paperMode: cfg.fund?.mode?.toLowerCase() === "paper",
     channels: cfg.channels, accounts: cfg.accounts,
     heldContractCapture,
@@ -2065,20 +2154,20 @@ async function main(): Promise<void> {
   // (docs/data-capture.md). Boot run = catch-up for any day missed while down; the timer fires
   // once post-close per ET day. Off the trade path; no-op without the service role.
   void archiveQuotesToStorage("boot");
-  setInterval(() => { void maybeArchiveTick(); }, 20 * 60_000); // every 20 min; self-gates to once/day post-close
+  setMainInterval(() => { void maybeArchiveTick(); }, 20 * 60_000); // every 20 min; self-gates to once/day post-close
 
   // SHADOW §03 PANEL (Mac-independent): run the existing day-report (override/foul-out
   // scorecard + benched-sim) from this always-on worker post-close, so the panel stays
   // current with no Mac. Reuses scripts/shadow-cron.ts as a NON-BLOCKING child (the heartbeat
   // keeps beating while it runs); off the trade path; no-op without the service role.
-  setInterval(() => { void maybePublishForensicsTick(); }, 20 * 60_000); // self-gates to once/day post-close
+  setMainInterval(() => { void maybePublishForensicsTick(); }, 20 * 60_000); // self-gates to once/day post-close
 
   // PRE-OPEN IDLE BEAT: the cron wakes at 09:00 ET but bars (hence cycles/sweeps)
   // start at 09:30 — the heartbeat read stale every morning and the cron's
   // executor gate WARN-flooded "stream heartbeat STALE" per channel per minute
   // (310 lines on 06-12). Beat once a minute through 08:55–09:35 so the gate
   // reads FRESH from the cron's first cycle. Harmless on weekends (no cron).
-  setInterval(() => {
+  setMainInterval(() => {
     if (!liveMode()) return;
     const m = alpaca.etParts(Date.now()).min;
     if (m >= RTH_OPEN - 35 && m < RTH_OPEN + 5) void store.heartbeat(`${WORKER_RUNTIME_VERSION} pre-open`);
@@ -2087,6 +2176,7 @@ async function main(): Promise<void> {
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
     process.on(sig, () => {
       info(`shutdown (${sig})`);
+      stopFixedRecovery();
       stream.stop();
       void (async () => {
         await Promise.allSettled([intraminuteCapture?.stop(), heldContractCapture?.stop()]);
@@ -2100,6 +2190,7 @@ async function main(): Promise<void> {
 // wedge shutdown; if it doesn't land, the next boot's openRun still marks this run abrupt — so this
 // only UPGRADES attribution (graceful vs uncaught vs fatal), never gates it. (external-review P4)
 async function recordExitAndDie(kind: string, code: number, signal: string | null, err?: unknown): Promise<never> {
+  stopFixedRecovery();
   try { await Promise.race([store.closeRun(kind, code, signal, err), new Promise((r) => setTimeout(r, 1500))]); }
   catch { /* fail-open */ }
   process.exit(code);
@@ -2116,4 +2207,21 @@ process.on("uncaughtException", (e) => {
   void recordExitAndDie("uncaught_exception", 1, null, e);
 });
 
-main().catch((e) => { error(`fatal — ${(e as Error).message}`); void recordExitAndDie("fatal_boot", 1, null, e); });
+main().catch(async(e)=>{
+  error(`fatal — ${(e as Error).message}`);
+  fixedRecoveryOnly=true;fixedCaptureReady=false;releaseSourceExecutorBoundaryReady=false;currentStartupReceipt=null;
+  stopNonFixedStartupResources();
+  if(!liveMode() || !fixedRuntime || !fixedServiceClient || !await fixedStartupRecoveryNeeded(fixedServiceClient)) {
+    await recordExitAndDie("fatal_boot",1,null,e);
+  }
+  // Main has stopped before establishing a live bar/strategy loop. Original
+  // history (or unknown discovery) keeps only the independent fixed clock.
+  // All POSTs still need original account/fund paper/native authority; fresh
+  // buys remain disabled until an independently validated process restart.
+  error("FIXED RECOVERY ONLY — current trading startup failed; fresh entries disabled; validated restart required");
+  void store.fixedRecoveryOnlyHeartbeat();
+  setInterval(()=>{void store.fixedRecoveryOnlyHeartbeat();},30_000);
+  for(const sig of ["SIGINT","SIGTERM"] as const)process.once(sig,()=>{
+    stopFixedRecovery();void recordExitAndDie(`recovery_only_${sig.toLowerCase()}`,0,sig);
+  });
+});

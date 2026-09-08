@@ -19,7 +19,12 @@ import {
 // each bucket's own Api. DATA-host calls (bars/chain) ALWAYS use account 1 — the
 // sip/opra data subscription lives on that account; the other paper accounts have
 // only the free feed, so market data must route through account 1's creds.
-export interface Api { paperHost: string; headers: Record<string, string>; }
+export interface Api {
+  paperHost: string; headers: Record<string, string>;
+  /** Worker-only negative fixed ownership proof, repeated before EACH legacy
+   * order POST (including ladder successors and direct orphan flattening). */
+  beforeOrder?: (symbol: string) => Promise<void>;
+}
 const credHeaders = (key: string, secret: string): Record<string, string> => ({
   "APCA-API-KEY-ID": key,
   "APCA-API-SECRET-KEY": secret,
@@ -87,6 +92,18 @@ export async function getAccount(api: Api = ACCT1_API): Promise<AlpacaAccount> {
   const a = await get(api.paperHost, "/v2/account", api.headers);
   return { equity: Number(a.equity), cash: Number(a.cash) };
 }
+/** Broker options capacity is distinct from cash/equity. Missing values stay unknown. */
+export async function getOptionsAffordability(api: Api): Promise<import("./fixedContractAffordability.js").OptionsAffordabilitySnapshot> {
+  const a = await get(api.paperHost, "/v2/account", api.headers);
+  const numeric = (v: unknown): number | null =>
+    (typeof v === "number" || (typeof v === "string" && v.trim() !== "")) && Number.isFinite(Number(v)) ? Number(v) : null;
+  const boolean = (v: unknown): boolean | null => typeof v === "boolean" ? v : null;
+  return { observedAtMs: Date.now(), optionsBuyingPowerUsd: numeric(a.options_buying_power),
+    status: String(a.status ?? ""), tradingBlocked: boolean(a.trading_blocked),
+    accountBlocked: boolean(a.account_blocked), tradeSuspendedByUser: boolean(a.trade_suspended_by_user),
+    optionsTradingLevel: numeric(a.options_trading_level) };
+}
+
 export async function getPositions(api: Api = ACCT1_API): Promise<AlpacaPosition[]> {
   const ps = await get(api.paperHost, "/v2/positions", api.headers);
   return (ps as any[]).map((p) => ({
@@ -144,6 +161,7 @@ export const TERMINAL_ORDER_STATUS = new Set(["filled", "canceled", "expired", "
 export async function orderAndFill(body: {
   symbol: string; qty: string; side: "buy" | "sell"; type: "market"; time_in_force: "day"; client_order_id: string;
 }, api: Api = ACCT1_API): Promise<{ id: string; fill: number; filledQty: number; status: string }> {
+  await api.beforeOrder?.(body.symbol);
   const o = await post(api.paperHost, "/v2/orders", body, api.headers);
   const id = String(o.id ?? "");
   let status = String(o.status ?? "");
@@ -186,6 +204,7 @@ export interface LadderParams { frac: number; rungs: number; rungSec: number; }
 export async function limitLadderFill(args: {
   symbol: string; side: "buy" | "sell"; qty: number; coidBase: string;
   bid: number; ask: number; ladder: LadderParams;
+  requireConfirmedTerminalBeforeAdvance?: boolean;
 }, api: Api = ACCT1_API): Promise<{ id: string; fill: number; filledQty: number; status: string; capturedUsd: number; crossRef: number; crossedQty: number }> {
   const { symbol, side, qty, coidBase, bid, ask } = args;
   const rungs = Math.max(1, Math.floor(args.ladder.rungs));
@@ -215,6 +234,7 @@ export async function limitLadderFill(args: {
         const fr = Math.min(0.95, frac + (1 - frac) * t);
         const raw = side === "buy" ? mid + fr * (ask - mid) : mid - fr * (mid - bid);
         const px = Math.max(TICK, Math.round(raw / TICK) * TICK);
+        await api.beforeOrder?.(symbol);
         const o = await post(api.paperHost, "/v2/orders", {
           symbol, qty: String(remaining), side, type: "limit", limit_price: px.toFixed(2),
           time_in_force: "day", client_order_id: `${coidBase}-r${i}`,
@@ -231,10 +251,25 @@ export async function limitLadderFill(args: {
           try { await del(api.paperHost, `/v2/orders/${id}`, api.headers); } catch { /* may have just filled */ }
           try { const g = await get(api.paperHost, `/v2/orders/${id}`, api.headers); st = String(g.status ?? st); fq = Number(g.filled_qty ?? fq); if (Number(g.filled_avg_price) > 0) fp = Number(g.filled_avg_price); } catch { /* settle */ }
         }
+        if (args.requireConfirmedTerminalBeforeAdvance) {
+          // A cancel request is not proof of cancellation. Never send another
+          // rung while the preceding request may still fill.
+          if (!id || !["filled", "canceled", "expired", "rejected"].includes(st)) {
+            throw new Error("fixed_contract_prior_rung_unresolved");
+          }
+          if (!Number.isInteger(fq) || fq < 0 || fq > remaining
+              || (fq > 0 && (!(fp > 0) || !Number.isFinite(fp)))) {
+            throw new Error("fixed_contract_prior_rung_fill_invalid");
+          }
+        }
         status = st;
         if (fq > 0 && fp > 0) { accQty += fq; accCost += fq * fp; remaining -= fq; } // captured (priced inside the spread)
       }
-    } catch { /* a rung threw — fall through to the next rung / market backstop; never strand the order */ }
+    } catch (error) {
+      if (error instanceof Error && error.name === "FixedEntryOwnershipError") throw error;
+      if (args.requireConfirmedTerminalBeforeAdvance) throw error;
+      // Historical policy behavior; the versioned fixed-contract path refuses uncertain continuation.
+    }
   }
   const fill = accQty > 0 ? accCost / accQty : 0;
   const capturedUsd = accQty > 0 ? (side === "buy" ? crossRef - fill : fill - crossRef) * accQty * 100 : 0;

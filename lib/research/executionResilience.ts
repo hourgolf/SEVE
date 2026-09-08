@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isFixedEntryProtocolObservation } from "./fixedEntryProtocolEvidence";
 import type { DecisionAtlasSourceSnapshot, AtlasExecutionRow } from "./decisionAtlasAdapter";
 
 export const EXECUTION_RESILIENCE_VERSION = "execution-resilience-v1" as const;
@@ -64,7 +65,7 @@ export function buildExecutionResilienceReport(input: {
   generatedAt: string;
   throughSession: string;
 }): ExecutionResilienceReport {
-  const rows = [...input.snapshot.executionObservations]
+  const rows = input.snapshot.executionObservations.filter(row => !isFixedEntryProtocolObservation(row))
     .sort((left, right) => left.event_at.localeCompare(right.event_at) || left.id.localeCompare(right.id));
   const issues: ExecutionTraceIssue[] = [];
   const routes = rows.filter(positionRoute);

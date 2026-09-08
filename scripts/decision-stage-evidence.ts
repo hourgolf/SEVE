@@ -1,5 +1,6 @@
 // GET/SELECT-only consumer for B1 cutover inspection. Never invokes a worker or order.
 import { readFileSync } from "node:fs";
+import { isFixedEntryProtocolObservation } from "../lib/research/fixedEntryProtocolEvidence";
 import { readDecisionStageEvidence } from "../lib/research/decisionStageEvidence";
 import { createServerSupabaseClient } from "./serverSupabase";
 async function main() {
@@ -13,12 +14,13 @@ async function main() {
     const sb = createServerSupabaseClient("decision stage evidence SELECT"); rows = [];
     for (let offset = 0; ; offset += 500) {
       const { data, error } = await sb.from("execution_observations")
-        .select("id,trace_id,event_kind,event_at,channel_slug,account_id,configuration_epoch_id,payload")
+        .select("id,trace_id,event_kind,event_at,channel_slug,account_id,configuration_epoch_id,reason,payload")
         .gte("event_at", from).lt("event_at", through).order("event_at").order("id").range(offset, offset + 499);
       if (error) throw Error("execution_observations SELECT failed: " + error.code);
       rows.push(...(data ?? [])); if ((data?.length ?? 0) < 500) break;
     }
   }
+  rows = rows.filter(row => !isFixedEntryProtocolObservation(row));
   const result = rows.map(readDecisionStageEvidence);
   console.log(JSON.stringify({ productionWrites: 0, rows: rows.length, traces: result.filter(x => x.state === "observed").length, evidence: result }, null, 2));
 }

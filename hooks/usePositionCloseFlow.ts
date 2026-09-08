@@ -11,6 +11,7 @@ import {
 
 interface PositionCloseWriter {
   closePosition: (id: string) => Promise<DeskWriteResult>;
+  closePositionStatus?: (id: string) => Promise<DeskWriteResult>;
   tagClose: (id: string, tag: string) => Promise<DeskWriteResult>;
 }
 
@@ -18,8 +19,9 @@ const messageOf = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
 
 /**
- * Shared guarded operator-close workflow. It owns UI state and a four-second
- * disarm timer only; the injected page-seam writer remains the sole remote path.
+ * Shared guarded operator-close workflow. A durable request remains pending
+ * until the authenticated status reader verifies global settlement; position
+ * disappearance alone never triggers success or a post-close reason prompt.
  */
 export function usePositionCloseFlow(write: PositionCloseWriter) {
   const [state, dispatch] = useReducer(positionCloseFlowReducer, INITIAL_POSITION_CLOSE_FLOW);
@@ -30,6 +32,27 @@ export function usePositionCloseFlow(write: PositionCloseWriter) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
   }, []);
+
+  useEffect(() => {
+    if (!state.pendingPrompts.length || !write.closePositionStatus) return;
+    const check = write.closePositionStatus;
+    let stopped = false;
+    const polls = new Set<ReturnType<typeof setTimeout>>();
+    const read = async (prompt: typeof state.pendingPrompts[number]) => {
+      let result: DeskWriteResult;
+      try { result = await check(prompt.id); }
+      catch { result = { ok: false, error: "Close status is unavailable; the exit remains pending." }; }
+      if (stopped) return;
+      if (result.ok && result.pending === false) {
+        dispatch({ type: "CLOSE_SETTLED", prompt, canTag: result.canTag === true }); return;
+      }
+      if (!result.ok) dispatch({ type: "CLOSE_CHECK_FAILED", error: result.error ?? "Close remains unconfirmed." });
+      const poll = setTimeout(() => { polls.delete(poll); void read(prompt); }, 2_000);
+      polls.add(poll);
+    };
+    for (const prompt of state.pendingPrompts) void read(prompt);
+    return () => { stopped = true; for (const poll of polls) clearTimeout(poll); };
+  }, [state.pendingPrompts, write.closePositionStatus]);
 
   useEffect(() => {
     active.current = true;
@@ -60,6 +83,12 @@ export function usePositionCloseFlow(write: PositionCloseWriter) {
         dispatch({ type: "CLOSE_FAILED", error: result.error ?? "close failed" });
         return;
       }
+      if (result.pending) {
+        dispatch({ type: "CLOSE_PENDING", prompt: { id: position.id, label: positionCloseLabel(position) } }); return;
+      }
+      if (result.canTag === false) {
+        dispatch({ type: "CLOSE_SETTLED", prompt: { id: position.id, label: positionCloseLabel(position) }, canTag: false }); return;
+      }
       dispatch({
         type: "CLOSE_SUCCEEDED",
         prompt: { id: position.id, label: positionCloseLabel(position) },
@@ -72,17 +101,17 @@ export function usePositionCloseFlow(write: PositionCloseWriter) {
   const tagClose = useCallback(async (value: string) => {
     const prompt = state.tagPrompt;
     if (!prompt) return;
-    dispatch({ type: "TAG_START" });
+    dispatch({ type: "TAG_START", id: prompt.id });
     try {
       const result = await write.tagClose(prompt.id, value);
       if (!active.current) return;
       if (!result.ok) {
-        dispatch({ type: "TAG_FAILED", error: result.error ?? "reason tag failed" });
+        dispatch({ type: "TAG_FAILED", id: prompt.id, error: result.error ?? "reason tag failed" });
         return;
       }
-      dispatch({ type: "TAG_SUCCEEDED" });
+      dispatch({ type: "TAG_SUCCEEDED", id: prompt.id });
     } catch (error) {
-      if (active.current) dispatch({ type: "TAG_FAILED", error: messageOf(error, "reason tag failed") });
+      if (active.current) dispatch({ type: "TAG_FAILED", id: prompt.id, error: messageOf(error, "reason tag failed") });
     }
   }, [state.tagPrompt, write]);
 

@@ -1,3 +1,4 @@
+import { FIXED_CONTRACT_ADMISSION_MODE, fixedContractAdmissionPolicy, type FixedContractAdmissionPolicy } from "./fixedContractAdmission";
 import type {
   AdmissionPolicySpec,
   CompiledReleaseManifest,
@@ -28,10 +29,11 @@ export interface ChannelControlPlaneSpecView {
   accountId: string;
   accountLabel: string;
   quantity: number;
-  premiumCap: number;
-  maxDebitUsd: number;
-  maxRiskUsd: number;
-  riskLimits: CompiledReleaseManifest["channelSpecs"][number]["riskLimits"];
+  fixedContractAdmission?: FixedContractAdmissionPolicy;
+  premiumCap: number | null;
+  maxDebitUsd: number | null;
+  maxRiskUsd: number | null;
+  riskLimits: { maxContracts: number; maxDebitUsd: number | null; maxRiskUsd: number | null };
   managerProfileId: string;
   managerVersion: string;
   managerLabel: string;
@@ -118,10 +120,12 @@ export function projectChannelControlPlaneOperatorView(input: {
       accountId: spec.accountId,
       accountLabel: paperAccountLabel(spec.accountId, "PAPER ACCOUNT"),
       quantity: spec.quantity,
-      premiumCap: Number(spec.entryParameters.premiumCap),
-      maxDebitUsd: spec.maxDebitUsd,
-      maxRiskUsd: spec.riskLimits.maxRiskUsd,
-      riskLimits: spec.riskLimits,
+      ...(spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE
+        ? { fixedContractAdmission: fixedContractAdmissionPolicy(), premiumCap: null,
+            maxDebitUsd: null, maxRiskUsd: null,
+            riskLimits: { maxContracts: spec.riskLimits.maxContracts, maxDebitUsd: null, maxRiskUsd: null } }
+        : { premiumCap: Number(spec.entryParameters.premiumCap), maxDebitUsd: spec.maxDebitUsd,
+            maxRiskUsd: spec.riskLimits.maxRiskUsd, riskLimits: spec.riskLimits }),
       managerProfileId: spec.managerProfileId,
       managerVersion: spec.managerVersion,
       managerLabel: String(spec.exitParameters.managerLabel ?? spec.managerProfileId),

@@ -14,7 +14,13 @@ export const RC54_WORKER_VERSION = "stream-2026-07-27a" as const;
 // intentionally separate so an evidence-plumbing/runtime-only deploy can be
 // verified in the heartbeat and run ledger without mutating sealed strategy
 // provenance.
-export const WORKER_RUNTIME_VERSION = "stream-runtime-2026-09-03c" as const;
+export const WORKER_RUNTIME_VERSION = "stream-runtime-2026-09-07a" as const;
+
+import { FIXED_CONTRACT_WORKER_COMPATIBILITY } from "../../lib/channels/fixedContractAdmission.js";
+export function supportsManifestCompatibility(version: string, currentStrategyVersion: string): boolean {
+  return currentStrategyVersion === RC54_WORKER_VERSION
+    && (version === RC54_WORKER_VERSION || version === FIXED_CONTRACT_WORKER_COMPATIBILITY);
+}
 
 export function activeWorkerVersion(rc54ReleaseEnabled: boolean): string {
   return rc54ReleaseEnabled ? RC54_WORKER_VERSION : WORKER_VERSION;

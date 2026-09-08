@@ -1,3 +1,5 @@
+import { validateCapacityContract } from "../../lib/channels/channelPortfolioCapacity.js";
+import { supportsManifestCompatibility } from "./version.js";
 import {
   CHANNEL_ACTIVATION_PROTOCOL_VERSION,
   buildShadowRuntimeProjection,
@@ -173,6 +175,7 @@ function startupReceiptBlockers(input: {
   receipt: Record<string, unknown> | null;
   expectedRoots: CurrentWorkerRootReceipt[];
   expectedReleaseId?: string;
+  expectedWorkerCompatibility?: string;
 }): string[] {
   const blockers: string[] = [];
   const receipt = input.receipt;
@@ -180,7 +183,8 @@ function startupReceiptBlockers(input: {
   if (string(receipt.releaseId) !== (input.expectedReleaseId ?? RC54_RELEASE_ID)) {
     blockers.push("startup_receipt:release_mismatch");
   }
-  if (string(receipt.workerVersion) !== RC54_WORKER_VERSION) {
+  if (string(receipt.workerVersion) !== (input.expectedWorkerCompatibility ?? RC54_WORKER_VERSION)
+      || !supportsManifestCompatibility(string(receipt.workerVersion), RC54_WORKER_VERSION)) {
     blockers.push("startup_receipt:worker_version_mismatch");
   }
   if (string(receipt.releaseConfigurationSha256) !== RC54_RELEASE_CONFIGURATION_SHA256) {
@@ -300,7 +304,7 @@ export function stageChannelActivationShadow(
       blockers.push("candidate:unexpected_authority");
     }
     if (!input.candidate.validationReady) blockers.push("candidate:not_validation_ready");
-    if (projection.workerCompatibilityVersion !== input.currentWorkerVersion) {
+    if (!supportsManifestCompatibility(projection.workerCompatibilityVersion, input.currentWorkerVersion)) {
       blockers.push("worker:compatibility_mismatch");
     }
     if (compiled.manifest.legacyConfigurationHash !== RC54_RELEASE_CONFIGURATION_SHA256) {
@@ -373,14 +377,15 @@ export function stageRosterBundleShadow(
         || input.preview.capacity.orderAuthority !== false) {
       blockers.push("bundle:capacity_not_ready");
     }
+    blockers.push(...validateCapacityContract({ specs: candidate.channelSpecs,
+      admissionPolicies: candidate.manifest.admissionPolicies, capacity: input.preview.capacity }));
     if (candidate.manifest.parentManifestId !== input.current.manifest.id
         || input.preview.activeManifestId !== input.current.manifest.id
         || input.preview.activeManifestContentHash
           !== input.current.manifest.contentHash) {
       blockers.push("bundle:base_manifest_drift");
     }
-    if (candidate.manifest.workerCompatibilityVersion
-        !== input.currentWorkerVersion) {
+    if (!supportsManifestCompatibility(candidate.manifest.workerCompatibilityVersion, input.currentWorkerVersion)) {
       blockers.push("worker:compatibility_mismatch");
     }
     if (candidate.manifest.legacyConfigurationHash
@@ -395,6 +400,7 @@ export function stageRosterBundleShadow(
   blockers.push(...startupReceiptBlockers({
     receipt: input.startupReceipt,
     expectedReleaseId: input.current.manifest.releaseId,
+    expectedWorkerCompatibility: input.current.manifest.workerCompatibilityVersion,
     expectedRoots: input.current.channelSpecs.map((spec) => ({
       slug: spec.slug,
       accountId: spec.accountId,

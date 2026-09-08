@@ -190,7 +190,8 @@ export function observedPolicyIdentity(input: {
     alpha,
     channel: {
       status: ch.status, executor: ch.executor, active: ch.is_active,
-      riskBudgetUsd: ch.capital_pct, maxContracts: ch.max_contracts,
+      riskBudgetUsd: ch.fixedContractAdmission ? null : ch.capital_pct, maxContracts: ch.max_contracts,
+      ...(ch.fixedContractAdmission ? { fixedContractAdmission: ch.fixedContractAdmission } : {}),
       dailyEntryLossLatchUsd: ch.daily_stop_usd, dailyEntryProfitLatchUsd: ch.daily_target_usd,
       boosted: ch.boosted, entryDte: ch.entry_dte, strikeOffset: ch.strike_offset,
       gapMinPct: ch.gap_min, eventPolicy: ch.event_policy,

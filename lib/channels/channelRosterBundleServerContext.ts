@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createFixedEntryServiceClient } from "../../worker/src/fixedEntryServiceClient";
+import { readFixedCustodyBoundary } from "../../worker/src/fixedEntryCustodyBoundary";
 import type { CompiledReleaseManifest, JsonObject } from "./channelControlPlane";
 import {
   buildOperatorPaperCapacityEnvelope,
@@ -192,6 +194,9 @@ export async function loadChannelRosterBundleServerContext(input: {
     accounts: equities,
     underlyings,
   });
+  const fixedCustody=await readFixedCustodyBoundary(createFixedEntryServiceClient(
+    (process.env.SUPABASE_URL??process.env.NEXT_PUBLIC_SUPABASE_URL)!,process.env.SUPABASE_SERVICE_ROLE_KEY!));
+  if(!fixedCustody.allSettled)throw new Error("fixed custody remains unresolved; configuration activation/rollback requires verified original-intent settlement");
   return Object.freeze({
     version: CHANNEL_ROSTER_BUNDLE_SERVER_CONTEXT_VERSION,
     registry,
@@ -203,8 +208,9 @@ export async function loadChannelRosterBundleServerContext(input: {
       positions: [],
     },
     collectionStates,
-    safeBoundaryProof: safeBoundary.proof as unknown as JsonObject,
+    safeBoundaryProof: {...safeBoundary.proof,fixedCustody} as unknown as JsonObject,
     evidenceRefs: [
+      `fixed-custody:${fixedCustody.contentHash}`,
       safeBoundary.boundary.accountInventoryEvidenceRef,
       ...safeBoundary.boundary.brokerAccounts.flatMap((account) => [
         account.openPositions.state === "observed"

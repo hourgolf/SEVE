@@ -25,6 +25,7 @@ export function useChannelManagerProposal(input: {
     if (!model || !spec || model.state !== "reviewable") {
       return { ready: false, reason: "Create a reviewable draft first." };
     }
+    if (spec.fixedContractAdmission) return { ready: false, reason: "This fixed-contract policy requires a versioned roster proposal; dollar-budget controls do not apply." };
     const keys = Object.keys(model.patch);
     const managerOnly = keys.length > 0
       && keys.every((key) => MANAGER_KEYS.has(key));
@@ -58,7 +59,8 @@ export function useChannelManagerProposal(input: {
   const seal = async () => {
     const model = input.model;
     const spec = input.activeSpec;
-    if (!model || !spec || !eligibility.ready || !session || !operator) return;
+    if (!model || !spec || !eligibility.ready || !session || !operator || spec.fixedContractAdmission
+        || spec.premiumCap == null || spec.maxDebitUsd == null || spec.maxRiskUsd == null) return;
     setBusy(true);
     setError(null);
     setNotice(null);

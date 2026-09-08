@@ -81,14 +81,15 @@ interface PreviewView {
     fields: Array<{ field: string; before: string; after: string }>;
   }>;
   capacity: {
+    staticDollarEnvelope?: "not-proven-for-full-roster";
     state: "pass" | "block";
     blockers: string[];
     metrics: Array<{
       id: string;
       current: number;
-      projected: number;
+      projected: number | null;
       limit: number;
-      state: "pass" | "block";
+      state: "pass" | "block" | "not-proven";
     }>;
   } | null;
   blockers: string[];

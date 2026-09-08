@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isFixedEntryProtocolObservation } from "./fixedEntryProtocolEvidence";
 import type { ChannelDecisionBriefBundle } from "./channelDecisionBrief";
 import type { AtlasCapacityPoint, DecisionAtlas } from "./decisionAtlas";
 import type { DecisionAtlasSourceSnapshot } from "./decisionAtlasAdapter";
@@ -46,8 +47,9 @@ const sha256 = (value: unknown): string => `sha256:${createHash("sha256")
 const numeric = (value: unknown): number => Number.isFinite(Number(value)) ? Number(value) : 0;
 
 function auditExecution(snapshot: DecisionAtlasSourceSnapshot): ExecutionIntegrityAudit {
-  const decisions = snapshot.executionObservations.filter((row) => row.event_kind === "decision");
-  const broker = snapshot.executionObservations.filter((row) => row.event_kind === "broker_result");
+  const ordinary = snapshot.executionObservations.filter(row => !isFixedEntryProtocolObservation(row));
+  const decisions = ordinary.filter((row) => row.event_kind === "decision");
+  const broker = ordinary.filter((row) => row.event_kind === "broker_result");
   const decisionTraceIds = new Set(decisions.map((row) => row.trace_id));
   const orphanBrokerResults = broker.filter((row) => !decisionTraceIds.has(row.trace_id)).map((row) => row.id).sort();
   const filledResultsWithoutPosition = broker.filter((row) => numeric(row.filled_qty) > 0

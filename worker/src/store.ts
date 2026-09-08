@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { fixedEntryOwnershipPresent, LEGACY_POSITION_FIXED_ABSENT_FILTERS, LEGACY_POSITION_POLICY_FILTER } from "../../lib/channels/fixedEntryOwnership.js";
 import WebSocket from "ws";
 import { config } from "./config.js";
 import { info, warn } from "./log.js";
@@ -50,6 +51,8 @@ import type {
 type WSTransport = NonNullable<NonNullable<Parameters<typeof createClient>[2]>["realtime"]>["transport"];
 
 export interface ChannelConfig {
+  /** Runtime-only, installed by a verified receipt overlay; never mapped from strategist JSON. */
+  fixedContractAdmission?: import("../../lib/channels/fixedContractAdmission").FixedContractAdmissionPolicy;
   id: string;
   slug: string;
   name: string;
@@ -176,12 +179,13 @@ const sb: SupabaseClient = createClient(config.supabaseUrl, config.supabaseServi
 });
 
 export async function loadReceiptBoundControlPlane(
+  client:Pick<SupabaseClient,"from">=sb,
 ): Promise<StoredReceiptBoundControlPlaneRead> {
   // The repository and worker workspaces install the same Supabase client
   // package independently. Its protected fields make the two otherwise
   // identical client classes nominally incompatible to TypeScript.
   return loadStoredReceiptBoundControlPlane(
-    sb as unknown as Parameters<typeof loadStoredReceiptBoundControlPlane>[0],
+    client as unknown as Parameters<typeof loadStoredReceiptBoundControlPlane>[0],
   );
 }
 
@@ -262,10 +266,10 @@ export async function loadRc54ControlPlaneBaselineIdentity(
   return { manifest, memberships, error: null };
 }
 
-export async function loadConfig(): Promise<{ fund: FundState | null; channels: ChannelConfig[]; accounts: AccountRow[]; accountsFresh: boolean }> {
-  const { data: fundRow, error: fundErr } = await sb.from("fund_state").select("*").eq("id", 1).maybeSingle();
+export async function loadConfig(client:Pick<SupabaseClient,"from">=sb): Promise<{ fund: FundState | null; channels: ChannelConfig[]; accounts: AccountRow[]; accountsFresh: boolean }> {
+  const { data: fundRow, error: fundErr } = await client.from("fund_state").select("*").eq("id", 1).maybeSingle();
   if (fundErr) warn(`store: fund_state read failed — ${fundErr.message}`);
-  const { data: rows, error } = await sb
+  const { data: rows, error } = await client
     .from("strategists")
     .select("id,slug,name,status,spec_json,underlying,executor,account_id,is_active,strategist_config(*)");
   if (error) { warn(`store: strategists read failed — ${error.message}`); return { fund: null, channels: [], accounts: [], accountsFresh: false }; }
@@ -276,7 +280,7 @@ export async function loadConfig(): Promise<{ fund: FundState | null; channels: 
   // good routing table with [] — every channel regrouped onto the DEFAULT account (wrong-
   // account live orders) while the real acct-2/3 lots rode unmanaged and their rows got
   // phantom-reconcile-closed. accountsFresh=false → reloadConfig keeps the prior table.
-  const { data: acctRows, error: acctErr } = await sb
+  const { data: acctRows, error: acctErr } = await client
     .from("accounts")
     .select("id,name,mode,cred_ref,is_armed,is_halted,master_daily_stop_usd");
   const acctMissingTable = !!acctErr && (acctErr.code === "42P01" || /does not exist|could not find the table|schema cache/i.test(acctErr.message ?? ""));
@@ -555,7 +559,7 @@ export async function markTrough(id: string, trough: number): Promise<void> {
 // ⚠ THROWS on a read error (audit 2026-07-10): swallowing it returned 0, which read as "no
 // realized P&L today" and let BOTH the daily_stop loss floor and the daily_target win-and-done
 // fail OPEN during a transient DB fault. The caller (decide.ts) fails CLOSED on the throw.
-export async function realizedTodayByChannel(strategistId: string, etDate: string): Promise<number> {
+export async function realizedTodayByChannel(strategistId: string, etDate: string,client:Pick<SupabaseClient,"from">=sb): Promise<number> {
   // Server-side date floor + a wide cap (audit L2): the old newest-100 window under-counted a
   // churny channel's realized past 100 closes/day → the daily-stop latched LATE. 00:00Z on the
   // ET date = the prior evening ET — a safe superset; the client-side ET filter below is exact.
@@ -564,7 +568,7 @@ export async function realizedTodayByChannel(strategistId: string, etDate: strin
   // win-and-done latch read a too-small loss/gain and fired LATE (or never). pageAll fetches every
   // page or THROWS on a page error — preserving the 10b fail-closed contract (the caller's try/catch
   // in decide.ts blocks the entry on the throw). id tiebreak: closed_at is not a total order.
-  const data = await pageAll<{ realized_pnl: number | null; closed_at: string | null }>((from) => sb
+  const data = await pageAll<{ realized_pnl: number | null; closed_at: string | null }>((from) => client
     .from("positions")
     .select("realized_pnl,closed_at,id")
     .eq("strategist_id", strategistId)
@@ -605,13 +609,14 @@ export async function peakBidSince(occ: string, since: string): Promise<number |
 // strategist_config / strategists mutation so a halt bites in <1s. If the
 // realtime publication isn't enabled (06_realtime.sql optional), this no-ops and
 // the index.ts poll fallback covers it.
-export function subscribeConfig(onChange: () => void): void {
-  sb.channel("seve-worker-config")
+export function subscribeConfig(onChange: () => void): ()=>Promise<unknown> {
+  const channel=sb.channel("seve-worker-config")
     .on("postgres_changes", { event: "*", schema: "public", table: "fund_state" }, () => { info("store: fund_state changed (realtime)"); onChange(); })
     .on("postgres_changes", { event: "*", schema: "public", table: "strategist_config" }, () => { info("store: strategist_config changed (realtime)"); onChange(); })
     .on("postgres_changes", { event: "*", schema: "public", table: "strategists" }, () => { info("store: strategists changed (realtime)"); onChange(); })
     .on("postgres_changes", { event: "*", schema: "public", table: "accounts" }, () => { info("store: accounts changed (realtime)"); onChange(); })
     .subscribe((status) => { if (status === "SUBSCRIBED") info("store: realtime config subscription active"); });
+  return ()=>sb.removeChannel(channel);
 }
 
 export async function writeShadowEvent(message: string, meta?: unknown): Promise<void> {
@@ -731,6 +736,16 @@ export async function runHeartbeat(): Promise<void> {
       .eq("boot_id", BOOT_ID);
     await reconcilePriorRuns();
   } catch { /* fail-open — telemetry only */ }
+}
+
+/** Recovery-only is explicitly unhealthy as a trading worker. Never refresh
+ * the legacy executor heartbeat or clear this error on a recovery tick. */
+export async function fixedRecoveryOnlyHeartbeat():Promise<void>{
+  if(!config.hasServiceRole)return;
+  try{await sb.from("worker_runs").update({last_heartbeat_at:new Date().toISOString(),
+    last_phase:"fixed-recovery-only",memory_rss_mb:rssMb(),
+    last_error:"Startup validation failed; original fixed-intent recovery only. Fresh entry authority disabled; validated restart required."})
+    .eq("boot_id",BOOT_ID).is("ended_at",null);}catch{/* Telemetry never grants order authority. */}
 }
 
 // Best-effort epitaph for the paths a handler CAN catch (graceful SIGTERM, uncaughtException,
@@ -938,6 +953,7 @@ export async function saveManagerShadowActualClose(run: ManagerShadowRun): Promi
 }
 
 export interface ManagerShadowActualPosition {
+  entry_features?: Record<string,unknown> | null;
   id: string;
   status: string;
   closed_at: string | null;
@@ -950,13 +966,14 @@ export async function loadManagerShadowActualPositions(ids: readonly string[]): 
   const out: ManagerShadowActualPosition[] = [];
   for (let i = 0; i < ids.length; i += 100) {
     const { data, error } = await sb.from("positions")
-      .select("id,status,closed_at,close_reason,realized_pnl")
+      .select("id,status,closed_at,close_reason,realized_pnl,entry_features")
       .in("id", ids.slice(i, i + 100));
     if (error) { warn(`store: manager shadow actual-close read failed — ${error.message}`); return null; }
     for (const row of data ?? []) out.push({
       id: String((row as any).id), status: String((row as any).status),
       closed_at: (row as any).closed_at ?? null, close_reason: (row as any).close_reason ?? null,
       realized_pnl: Number((row as any).realized_pnl ?? 0),
+      entry_features: (row as any).entry_features ?? null,
     });
   }
   return out;
@@ -1019,6 +1036,7 @@ export async function insertPosition(row: {
   release_manifest_id?: string | null;
   configuration_epoch_id?: string | null;
 }): Promise<PositionInsertResult> {
+  if (fixedEntryOwnershipPresent(row)) throw new Error("fixed_store:legacy_insert_prohibited");
   const { entry_reason, entry_features, entry_delta, ...core } = row;
   const { data, error } = await sb.from("positions").insert({
     ...core, current_mark: core.avg_entry_price, unrealized_pnl: 0, status: "open",
@@ -1038,7 +1056,9 @@ export async function insertPosition(row: {
 export async function updatePositionStack(id: string, newQty: number, newAvgEntry: number): Promise<string | null> {
   const { error } = await sb.from("positions")
     .update({ qty: newQty, avg_entry_price: newAvgEntry, current_mark: newAvgEntry })
-    .eq("id", id);
+    .eq("id", id)
+    .is(LEGACY_POSITION_FIXED_ABSENT_FILTERS[0], null).is(LEGACY_POSITION_FIXED_ABSENT_FILTERS[1], null)
+    .or(LEGACY_POSITION_POLICY_FILTER);
   return error ? error.message : null;
 }
 
@@ -1051,7 +1071,9 @@ export async function updatePositionStack(id: string, newQty: number, newAvgEntr
 export async function trancheClosePositionRow(id: string, soldQty: number, mark: number, realized: number, closeReason: string = "target_tranche"): Promise<boolean> {
   const { data, error } = await sb.from("positions")
     .update({ status: "closed", closed_at: new Date().toISOString(), qty: soldQty, current_mark: mark, unrealized_pnl: 0, realized_pnl: realized, close_reason: closeReason })
-    .eq("id", id).eq("status", "open").select("id");
+    .eq("id", id).eq("status", "open")
+    .is(LEGACY_POSITION_FIXED_ABSENT_FILTERS[0], null).is(LEGACY_POSITION_FIXED_ABSENT_FILTERS[1], null)
+    .or(LEGACY_POSITION_POLICY_FILTER).select("id");
   if (error) { warn(`store: tranche close failed — ${error.message}`); return false; }
   return (data ?? []).length > 0;
 }
@@ -1076,6 +1098,7 @@ export async function insertPartialRemainderRow(parent: PositionRow, remainQty: 
 }
 
 async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: number, o: { runnerOf: string | null; entryReason: string }): Promise<PositionInsertResult> {
+  if (fixedEntryOwnershipPresent(parent)) throw new Error("fixed_store:legacy_remainder_prohibited");
   const { data, error } = await sb.from("positions").insert({
     strategist_id: parent.strategist_id, occ_symbol: parent.occ_symbol,
     underlying: parent.underlying || parent.occ_symbol.slice(0, parent.occ_symbol.length - 15),
@@ -1108,7 +1131,9 @@ export async function closePositionRow(id: string, mark: number, realized: numbe
   // caller skips re-journaling a phantom second booking. Mirrors the manual close-position route.
   const { data, error } = await sb.from("positions")
     .update({ status: "closed", closed_at: new Date().toISOString(), current_mark: mark, unrealized_pnl: 0, realized_pnl: realized, close_reason: reason ?? null })
-    .eq("id", id).eq("status", "open").select("id");
+    .eq("id", id).eq("status", "open")
+    .is(LEGACY_POSITION_FIXED_ABSENT_FILTERS[0], null).is(LEGACY_POSITION_FIXED_ABSENT_FILTERS[1], null)
+    .or(LEGACY_POSITION_POLICY_FILTER).select("id");
   if (error) { warn(`store: close update failed — ${error.message}`); return false; }
   return Array.isArray(data) && data.length > 0;
 }

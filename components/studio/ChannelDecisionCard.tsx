@@ -108,7 +108,7 @@ export function ChannelDecisionCard({ effective, controlPlane, decisionBrief, co
         <section className={`channel-activation-readiness ${activeSpec ? "ready" : "blocked"}`} aria-label="Activation and capacity readiness">
           <header><small>GOVERNED ACTIVATION LAYER</small><b>{activationState}</b></header>
           {activeSpec ? <div>
-            <span><small>ROUTE / SIZE</small><b>{activeSpec.accountLabel} · {activeSpec.quantity} ct</b><i>{usd0(activeSpec.maxRiskUsd)} risk · {usd0(activeSpec.maxDebitUsd)} debit cap</i></span>
+            <span><small>ROUTE / SIZE</small><b>{activeSpec.accountLabel} · {activeSpec.quantity} ct</b><i>{activeSpec.fixedContractAdmission ? "Broker options buying power · no fixed dollar risk ceiling" : `${usd0(activeSpec.maxRiskUsd)} risk · ${usd0(activeSpec.maxDebitUsd)} debit cap`}</i></span>
             <span><small>COLLISION DOMAIN</small><b>{activeSpec.capacity.domainId}</b><i>{activeSpec.capacity.familyId} · priority {activeSpec.capacity.priority}</i></span>
             <span><small>CAPACITY</small><b>{activeSpec.capacity.underlying} {activeSpec.capacity.maxOpenUnderlying} open · clock {activeSpec.capacity.sameClockMax}</b><i>family {activeSpec.capacity.maxOpenPerFamily} · domain {activeSpec.capacity.maxOpenGlobal} · OCC {activeSpec.capacity.sameOccOpenMax}</i></span>
             <span><small>ENTRY FREQUENCY</small><b>{activeSpec.maxEntriesPerSession} / session</b><i>{activeSpec.capacity.crossDomainSameOcc === "block" ? "cross-domain same OCC blocked" : "cross-domain same OCC requires receipt"}</i></span>

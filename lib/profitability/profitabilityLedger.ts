@@ -7,6 +7,9 @@
 // ============================================================================
 
 import { latestImmutableExecutionAccountRoutes } from "../ops/brokerReconciliation";
+import { isFixedEntryProtocolObservation } from "../research/fixedEntryProtocolEvidence";
+import { fixedEntryOwnershipPresent } from "../channels/fixedEntryOwnership";
+import { applyFixedManagerComparison, type FixedManagerComparisonIndex } from "../research/fixedManagerComparison";
 
 export interface ProfitabilityAccountRow {
   id: string;
@@ -47,6 +50,8 @@ export interface ProfitabilityOutcomeRow {
 }
 
 export interface ProfitabilityExecutionRouteRow {
+  reason?: string | null;
+  payload?: Record<string, unknown> | null;
   id: string;
   position_id: string | null;
   opportunity_id: string | null;
@@ -64,6 +69,16 @@ export interface ProfitabilityExecutionQualityRow {
 }
 
 export interface ProfitabilityManagerShadowRow {
+  account_id?: string | null;
+  strategist_id?: string | null;
+  configuration_epoch_id?: string | null;
+  entry_at?: string;
+  entry_price?: number | string;
+  original_qty?: number | string;
+  admitted_at?: string | null;
+  admission_source?: string | null;
+  evidence_state?: string | null;
+  first_quote_at?: string | null;
   id: string;
   position_id: string;
   manager_id: string;
@@ -90,6 +105,7 @@ export interface ProfitabilityLedgerInput {
   executionQuality: readonly ProfitabilityExecutionQualityRow[];
   managerShadow: readonly ProfitabilityManagerShadowRow[];
   equityDaily: readonly ProfitabilityEquityDayRow[];
+  fixedManagerComparison?: FixedManagerComparisonIndex;
 }
 
 export interface ConfigurationIdentity {
@@ -155,9 +171,13 @@ export interface LogicalTrade {
   executionLeakageUsd: number | null;
   closeReasons: string[];
   censorCodes: string[];
+  fixedIntentSettlementId?: string | null;
+  bookedToDateUsd?: number | null;
 }
 
 export interface ManagerCounterfactualPath {
+  rawCounterfactualPnlUsd?: number | null;
+  rawActualComparatorPnlUsd?: number | null;
   id: string;
   logicalTradeId: string | null;
   positionId: string;
@@ -369,9 +389,10 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     groups.set(key, [...(groups.get(key) ?? []), position]);
   }
 
-  const latestRouteByPosition = latestImmutableExecutionAccountRoutes(input.executionRoutes);
+  const ordinaryRoutes = input.executionRoutes.filter(row => !isFixedEntryProtocolObservation(row));
+  const latestRouteByPosition = latestImmutableExecutionAccountRoutes(ordinaryRoutes);
   const latestRouteByOpportunity = latestImmutableExecutionAccountRoutes(
-    input.executionRoutes.map((route) => ({
+    ordinaryRoutes.map((route) => ({
       id: route.id,
       position_id: route.opportunity_id,
       account_id: route.account_id,
@@ -528,7 +549,21 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     };
     if (configuration.kind === "legacy_unstamped") censorCodes.push("legacy_unstamped_configuration");
 
-    const allClosed = rows.every((row) => row.status === "closed" && validIso(row.closed_at));
+    const fixedRows = rows.filter(fixedEntryOwnershipPresent);
+    const fixedProof = fixedRows.length ? input.fixedManagerComparison?.[root] : null;
+    const fixedCongruent = fixedProof && fixedRows.length === rows.length
+      && fixedProof.generationIds.length === rows.length && rows.every(row => {
+        const proof = input.fixedManagerComparison?.[row.id];
+        return proof && proof.intentId === fixedProof.intentId && fixedProof.generationIds.includes(row.id)
+          && Number(row.qty) === proof.currentQuantity && Number(row.avg_entry_price) === proof.currentBasis
+          && row.status === proof.currentStatus && finite(row.realized_pnl) === proof.currentRealizedPnl
+          && (row.closed_at == null && proof.currentClosedAt == null
+            || Date.parse(row.closed_at!) === Date.parse(proof.currentClosedAt!));
+      });
+    if (fixedRows.length && !fixedCongruent) censorCodes.push("fixed_intent_evidence_unavailable_or_drifted");
+    else if (fixedRows.length && !fixedProof?.settlementId) censorCodes.push("fixed_intent_settlement_pending");
+    const allClosed = rows.every((row) => row.status === "closed" && validIso(row.closed_at))
+      && (!fixedRows.length || !!fixedCongruent && !!fixedProof?.settlementId);
     const anyOpen = rows.some((row) => row.status === "open");
     const quantities = rows.map((row) => finite(row.qty));
     const entries = rows.map((row) => finite(row.avg_entry_price));
@@ -582,7 +617,7 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
       || code === "partial_configuration_lineage"
       || code === "invalid_quantity"
       || code === "invalid_entry_price"
-      || code === "missing_realized_pnl")
+      || code === "missing_realized_pnl" || code === "fixed_intent_evidence_unavailable_or_drifted")
       ? "censored"
       : anyOpen || !allClosed ? "open" : "closed";
     const comparability: ProfitabilityComparability = status === "censored"
@@ -594,6 +629,8 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
           ? "immutable_route_only"
           : "exact_configuration";
     logicalTrades.push({
+      ...(fixedRows.length ? { fixedIntentSettlementId: fixedCongruent ? fixedProof?.settlementId ?? null : null,
+        bookedToDateUsd: fixedCongruent ? fixedProof?.bookedToDateUsd ?? null : null } : {}),
       id: `trade:${root}`,
       rootPositionId: root,
       positionIds: rows.map((row) => row.id).sort(),
@@ -646,7 +683,13 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
   }
   const shadowIds = new Set<string>();
   const managerCounterfactualPaths: ManagerCounterfactualPath[] = [];
-  for (const row of input.managerShadow) {
+  const fixedPositionIds = new Set([...input.positions.filter(fixedEntryOwnershipPresent).map(r => r.id),
+    ...Object.keys(input.fixedManagerComparison ?? {})]);
+  for (const original of input.managerShadow) {
+    const trade = logicalTrades.find(t => t.id === tradeIdByPosition.get(original.position_id));
+    const row = applyFixedManagerComparison(original, {fixedPositionIds,
+      evidence:!trade || !Object.prototype.hasOwnProperty.call(trade,"fixedIntentSettlementId")
+        || trade.censorCodes.includes("fixed_intent_evidence_unavailable_or_drifted") ? undefined : input.fixedManagerComparison});
     if (shadowIds.has(row.id)) {
       pushIssue(blockingIssues, `duplicate manager-shadow run ${row.id}`);
       continue;
@@ -655,6 +698,8 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     const logicalTradeId = tradeIdByPosition.get(row.position_id) ?? null;
     if (!logicalTradeId) pushIssue(warnings, `manager-shadow run ${row.id} has no ledger position`);
     managerCounterfactualPaths.push({
+      ...(row.raw_fixed_manager_evidence ? {rawCounterfactualPnlUsd:finite(original.terminal_pnl),
+        rawActualComparatorPnlUsd:finite(original.actual_realized_pnl)} : {}),
       id: row.id,
       logicalTradeId,
       positionId: row.position_id,
@@ -730,7 +775,7 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
         accounts: input.accounts.length,
         positions: input.positions.length,
         outcomes: input.outcomes.length,
-        executionRoutes: input.executionRoutes.length,
+        executionRoutes: ordinaryRoutes.length,
         executionQuality: input.executionQuality.length,
         managerShadow: input.managerShadow.length,
         equityDaily: input.equityDaily.length,

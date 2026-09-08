@@ -3,7 +3,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildFleetEvidenceAudit,
   type FleetChannelReceipt,
@@ -14,6 +14,9 @@ import {
   type FleetSignalReceipt,
 } from "../lib/research/fleetEvidenceAudit.js";
 import { POSITION_RESEARCH_ANNOTATIONS } from "../lib/research/positionAnnotations.js";
+import { createFixedEntryServiceClient } from "../worker/src/fixedEntryServiceClient.js";
+import { readFixedManagerComparisonEvidence } from "../worker/src/fixedEntryManagerComparisonEvidence.js";
+import { applyFixedManagerComparison,constrainFixedManagerEvidence,projectFixedLogicalPositionRows,type FixedManagerRunLike } from "../lib/research/fixedManagerComparison.js";
 
 const arg = (name: string, fallback: string): string => {
   const index = process.argv.indexOf(`--${name}`);
@@ -88,6 +91,9 @@ interface AccountDbRow { id: string; name: string; mode: string; }
 interface ConfigDbRow { strategist_id: string; muted: boolean; }
 interface SignalDbRow { strategist_id: string; acted_on: boolean; blocked_reason: string | null; }
 interface PositionDbRow {
+  entry_features?: unknown;
+  avg_entry_price: number | string;
+  status: string;
   id: string;
   strategist_id: string;
   opened_at: string;
@@ -106,7 +112,7 @@ interface ExecutionDbRow {
   blocked_reason: string | null;
 }
 interface OutcomeDbRow { position_id: string; event_kind: string; opportunity_id: string | null; }
-interface ManagerDbRow {
+interface ManagerDbRow extends FixedManagerRunLike {
   strategist_id: string;
   position_id: string;
   status: string;
@@ -115,7 +121,7 @@ interface ManagerDbRow {
   actual_realized_pnl: number | string | null;
 }
 
-async function readFleet(sb: SupabaseClient): Promise<{
+async function readFleet(sb: Pick<SupabaseClient,"from">): Promise<{
   channels: FleetChannelReceipt[];
   signals: FleetSignalReceipt[];
   positions: FleetPositionReceipt[];
@@ -124,7 +130,7 @@ async function readFleet(sb: SupabaseClient): Promise<{
   managerRuns: FleetManagerReceipt[];
   sourceRows: Record<string, number>;
 }> {
-  const [strategists, accounts, configs, signalRows, positionRows, executionRows, outcomeRows, managerRows] = await Promise.all([
+  const [strategists, accounts, configs, signalRows, positionRows, executionRows, outcomeRows, managerRows,fixedEvidence] = await Promise.all([
     page<StrategistDbRow>(
       (from, to) => sb.from("strategists")
         .select("id,slug,name,account_id,underlying,executor,status,is_active")
@@ -148,7 +154,7 @@ async function readFleet(sb: SupabaseClient): Promise<{
     ),
     page<PositionDbRow>(
       (from, to) => sb.from("positions")
-        .select("id,strategist_id,opened_at,closed_at,qty,realized_pnl,close_reason,runner_of")
+        .select("id,strategist_id,opened_at,closed_at,qty,realized_pnl,close_reason,runner_of,entry_features,avg_entry_price,status")
         .gte("opened_at", START_ISO).lt("opened_at", END_ISO)
         .order("opened_at").order("id").range(from, to),
       "positions",
@@ -169,15 +175,18 @@ async function readFleet(sb: SupabaseClient): Promise<{
     ),
     page<ManagerDbRow>(
       (from, to) => sb.from("manager_shadow_runs")
-        .select("strategist_id,position_id,status,economic_mode,terminal_pnl,actual_realized_pnl")
+        .select("strategist_id,position_id,status,economic_mode,terminal_pnl,actual_realized_pnl,account_id,configuration_epoch_id,entry_at,entry_price,original_qty,admitted_at,admission_source,evidence_state,first_quote_at,censor_code,censored_at")
         .gte("entry_at", START_ISO).lt("entry_at", END_ISO)
         .order("entry_at").order("id").range(from, to),
       "manager shadow runs",
     ),
+    readFixedManagerComparisonEvidence(sb),
   ]);
 
   const accountById = new Map(accounts.map((account) => [account.id, account]));
   const configByStrategist = new Map(configs.map((config) => [config.strategist_id, config]));
+  const fixedComparison = constrainFixedManagerEvidence(positionRows,fixedEvidence);
+  const originalById=new Map(positionRows.map(row=>[row.id,row]));
   return {
     channels: strategists.map((strategist) => {
       const account = strategist.account_id ? accountById.get(strategist.account_id) : null;
@@ -196,7 +205,7 @@ async function readFleet(sb: SupabaseClient): Promise<{
       };
     }),
     signals: signalRows.map((row) => ({ strategistId: row.strategist_id, actedOn: row.acted_on, blockedReason: row.blocked_reason })),
-    positions: positionRows.map((row) => ({
+    positions: projectFixedLogicalPositionRows(positionRows,fixedEvidence).map((row) => ({
       id: row.id,
       strategistId: row.strategist_id,
       openedAt: row.opened_at,
@@ -205,6 +214,8 @@ async function readFleet(sb: SupabaseClient): Promise<{
       realizedPnl: numeric(row.realized_pnl),
       closeReason: row.close_reason,
       runnerOf: row.runner_of,
+      ...(fixedComparison.fixedPositionIds.has(row.id)?{rawClosedAt:originalById.get(row.id)!.closed_at,
+        rawRealizedPnl:numeric(originalById.get(row.id)!.realized_pnl)}:{}),
     })),
     executions: executionRows.map((row) => ({
       strategistId: row.strategist_id,
@@ -215,13 +226,16 @@ async function readFleet(sb: SupabaseClient): Promise<{
       blockedReason: row.blocked_reason,
     })),
     outcomes: outcomeRows.map((row) => ({ positionId: row.position_id, eventKind: row.event_kind, opportunityId: row.opportunity_id })),
-    managerRuns: managerRows.map((row) => ({
+    managerRuns: managerRows.map(row=>applyFixedManagerComparison(row,fixedComparison)).map((row) => ({
       strategistId: row.strategist_id,
       positionId: row.position_id,
       status: row.status,
       economicMode: row.economic_mode,
       terminalPnl: numeric(row.terminal_pnl),
       actualRealizedPnl: numeric(row.actual_realized_pnl),
+      censorCode: row.censor_code ?? null,
+      ...(row.raw_fixed_manager_evidence ? {rawTerminalPnl:numeric(row.raw_fixed_manager_evidence.terminal_pnl),
+        rawActualRealizedPnl:numeric(row.raw_fixed_manager_evidence.actual_realized_pnl)} : {}),
     })),
     sourceRows: {
       strategists: strategists.length,
@@ -240,7 +254,7 @@ async function main(): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (!url || !key) throw new Error("Supabase backend credentials missing");
-  const sb = createClient(url, key, { auth: { persistSession: false } });
+  const sb = createFixedEntryServiceClient(url, key);
   const fleet = await readFleet(sb);
   const audit = buildFleetEvidenceAudit({
     channels: fleet.channels,

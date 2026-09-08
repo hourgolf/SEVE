@@ -7,8 +7,13 @@
 
 import { managerIdsForChannel } from "@/engine/managerPolicy";
 import { createServerSupabaseClient } from "./serverSupabase";
+import { fixedEntryOwnershipPresent } from "@/lib/channels/fixedEntryOwnership";
+import { fixedManagerComparisonCode } from "@/lib/research/fixedManagerComparison";
+import { createFixedEntryServiceClient } from "@/worker/src/fixedEntryServiceClient";
+import { readFixedManagerComparisonEvidence } from "@/worker/src/fixedEntryManagerComparisonEvidence";
 
 interface PositionRow {
+  entry_features?:Record<string,unknown>|null;
   id: string;
   occ_symbol: string;
   qty: number | string;
@@ -28,7 +33,7 @@ const state = (ok: boolean, pending = false): string => ok ? "GREEN" : pending ?
 async function main(): Promise<void> {
   const sb = createServerSupabaseClient("live-position-evidence");
   const positionsRead = await sb.from("positions")
-    .select("id,occ_symbol,qty,avg_entry_price,opened_at,peak_mark,runner_of,strategists!inner(slug,account_id)")
+    .select("id,occ_symbol,qty,avg_entry_price,opened_at,peak_mark,runner_of,entry_features,strategists!inner(slug,account_id)")
     .eq("status", "open").order("opened_at", { ascending: true }).limit(24);
   if (positionsRead.error) throw new Error(`open position read failed: ${positionsRead.error.message}`);
   const positions = (positionsRead.data ?? []) as unknown as PositionRow[];
@@ -36,19 +41,27 @@ async function main(): Promise<void> {
   console.log("\n══ LIVE POSITION EVIDENCE · SELECT ONLY ══");
   console.log(`Open positions: ${positions.length}`);
   if (!positions.length) return;
+  const fixedEvidence=positions.some(fixedEntryOwnershipPresent)
+    ? await readFixedManagerComparisonEvidence(createFixedEntryServiceClient(
+      (process.env.SUPABASE_URL??process.env.NEXT_PUBLIC_SUPABASE_URL)!,process.env.SUPABASE_SERVICE_ROLE_KEY!)):{};
 
   let hardFailures = 0;
+  let comparisonUnavailable=0;
   for (const position of positions) {
     const channel = relation(position.strategists).slug ?? "unknown";
     const expectedManagers = managerIdsForChannel(channel).length;
     const since = position.opened_at;
     const managerPositionId = position.runner_of ?? position.id;
+    const fixed=fixedEntryOwnershipPresent(position);
+    const proof=fixedEvidence[position.id];
+    const originalProof=proof && Number(position.qty)===proof.currentQuantity
+      && Number(position.avg_entry_price)===proof.currentBasis && proof.currentStatus==="open"?proof:undefined;
     const [outcomes, managers, captures, captureHealth] = await Promise.all([
       sb.from("position_outcome_events")
         .select("event_kind,event_at,plan_id,opportunity_id,quantity,avg_entry_price,close_reason")
         .eq("position_id", position.id).order("event_at", { ascending: true }).limit(8),
       sb.from("manager_shadow_runs")
-        .select("manager_id,status,evidence_state,entry_at,first_quote_at,last_quote_at,last_observed_at,consecutive_quote_misses,quote_max_age_ms,censor_code,economic_mode,original_qty")
+        .select("position_id,manager_id,status,evidence_state,entry_at,first_quote_at,last_quote_at,last_observed_at,consecutive_quote_misses,quote_max_age_ms,censor_code,economic_mode,original_qty,account_id,strategist_id,configuration_epoch_id,entry_price,admitted_at,admission_source")
         .eq("position_id", managerPositionId).order("manager_id", { ascending: true }).limit(12),
       sb.from("held_contract_capture_receipts")
         .select("sample_count,successful_quote_count,dropped_samples,first_fetch_at,last_fetch_at,completed_at,gap_count,max_observation_gap_ms")
@@ -79,7 +92,7 @@ async function main(): Promise<void> {
           .select("trace_id,event_kind,event_at,action,reason,blocked_reason,occ_symbol,requested_qty,broker_status,filled_qty,fill_price,quote_age_ms")
           .eq("opportunity_id", opportunityId).order("event_at", { ascending: true }).limit(8)
         : Promise.resolve({ data: [], error: null }),
-      opportunityId
+      opportunityId && !fixed
         ? sb.from("position_plans")
           .select("id,state,created_at,activated_at,policy_epoch_id,opportunity_id")
           .eq("opportunity_id", opportunityId).limit(1).maybeSingle()
@@ -94,15 +107,19 @@ async function main(): Promise<void> {
     }
     const observationRows = opportunityObservations.data ?? [];
     const decision = observationRows.some((row) => row.event_kind === "decision" && row.action === "enter");
-    const fill = observationRows.some((row) => row.event_kind === "broker_result" && Number(row.filled_qty ?? 0) > 0);
+    const fill = observationRows.some((row) => row.event_kind === "broker_result" && Number(row.filled_qty ?? 0) > 0)
+      || fixed && !!originalProof;
     const outcomeOpen = Boolean(openedOutcome);
-    const planBound = Boolean(plan.data && openedOutcome?.plan_id === plan.data.id);
+    const planBound = fixed ? !!originalProof && opportunityId===position.entry_features?.opportunity_id
+      : Boolean(plan.data && openedOutcome?.plan_id === plan.data.id);
     const managerRows = managers.data ?? [];
     const managerIds = new Set(managerRows.map((row) => row.manager_id));
     const managerComplete = managerIds.size === expectedManagers;
     const observing = managerRows.filter((row) => row.evidence_state === "observing").length;
-    const managerEvidenceReady = managerComplete && observing === expectedManagers;
-    const managerEvidencePending = managerComplete && !managerEvidenceReady;
+    const comparisonCodes=fixed?managerRows.map(row=>fixedManagerComparisonCode(row,originalProof)).filter(Boolean):[];
+    if(comparisonCodes.length)comparisonUnavailable++;
+    const managerEvidenceReady = managerComplete && observing === expectedManagers && !comparisonCodes.length;
+    const managerEvidencePending = managerComplete && !managerEvidenceReady && !comparisonCodes.length;
     const captureRows = captures.data ?? [];
     const captureFailures = (captureHealth.data ?? []).reduce((sum, row) => sum + Number(row.affected_samples ?? 0), 0);
     const openAgeSec = age(position.opened_at);
@@ -118,6 +135,7 @@ async function main(): Promise<void> {
     console.log(`  ${state(entryOk)} entry lineage · opportunity=${opportunityId ? "bound" : "missing"} decision=${decision} fill=${fill} plan=${plan.data?.state ?? "missing"}/${planBound ? "bound" : "unbound"} outcome=${outcomeOpen}`);
     console.log(`  ${state(managerEvidenceReady, managerEvidencePending)} manager arms${position.runner_of ? " · inherited from root" : ""} · ${managerIds.size}/${expectedManagers} · observing=${observing} · states=${[...new Set(managerRows.map((row) => `${row.status}/${row.evidence_state}`))].join(",") || "none"}`);
     if (managerRows.length) {
+      if(comparisonCodes.length)console.log(`    comparison unavailable: ${[...new Set(comparisonCodes)].join(", ")}; raw observer state is not comparison eligibility`);
       const misses = managerRows.reduce((sum, row) => sum + Number(row.consecutive_quote_misses ?? 0), 0);
       console.log(`    quote evidence: first=${managerRows[0].first_quote_at ?? "none"} last=${managerRows[0].last_quote_at ?? "none"} misses=${misses} maxAgeMs=${managerRows[0].quote_max_age_ms}`);
     }
@@ -130,6 +148,8 @@ async function main(): Promise<void> {
   if (hardFailures) {
     console.log(`\nRESULT: RED · ${hardFailures} position(s) have missing or failed durable evidence`);
     process.exitCode = 2;
+  } else if(comparisonUnavailable){
+    console.log(`\nRESULT: EXECUTION EVIDENCE PRESENT · comparison unavailable for ${comparisonUnavailable} fixed position(s); explicit exclusions are not evidence of poor channel performance`);
   } else {
     console.log("\nRESULT: GREEN/YELLOW · durable entry and capture evidence are present; yellow denotes an admitted manager arm awaiting durable first-quote proof or bounded first-segment capture latency");
   }

@@ -10,7 +10,7 @@ export interface DecisionTrace {
   source: { gitSha: string | null; bootId: string | null };
   clocks: Record<string, number | null>;
   quantities: Record<string, number | null>;
-  sizing: Record<string, number | boolean | null>;
+  sizing: Record<string, number | string | boolean | null>;
   gates: { name: string; status: "pass" | "fail" | "unknown" | "not_evaluated"; reason: string | null }[];
   selectedQuote: Record<string, unknown>;
   submissionQuote?: Record<string, unknown>;
@@ -34,8 +34,8 @@ export function quoteObservation(chain: ChainStore, occ: string, atMs: number): 
 }
 export function startEntryTrace(input: {
   chain: ChainStore; occ: string; sourceBarAtMs: number; quoteQueried: boolean; quoteAtMs: number | null;
-  quote: Record<string, unknown> | null; sizingVisited: boolean; qty: number; sizingInputUsd: number;
-  stopFraction: number; nativeStopPct: number; blocked: string | null;
+  quote: Record<string, unknown> | null; sizingVisited: boolean; qty: number; sizingInputUsd: number | null;
+  fixedContractMode?: string; stopFraction: number | null; nativeStopPct: number; blocked: string | null;
 }): DecisionTrace | undefined {
   return safeTrace(() => ({
     schema: TRACE_SCHEMA, source: { gitSha: null, bootId: null },
@@ -44,7 +44,7 @@ export function startEntryTrace(input: {
       submissionAttemptedAtMs: null, brokerResultObservedAtMs: null, exchangeFillAtMs: null },
     quantities: { provisionalQty: input.sizingVisited ? input.qty : null, releaseRequestedQty: null,
       postArbitrationQty: null, executorPermittedQty: null, submissionAttemptedQty: null, submittedQty: null, filledQty: null },
-    sizing: { inputUsd: input.sizingInputUsd, sizingStopFraction: input.sizingVisited ? input.stopFraction : null,
+    sizing: { ...(input.fixedContractMode ? { admissionMode: input.fixedContractMode } : {}), inputUsd: input.sizingInputUsd, sizingStopFraction: input.sizingVisited ? input.stopFraction : null,
       nativeStopPct: input.nativeStopPct, fixedOverride: null, premiumCap: null, debitCapUsd: null,
       finalNominalStopBudgetEnforced: null, requestedNominalStopUsd: null, filledNominalStopUsd: null },
     gates: [{ name: "entry_preparation", status: input.blocked ? "fail" : "pass", reason: input.blocked },
@@ -59,7 +59,7 @@ export function observedCandidate(d: ShadowDecision, atMs: number, source: Decis
   const next = safeTrace(() => ({ ...t, source, clocks: { ...t.clocks, candidateObservedAtMs: atMs } }));
   return next ? { ...d, detail: { ...d.detail, decisionTrace: next } } : d;
 }
-export function releaseTrace(d: ShadowDecision, x: { qty: number; premiumCap: number; debitCapUsd: number; observedAtMs: number }): DecisionTrace | undefined {
+export function releaseTrace(d: ShadowDecision, x: { qty: number; premiumCap: number | null; debitCapUsd: number | null; observedAtMs: number }): DecisionTrace | undefined {
   const t = traceOf(d); if (!t) return undefined;
   return safeTrace(() => ({ ...t, clocks: { ...t.clocks, groupObservedAtMs: x.observedAtMs },
     quantities: { ...t.quantities, releaseRequestedQty: x.qty },

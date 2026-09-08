@@ -1,3 +1,4 @@
+import { FIXED_CONTRACT_ADMISSION_MODE, fixedContractScopeValid } from "./fixedContractAdmission";
 import type {
   AdmissionPolicySpec,
   ChannelSpecVersion,
@@ -58,13 +59,23 @@ export interface LivePortfolioTruth {
 export interface CapacityMetric {
   id: string;
   current: number;
-  projected: number;
+  projected: number | null;
+  boundedSubsetProjected?: number;
+  reason?: "quote-dependent-broker-affordability";
   limit: number;
-  state: "pass" | "block";
+  state: "pass" | "block" | "not-proven";
 }
 
 export interface PortfolioCapacityEvaluation {
-  version: typeof CHANNEL_PORTFOLIO_CAPACITY_VERSION;
+  version: typeof CHANNEL_PORTFOLIO_CAPACITY_VERSION | "channel-portfolio-capacity-v2";
+  assessment?: "static-bounded-plus-broker-affordability";
+  staticDollarEnvelope?: "not-proven-for-full-roster";
+  runtimeAffordabilityRequirements?: Array<{ channelSlug: string; channelSpecContentHash: string;
+    accountId: string; policyVersion: typeof FIXED_CONTRACT_ADMISSION_MODE; quantity: 4;
+    perContractPremiumCap: null; channelDebitCapUsd: null; channelStopDollarCapUsd: null;
+    authority: "broker-options-buying-power"; admissionClock: "immediately-before-new-buy";
+    onMissingOrUncertain: "block-new-entry"; percentEnvelopeEnforced: false }>;
+  evaluationInputs?: { envelope: PortfolioCapacityEnvelope; live: LivePortfolioTruth };
   state: "pass" | "block";
   evaluatedPaperSlugs: string[];
   metrics: CapacityMetric[];
@@ -151,6 +162,8 @@ function worstCase(input: {
 }): number {
   const byDomain = new Map<string, ChannelSpecVersion[]>();
   for (const spec of input.specs) {
+    // Dollar projections for dynamic policy are represented separately as unknown.
+    if (input.field !== "openPositions" && spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE) continue;
     const rows = byDomain.get(spec.collisionDomain) ?? [];
     rows.push(spec);
     byDomain.set(spec.collisionDomain, rows);
@@ -183,6 +196,13 @@ export function evaluatePortfolioCapacity(input: {
   const metrics: CapacityMetric[] = [];
   const paperSpecs = input.specs.filter((spec) =>
     (spec.executionPosture ?? "paper") === "paper");
+  const dynamicSpecs = paperSpecs.filter(spec => spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE);
+  for (const spec of paperSpecs) {
+    if (spec.entryParameters.admissionSizingMode !== undefined
+        && (spec.entryParameters.admissionSizingMode !== FIXED_CONTRACT_ADMISSION_MODE || !fixedContractScopeValid(spec))) {
+      blockers.push(`capacity:unsupported_admission_policy:${spec.slug}`);
+    }
+  }
   const policyIds = new Set(input.admissionPolicies.map((policy) => policy.id));
   const accountLimits = new Map(input.envelope.accounts.map((limit) =>
     [limit.accountId, limit]));
@@ -364,15 +384,44 @@ export function evaluatePortfolioCapacity(input: {
     }
   }
 
+  const dynamicMetricIds = new Set<string>();
+  for (const spec of dynamicSpecs) {
+    for (const suffix of ["debit", "risk"]) {
+      dynamicMetricIds.add(`account:${spec.accountId}:${suffix}`);
+      dynamicMetricIds.add(`underlying:${spec.symbolScope[0]}:${suffix}`);
+      for (const group of input.envelope.correlationGroups) {
+        if (group.underlyings.includes(spec.symbolScope[0])) dynamicMetricIds.add(`correlation:${group.id}:${suffix}`);
+      }
+    }
+  }
+  const reportedMetrics = metrics.map(metric => dynamicMetricIds.has(metric.id)
+    ? { ...metric, boundedSubsetProjected: metric.projected!, projected: null,
+        state: "not-proven" as const, reason: "quote-dependent-broker-affordability" as const }
+    : metric);
   const deduped = unique(blockers);
   return Object.freeze({
-    version: CHANNEL_PORTFOLIO_CAPACITY_VERSION,
+    version: dynamicSpecs.length ? "channel-portfolio-capacity-v2" : CHANNEL_PORTFOLIO_CAPACITY_VERSION,
+    ...(dynamicSpecs.length ? {
+      assessment: "static-bounded-plus-broker-affordability" as const,
+      staticDollarEnvelope: "not-proven-for-full-roster" as const,
+      evaluationInputs: structuredClone({ envelope: input.envelope, live: input.live }),
+      runtimeAffordabilityRequirements: dynamicSpecs.map(spec => ({
+        channelSlug: spec.slug, channelSpecContentHash: spec.contentHash, accountId: spec.accountId,
+        policyVersion: FIXED_CONTRACT_ADMISSION_MODE, quantity: 4 as const, perContractPremiumCap: null,
+        channelDebitCapUsd: null, channelStopDollarCapUsd: null, authority: "broker-options-buying-power" as const,
+        admissionClock: "immediately-before-new-buy" as const, onMissingOrUncertain: "block-new-entry" as const,
+        percentEnvelopeEnforced: false as const,
+      })).sort((a, b) => a.channelSlug.localeCompare(b.channelSlug)),
+    } : {}),
     state: deduped.length ? "block" : "pass",
     evaluatedPaperSlugs: paperSpecs.map((spec) => spec.slug).sort(),
-    metrics: metrics.sort((left, right) => left.id.localeCompare(right.id)),
+    metrics: reportedMetrics.sort((left, right) => left.id.localeCompare(right.id)),
     blockers: deduped,
     limitations: [
-      "Configured exposure is the worst concurrent set allowed by each admission domain; it is not an efficacy forecast.",
+      ...(dynamicSpecs.length ? [
+        "Activation-contract pass requires broker options affordability at each fixed-contract entry; it does not prove a finite full-roster dollar envelope.",
+        "MACD contribution is quote-dependent. Proposal percentage limits are not enforced for that contribution; affected projected dollars are unknown, not zero.",
+      ] : ["Configured exposure is the worst concurrent set allowed by each admission domain; it is not an efficacy forecast."]),
       "Exact option-contract collision remains an entry-time broker and OCC check.",
       "A passing preview grants no activation or order authority.",
     ],
@@ -380,4 +429,32 @@ export function evaluatePortfolioCapacity(input: {
     runtimeMutationAuthorized: false,
     orderAuthority: false,
   });
+}
+
+/** New policies cannot travel through state-only v1 capacity checks. Recompute
+ * every v2 metric and exact requirement against the candidate and sealed inputs. */
+export function validateCapacityContract(input: {
+  specs: readonly ChannelSpecVersion[]; admissionPolicies: readonly AdmissionPolicySpec[];
+  capacity: PortfolioCapacityEvaluation;
+}): string[] {
+  const c = input.capacity;
+  if (!c || c.state !== "pass" || c.executionAuthority !== false
+      || c.runtimeMutationAuthorized !== false || c.orderAuthority !== false) return ["capacity:contract_not_ready"];
+  const dynamic = input.specs.some(spec => (spec.executionPosture ?? "paper") === "paper"
+    && spec.entryParameters.admissionSizingMode !== undefined);
+  if (!dynamic) return c.version === CHANNEL_PORTFOLIO_CAPACITY_VERSION
+    && c.runtimeAffordabilityRequirements === undefined && c.evaluationInputs === undefined
+    && c.assessment === undefined && c.staticDollarEnvelope === undefined
+    ? [] : ["capacity:legacy_contract_version_mismatch"];
+  if (c.version !== "channel-portfolio-capacity-v2" || !c.evaluationInputs) return ["capacity:dynamic_contract_required"];
+  try {
+    const expected = evaluatePortfolioCapacity({ specs: input.specs, admissionPolicies: input.admissionPolicies,
+      envelope: c.evaluationInputs.envelope, live: c.evaluationInputs.live });
+    const stable = (value: unknown): string => {
+      if (value === null || typeof value !== "object") return JSON.stringify(value);
+      if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+      return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k,v]) => `${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;
+    };
+    return expected.state === "pass" && stable(expected) === stable(c) ? [] : ["capacity:dynamic_contract_drift"];
+  } catch { return ["capacity:dynamic_contract_invalid"]; }
 }

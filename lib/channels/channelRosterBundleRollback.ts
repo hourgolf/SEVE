@@ -1,3 +1,4 @@
+import { validateCapacityContract } from "./channelPortfolioCapacity";
 import {
   canonicalJson,
   compileReleaseManifest,
@@ -254,6 +255,8 @@ export function buildExactRosterRollbackPreview(input: {
     .filter((result) => result.state !== "pass")
     .map((result) => `rollback:validation:${result.code}`));
   blockers.push(...capacity.blockers);
+  blockers.push(...validateCapacityContract({ specs: candidate.channelSpecs,
+    admissionPolicies: candidate.manifest.admissionPolicies, capacity }));
   const configurationEpochId = buildShadowRuntimeProjection(
     candidate,
   ).configurationEpochId;
@@ -320,6 +323,9 @@ export function prepareExactRosterRollbackDraftWrite(input: {
       || input.preview.orderAuthority !== false) {
     throw new Error("only a fully passing exact rollback can be persisted");
   }
+  const capacityBlockers = validateCapacityContract({ specs: candidate.channelSpecs,
+    admissionPolicies: candidate.manifest.admissionPolicies, capacity: bundle.capacity });
+  if (capacityBlockers.length) throw new Error(capacityBlockers.join(","));
   if (![input.draft.id, input.draft.rollbackOfActivationReceiptId,
     input.draft.operatorId, input.initialReceiptId]
     .every((value) => UUID.test(value))) {

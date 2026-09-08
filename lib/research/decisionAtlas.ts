@@ -122,11 +122,12 @@ export interface AtlasInput {
   opportunities: readonly AtlasOpportunity[];
   managerPaths: readonly AtlasManagerPath[];
   accountBudgets: readonly AtlasAccountBudget[];
+  portfolioReplayUnavailableReason?: string;
   activeChannels?: readonly string[];
   /** Catalog coverage is independent of trading authority and observed outcomes. */
   catalogChannels?: readonly string[];
   currentChannelConfigurationEras?: Readonly<Record<string, string>>;
-  channelPremiumCaps?: Readonly<Record<string, number>>;
+  channelPremiumCaps?: Readonly<Record<string, number | null>>;
   channelMaxEntriesPerSession?: Readonly<Record<string, number>>;
   exactBlockedCandidates?: readonly AtlasExactBlockedCandidate[];
   sourceNormalization?: {
@@ -611,9 +612,12 @@ export function buildCapacityReplay(input: {
   targetRows: readonly AtlasOpportunity[];
   portfolioRows: readonly AtlasOpportunity[];
   accountBudgets: readonly AtlasAccountBudget[];
-  channelPremiumCaps?: Readonly<Record<string, number>>;
+  portfolioReplayUnavailableReason?: string;
+  channelPremiumCaps?: Readonly<Record<string, number | null>>;
   channelMaxEntriesPerSession?: Readonly<Record<string, number>>;
 }): AtlasCapacityReplay {
+  if (input.portfolioReplayUnavailableReason) return { points: [], bestSupportedContracts: null,
+    limitations: [input.portfolioReplayUnavailableReason] };
   const budgets = new Map(input.accountBudgets.map((budget) => [budget.accountId, budget]));
   const points: AtlasCapacityPoint[] = [];
   const limitations = new Set<string>();
@@ -946,6 +950,7 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
     const capacity = buildCapacityReplay({ targetChannel: channel,
       targetRows: targetReplayRows.length ? targetReplayRows : decisionRows,
       portfolioRows, accountBudgets: input.accountBudgets,
+      ...(input.portfolioReplayUnavailableReason ? { portfolioReplayUnavailableReason: input.portfolioReplayUnavailableReason } : {}),
       channelPremiumCaps: input.channelPremiumCaps,
       channelMaxEntriesPerSession: input.channelMaxEntriesPerSession });
     const edges = graph.filter((edge) => edge.left === channel || edge.right === channel);

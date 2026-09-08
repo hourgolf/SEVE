@@ -1,10 +1,16 @@
 import { DAY1_MANAGER_ARMS } from "@/lib/channels/day1Release";
 import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
+import { applyFixedManagerComparison, constrainFixedManagerEvidence, type FixedManagerComparisonIndex } from "./fixedManagerComparison";
 
 export const COMMON_MANAGER_ARMS = DAY1_MANAGER_ARMS;
 export type CommonManagerId = (typeof COMMON_MANAGER_ARMS)[number];
 
 export interface ChannelManagerRunRow {
+  account_id?: string | null;
+  strategist_id?: string | null;
+  admitted_at?: string | null;
+  admission_source?: string | null;
+  first_quote_at?: string | null;
   id: string;
   position_id: string;
   channel_slug: string;
@@ -27,6 +33,11 @@ export interface ChannelManagerRunRow {
 }
 
 export interface ChannelManagerPositionRow {
+  entry_features?: Record<string,unknown> | null;
+  qty?: number | string;
+  avg_entry_price?: number | string;
+  status?: string;
+  closed_at?: string | null;
   id: string;
   runner_of: string | null;
   realized_pnl: number | string | null;
@@ -265,14 +276,18 @@ export function deriveChannelManagerEvidenceBook(input: {
   generatedAt: string;
   cohortFrom?: string;
   shadowBookVersion?: string;
+  fixedManagerComparison?: FixedManagerComparisonIndex;
 }): ChannelManagerEvidenceBook {
   const defaultVersion = input.shadowBookVersion ?? "manager-shadow-book-v2";
   const positionById = new Map(input.positions.map((row) => [row.id, row]));
+  const {fixedPositionIds,evidence:fixedEvidence} = constrainFixedManagerEvidence(input.positions,input.fixedManagerComparison);
   const children = new Map<string, ChannelManagerPositionRow[]>();
   for (const row of input.positions) {
     if (row.runner_of) children.set(row.runner_of, [...(children.get(row.runner_of) ?? []), row]);
   }
   const actualPnl = (positionId: string): number | null => {
+    const fixed = fixedEvidence[positionId];
+    if (fixed || fixedPositionIds.has(positionId)) return fixed?.settlementId ? fixed.finalPnlUsd : null;
     const rows: ChannelManagerPositionRow[] = [];
     const queue = [positionId];
     const seen = new Set<string>();
@@ -287,7 +302,7 @@ export function deriveChannelManagerEvidenceBook(input: {
     const pnls = rows.map((row) => finite(row.realized_pnl)).filter((value): value is number => value != null);
     return pnls.length === rows.length && rows.length ? round(pnls.reduce((sum, value) => sum + value, 0)) : null;
   };
-  const selected = input.managerRuns.filter((row) =>
+  const selected = input.managerRuns.map(row => applyFixedManagerComparison(row,{fixedPositionIds,evidence:fixedEvidence})).filter((row) =>
     row.shadow_book_version === defaultVersion
     && (COMMON_MANAGER_ARMS as readonly string[]).includes(row.manager_id));
   const byChannel = new Map<string, ChannelManagerRunRow[]>();
@@ -295,10 +310,15 @@ export function deriveChannelManagerEvidenceBook(input: {
 
   const channels = Object.fromEntries([...byChannel].map(([slug, rows]) => {
     const byPosition = new Map<string, ChannelManagerRunRow[]>();
-    for (const row of rows) byPosition.set(row.position_id, [...(byPosition.get(row.position_id) ?? []), row]);
+    for (const row of rows) {
+      const id = fixedEvidence[row.position_id]?.rootPositionId ?? row.position_id;
+      byPosition.set(id, [...(byPosition.get(id) ?? []), row]);
+    }
     const trades: ChannelManagerTradePoint[] = [...byPosition].map(([positionId, positionRuns]) => {
       const first = [...positionRuns].sort((left, right) => left.entry_at.localeCompare(right.entry_at))[0];
-      const debit = (finite(first.entry_price) ?? 0) * 100 * (finite(first.original_qty) ?? 0);
+      const fixed = fixedEvidence[positionId];
+      const debit = fixed?.settlementId ? fixed.finalDebitUsd ?? 0
+        : (finite(first.entry_price) ?? 0) * 100 * (finite(first.original_qty) ?? 0);
       const pnl = actualPnl(positionId);
       const actualReturnPct = pnl != null && debit > 0 ? round((pnl / debit) * 100) : null;
       const noStop = positionRuns.find((row) => row.manager_id === "BELL/no-stop");

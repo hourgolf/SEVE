@@ -25,4 +25,11 @@ const broken = buildExecutionCapacityReadiness({ atlas, briefs, snapshot: {
 } as unknown as DecisionAtlasSourceSnapshot });
 assert.equal(broken.execution.state, "block");
 assert.equal(broken.channels.alpha.state, "hold");
+const protocol = { id: "protocol", trace_id: "x", event_kind: "decision", action: "reconcile",
+  reason: "fixed_entry_protocol:intent", payload: { fixed_entry_protocol: "fixed-entry-intent-v1" } };
+assert.deepEqual(buildExecutionCapacityReadiness({ atlas, briefs,
+  snapshot: { ...snapshot, executionObservations: [...snapshot.executionObservations, protocol] } as unknown as DecisionAtlasSourceSnapshot }), result);
+assert.equal(buildExecutionCapacityReadiness({ atlas, briefs, snapshot: { ...snapshot,
+  executionObservations: [{ id: "orphan", trace_id: "x", event_kind: "broker_result", filled_qty: 1 }, protocol],
+} as unknown as DecisionAtlasSourceSnapshot }).execution.state, "block", "protocol must not repair a missing ordinary decision");
 console.log("execution-capacity-readiness-selftest: PASS");
