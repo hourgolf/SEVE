@@ -2,9 +2,8 @@
  * durable all-out request serviced by the original worker intent. Completion
  * requires global settlement, not disappearance of the clicked position row.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { fixedEntryOwnershipPresent } from "../channels/fixedEntryOwnership";
-import { assertFixedEntryServiceClient } from "../../worker/src/fixedEntryServiceClient";
+import { assertFixedEntryServiceClient, type createFixedEntryServiceClient } from "../../worker/src/fixedEntryServiceClient";
 import { discoverFixedEntryIntents, FIXED_POSITION_COLUMNS, readFixedIntentRecords,
   readFixedIntentPositions } from "../../worker/src/fixedEntrySupabaseCoverage";
 import { fixedPositionIdentityMatches, type FixedMaterializedPosition } from "../../worker/src/fixedEntryCoverageMaterialization";
@@ -13,7 +12,9 @@ import { verifyFixedIntentSettlement } from "../../worker/src/fixedEntryIntentSe
 import { requestFixedIntentExit } from "../../worker/src/fixedEntryExitRequest";
 import { fixedClaimStorage } from "../../worker/src/fixedEntryLedgerSupabase";
 import type { FixedEntryIntent } from "../../worker/src/fixedEntryLedgerModel";
-type Client = Pick<SupabaseClient, "from">;
+// Keep this port tied to the fixed service-client factory. Root and worker
+// install separate SDK versions whose query builders carry private types.
+type Client = ReturnType<typeof createFixedEntryServiceClient>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export interface FixedManualCloseStatus {
   ok: true;

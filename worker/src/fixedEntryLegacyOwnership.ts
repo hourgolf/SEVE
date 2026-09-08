@@ -21,7 +21,10 @@ export function makeFixedEntryLegacyOwnershipGuard(client: Pick<SupabaseClient, 
   assertFixedEntryServiceClient(client);
   let fixedSeen=false;
   const mode=readMode??(async()=>{
-    const stored=await loadStoredReceiptBoundControlPlane(client as Parameters<typeof loadStoredReceiptBoundControlPlane>[0]);
+    // The trusted factory returns a real service SDK client. The web and
+    // worker lockfiles install nominally distinct query-builder classes;
+    // this read-only shared loader uses their common `from` API.
+    const stored=await loadStoredReceiptBoundControlPlane(client as unknown as Parameters<typeof loadStoredReceiptBoundControlPlane>[0]);
     if(!stored.compiled || !["receipt-bound","baseline-active"].includes(stored.state))return "unknown";
     return stored.compiled.workerProjection.roots.some(root=>root.slug==="vb-macd-state"
       && Object.prototype.hasOwnProperty.call(root,"fixedContractAdmission"))?"fixed":"legacy";
