@@ -1,3 +1,7 @@
+// ⚑ WORKER VERSION: 2026-09-08a  (MACD STREAM CUSTODY — legacy cron never manages vb-macd-state.)
+// MACD exits and recovery belong to its durable streaming intent. The legacy single-account
+// failover cannot reconcile, sell, or mark that channel, including after a stale heartbeat.
+// All other channels retain the existing cron behavior. No account credentials or schedules change.
 // ⚑ WORKER VERSION: 2026-07-14a  (RTH-SCOPED STREAM FAILOVER — worker_heartbeat intentionally stops
 //   after the cash session, so cron must not interpret the expected overnight silence as a worker
 //   outage. Stream stale pages and exit-only stream-channel failover now run only 09:30–16:00 ET;
@@ -901,6 +905,12 @@ Deno.serve(async () => {
      // channel would be skipped that minute. Journal it and move on. (Body kept at its
      // original indent to keep the diff minimal; the try just brackets the iteration.)
      try {
+      // MACD_CUSTODY_BOUNDARY: unconditional channel exclusion precedes every legacy position read,
+      // reconciliation, sell, entry, and economic write, independent of status or heartbeat freshness.
+      if (s.slug === "vb-macd-state") {
+        out.push({ slug: s.slug, note: "macd_stream_custody_only" });
+        continue;
+      }
       const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
       if (!cfg) continue;                                           // no config → idle
       // PHASE-B executor gate (2026-06-10a): a 'stream'-owned channel is the Railway
