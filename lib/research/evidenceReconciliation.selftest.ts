@@ -25,6 +25,7 @@ assert.equal(first.guarantees.automaticProductionRecovery, false);
 const second = buildEvidenceReconciliation({ atlas, snapshot,
   opportunities: [{ ...row, sourceRefs: [...row.sourceRefs, "virtual_trades:signal-1"] }] as never[] });
 assert.equal(second.summary.missingVirtualRows, 0);
+assert.equal(second.state, "limited", "row presence without bounded payload verification cannot certify evidence readiness");
 assert.equal(second.receiptSha256, buildEvidenceReconciliation({ atlas, snapshot,
   opportunities: [{ ...row, sourceRefs: [...row.sourceRefs, "virtual_trades:signal-1"] }] as never[] }).receiptSha256);
 const exact = buildEvidenceReconciliation({ atlas, snapshot,

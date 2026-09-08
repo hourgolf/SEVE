@@ -123,6 +123,8 @@ export interface AtlasInput {
   managerPaths: readonly AtlasManagerPath[];
   accountBudgets: readonly AtlasAccountBudget[];
   activeChannels?: readonly string[];
+  /** Catalog coverage is independent of trading authority and observed outcomes. */
+  catalogChannels?: readonly string[];
   currentChannelConfigurationEras?: Readonly<Record<string, string>>;
   channelPremiumCaps?: Readonly<Record<string, number>>;
   channelMaxEntriesPerSession?: Readonly<Record<string, number>>;
@@ -296,6 +298,7 @@ export interface AtlasChannelDossier {
 }
 
 export interface DecisionAtlas {
+  sourceSnapshotSha256?: string;
   schemaVersion: 3;
   atlasVersion: typeof DECISION_ATLAS_VERSION;
   generatedAt: string;
@@ -785,7 +788,9 @@ function lifecycle(input: {
   let disposition: AtlasDisposition = "continue_collecting";
   let decisionGroup: AtlasDecisionGroup = "needs_more_evidence";
   const drivers: string[] = [];
-  if (!mature) {
+  if (!input.rows.length || /unstamped|legacy|unverified|virtual-reference-policy/i.test(input.rows[0]?.configurationEra ?? "")) {
+    drivers.push("No verified policy cohort supports a roster or manager recommendation; retain these results as historical diagnostics.");
+  } else if (!mature) {
     drivers.push(`${sessions} scored session(s) and ${outcomes.length} scored logical outcome(s); start inference at 5 sessions and 10 outcomes.`);
   } else if (negativeConsistent && uniqueness === "redundant") {
     disposition = "retire";
@@ -814,15 +819,15 @@ function lifecycle(input: {
     else if ((current?.nativeOutlierShare ?? 0) > 0.35) drivers.push("The result depends too heavily on a small number of winners; isolate one entry or exit variable.");
     else if (typical != null && typical > 0
       && current?.nativeTypicalCapture != null && current.nativeTypicalCapture < 0.45)
-      drivers.push("Entries find opportunity, but the current exit keeps less than half of the available move.");
+      drivers.push("Recorded final returns are small relative to sampled peaks; paired executable exit tests are required before attributing the difference to management.");
     else drivers.push("There is enough scored evidence to establish mixed session behavior; collect the next evidence through one bounded variable experiment.");
   }
   const language: Record<AtlasDisposition, string> = {
-    promote: "Entry evidence is promising enough for a bounded promotion review.",
+    promote: "Observed managed outcomes warrant a bounded promotion review; raw entry quality is not identified.",
     size: "The current shape is promising; review additional size without changing its logic.",
-    change_manager: "The entry appears useful, but a paired exit alternative is more consistent.",
-    retune_one_variable: "The entry finds opportunity, but one exit variable deserves a controlled test.",
-    continue_collecting: "Keep collecting until at least 5 scored sessions and 10 scored outcomes are available.",
+    change_manager: "A paired exit alternative warrants review of native stops, executable prices and portfolio effects.",
+    retune_one_variable: "Mixed managed outcomes warrant one controlled test; they do not isolate entry quality.",
+    continue_collecting: "Collect verified, comparable outcomes; sample counts alone do not establish decision readiness.",
     retire: "Retire from collection review: evidence is negative and largely duplicated.",
   };
   return {
@@ -831,12 +836,12 @@ function lifecycle(input: {
     typicalSessionUsd: typicalSession, positiveSessions, negativeSessions, flatSessions,
     positiveSessionRate, directionConsistency,
     configurationCertainty: input.rows[0]?.evidenceLayer === "exact_current_configuration" ? "exact_current"
-      : /unstamped|legacy/i.test(input.rows[0]?.configurationEra ?? "") ? "historical_unstamped" : "versioned_historical",
+      : /unstamped|legacy|unverified/i.test(input.rows[0]?.configurationEra ?? "") ? "historical_unstamped" : "versioned_historical",
     additionalIndependentSessions: sessions < 5 ? 5 - sessions : null, uniqueness,
     decisionDrivers: drivers,
     limitations: [
       ...(input.rows.some((row) => !row.configurationEra) ? ["Legacy rows without an exact configuration era remain separate."] : []),
-      ...(/unstamped|legacy/i.test(input.rows[0]?.configurationEra ?? "")
+      ...(/unstamped|legacy|unverified/i.test(input.rows[0]?.configurationEra ?? "")
         ? ["Historical virtual evidence is not stamped to a verified channel specification; use it for research grouping, not exact-current claims."] : []),
     ],
   };
@@ -930,7 +935,7 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
   const graphRows = [...new Set(rows.map((row) => row.channel))].flatMap((channel) =>
     selectDecisionCohort(rows.filter((row) => row.channel === channel)));
   const graph = buildCollisionGraph(graphRows);
-  const channels = [...new Set(rows.map((row) => row.channel))].sort();
+  const channels = [...new Set([...(input.catalogChannels ?? []), ...rows.map((row) => row.channel)])].sort();
   const dossiers = Object.fromEntries(channels.map((channel) => {
     const channelRows = rows.filter((row) => row.channel === channel);
     const decisionRows = selectDecisionCohort(channelRows);
@@ -971,7 +976,7 @@ export function buildDecisionAtlas(input: AtlasInput): DecisionAtlas {
         fact: decisionRows[0]?.evidenceLayer === "exact_current_configuration"
           ? "Default metrics use the unchanged current channel specification across portfolio receipts."
           : decisionRows[0]?.evidenceLayer === "prospective_virtual"
-            ? /unstamped|legacy/i.test(decisionRows[0]?.configurationEra ?? "")
+            ? /unstamped|legacy|unverified/i.test(decisionRows[0]?.configurationEra ?? "")
               ? "Default metrics use historical virtual paths with an unverified configuration stamp; not portfolio P&L."
               : "Default metrics use the latest versioned prospective virtual cohort; not portfolio P&L."
             : "Default metrics use the latest available era; exact-current evidence is not available.",

@@ -9,6 +9,7 @@ import { loadStoredReceiptBoundControlPlane } from "../lib/channels/channelContr
 import type { ProfitabilityLedger } from "../lib/profitability/profitabilityLedger";
 import { etDateOf } from "../lib/profitability/profitabilityLedger";
 import { buildDecisionAtlas } from "../lib/research/decisionAtlas";
+import { evidenceJsonHash } from "../lib/research/atlasEvidenceEligibility";
 import {
   buildBoundedRetuneBook,
   renderBoundedRetuneBookMarkdown,
@@ -175,7 +176,7 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
       .select("id,runner_of,entry_features,occ_symbol,opened_at", options)
       .gte("opened_at", evidenceWindow.start).lt("opened_at", evidenceWindow.end).order("opened_at").order("id")),
     read<AtlasSignalRow>("signals", (options) => sb.from("signals")
-      .select("id,strategist_id,signal_type,underlying_price,direction,rationale,acted_on,blocked_reason,created_at,configuration_epoch_id", options)
+      .select("id,strategist_id,signal_type,underlying_price,direction,rationale,acted_on,blocked_reason,created_at,configuration_epoch_id,channel_spec_version_id,release_manifest_id", options)
       .gte("created_at", evidenceWindow.start).lt("created_at", evidenceWindow.end).order("created_at").order("id")),
     read<AtlasExecutionRow>("execution_observations", (options) => sb.from("execution_observations")
       .select(["id", "trace_id", "event_kind", "event_at", "strategist_id", "account_id", "channel_slug",
@@ -184,7 +185,7 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
         "configuration_epoch_id", "source_bar_at", "client_order_id", "broker_order_id", "source_boot_id"].join(","), options)
       .gte("event_at", evidenceWindow.start).lt("event_at", evidenceWindow.end).order("event_at").order("id")),
     read<AtlasVirtualTradeRow>("virtual_trades", (options) => sb.from("virtual_trades")
-      .select("signal_id,strategist_id,slug,occ,signal_at,blocked,entry_px,exit_reason,exit_px,exit_at,pnl_per_contract,mfe_pct,giveback_pct", options)
+      .select("signal_id,strategist_id,slug,occ,signal_at,blocked,entry_px,exit_reason,exit_px,exit_at,pnl_per_contract,mfe_pct,giveback_pct,stop_pct,tp_pct,n_quotes,channel_spec_version_id,release_manifest_id,configuration_epoch_id,native_manager_policy_version,research_publisher_version", options)
       .gte("signal_at", evidenceWindow.start).lt("signal_at", evidenceWindow.end).order("signal_at").order("signal_id"), "signal_id"),
     read<ChannelManagerRunRow>("manager_shadow_runs", (options) => sb.from("manager_shadow_runs")
       .select(["id", "position_id", "channel_slug", "manager_id", "manager_policy_version", "shadow_book_version",
@@ -287,6 +288,7 @@ async function main(): Promise<void> {
   snapshot = catchup.snapshot;
   const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt, throughSession });
   const atlas = buildDecisionAtlas(normalized);
+  atlas.sourceSnapshotSha256 = evidenceJsonHash(snapshot);
   const boundedRetunes = buildBoundedRetuneBook({
     generatedAt,
     throughSession,

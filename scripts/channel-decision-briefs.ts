@@ -2,6 +2,7 @@
 // This command is local-only and carries no database or trading authority.
 
 import { createHash } from "node:crypto";
+import { evidenceJsonHash } from "../lib/research/atlasEvidenceEligibility";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DecisionAtlas } from "../lib/research/decisionAtlas";
@@ -65,6 +66,10 @@ const bundle = buildChannelDecisionBriefs({
   entryAtlas,
   trialReviews: buildRosterTrialReviews(snapshot, atlas.throughSession),
 });
+if (atlas.sourceSnapshotSha256 !== evidenceJsonHash(snapshot)) {
+  throw new Error("Atlas source receipt does not match the brief generator's frozen snapshot; rebuild the Atlas first.");
+}
+bundle.sourceInputs = { snapshotSha256: evidenceJsonHash(snapshot), atlasSha256: evidenceJsonHash(atlas) };
 const json = `${JSON.stringify(bundle, null, 2)}\n`;
 const markdown = `${renderChannelDecisionBriefs(bundle)}\n`;
 const hash = (value: string): string => `sha256:${createHash("sha256").update(value).digest("hex")}`;

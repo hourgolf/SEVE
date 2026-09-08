@@ -15,7 +15,7 @@ const finishMap = read("./EntryFinishMap.tsx");
 
 assert.match(card, /HISTORICAL VIRTUAL/);
 assert.match(card, /PLATFORM RULES/);
-assert.match(card, /opportunities suppressed/);
+assert.match(card, /modeled wins/);
 assert.match(card, /PROSPECTIVE TEST/);
 assert.match(card, /SELECTED CHANNEL/);
 assert.match(card, /\{brief\.channel\}/,
@@ -29,14 +29,14 @@ assert.match(card, /CURRENT SAMPLE ONLY/);
 assert.match(card, /DO NOT ACT ON THIS SAMPLE ALONE/);
 assert.match(card, /SessionDistributionStrip/);
 assert.match(card, /See supporting evidence/);
-assert.match(card, /CURRENT EXECUTED/);
+assert.match(card, /LATEST EXECUTED ERA/);
 assert.match(card, /HISTORICAL VIRTUAL/);
-assert.match(card, /DO LATER ENTRIES STILL HELP/);
-assert.match(card, /IS THIS ENTRY FINDING A REAL MOVE/);
+assert.match(card, /RECORDED OPPORTUNITY ORDER/);
+assert.match(card, /RECORDED ENTRY CONTEXT/);
 assert.match(card, /TYPICAL BEST MOVE/);
 assert.match(card, /FAVORABLE PATHS/);
 assert.match(card, /Compare entry relationships and entry order/);
-assert.match(card, /HOW MUCH OF THE MOVE DID THE EXIT KEEP/);
+assert.match(card, /SAMPLED PEAK AND FINAL RETURN/);
 assert.match(card, /DOES A DIFFERENT EXIT WIN TYPICALLY/);
 assert.match(card, /VIRTUAL TRAIL READ/);
 assert.match(card, /EXECUTED TRAIL READ/);

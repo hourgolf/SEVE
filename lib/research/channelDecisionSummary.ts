@@ -16,7 +16,7 @@ export const CHANNEL_DISPOSITIONS = [
 ] as const;
 
 export type ChannelDisposition = typeof CHANNEL_DISPOSITIONS[number];
-export type DecisionEvidenceState = "DECISION READY" | "DEVELOPING" | "TOO EARLY" | "REVIEW REQUIRED";
+export type DecisionEvidenceState = "CURRENT COHORT" | "DEVELOPING" | "TOO EARLY" | "REVIEW REQUIRED";
 
 export interface ChannelDecisionMetric {
   label: string;
@@ -28,7 +28,7 @@ export interface ChannelDecisionSummary {
   summaryVersion: typeof CHANNEL_DECISION_SUMMARY_VERSION;
   channel: string;
   throughSession: string;
-  sourceLabel: "NIGHTLY PAIRED";
+  sourceLabel: "NIGHTLY EVIDENCE";
   disposition: ChannelDisposition;
   diagnosis: string;
   nextTest: string;
@@ -132,12 +132,12 @@ function evidenceState(brief: ChannelDecisionBrief): { state: DecisionEvidenceSt
   const sessions = brief.evidence.decisionSessions;
   const opportunities = brief.evidence.decisionOpportunities;
   if (brief.evidence.exactCurrentAvailable && sessions >= 5 && opportunities >= 10) {
-    return { state: "DECISION READY", fact: `${sessions} independent sessions and ${opportunities} logical opportunities from the current configuration.` };
+    return { state: "CURRENT COHORT", fact: `${sessions} sessions and ${opportunities} recorded opportunities match the current configuration. Counts alone do not establish a decision-ready change.` };
   }
   if (sessions >= 5 && opportunities >= 10) {
     return { state: "DEVELOPING", fact: `${sessions} sessions and ${opportunities} opportunities are useful, but the decision cohort is not exact-current configuration evidence.` };
   }
-  return { state: "TOO EARLY", fact: `${sessions} independent sessions and ${opportunities} logical opportunities; keep collecting before treating the direction as durable.` };
+  return { state: "TOO EARLY", fact: `${sessions} sessions and ${opportunities} recorded opportunities; keep collecting before treating the direction as durable.` };
 }
 
 function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
@@ -157,8 +157,8 @@ function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
     return { label: weak ? `${weak.entryNumber === 2 ? "SECOND" : `ENTRY ${weak.entryNumber}`} ENTRY` : "ENTRY ORDER", value: weak ? money(weak.typicalResultPerContractUsd, "/ct") : "COLLECTING", fact: brief.entryFrequency.conclusion };
   }
   if (axis === "exit") return (brief.nativeExit.typicalReturnPct ?? 0) < 0 && (brief.nativeExit.typicalBestMovePct ?? 0) > 0
-    ? { label: "EXIT RESULT", value: "BELOW ENTRY", fact: brief.nativeExit.conclusion }
-    : { label: "MOVE KEPT", value: percent(brief.nativeExit.typicalCapture), fact: brief.nativeExit.conclusion };
+    ? { label: "EXIT RESULT", value: "BELOW ENTRY", fact: "Sampled peak/final-return diagnostic; not an executable exit comparison." }
+    : { label: "PEAK RATIO", value: percent(brief.nativeExit.typicalCapture), fact: "Sampled peak/final-return diagnostic; not an executable exit comparison." };
   if (axis === "manager") {
     const challenger = brief.managers.recommended ?? brief.managers.compared[0] ?? null;
     return { label: "CHALLENGER", value: challenger?.managerId ?? "NONE YET", fact: brief.managers.conclusion };
@@ -170,36 +170,36 @@ function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
   }
   if (axis === "admission") return {
     label: "PLATFORM EFFECT",
-    value: `${brief.platformEffect.blockedWinners} SUPPRESSED / ${brief.platformEffect.protectedLosses} PROTECTED`,
-    fact: brief.platformEffect.conclusion,
+    value: `${brief.platformEffect.blockedWinners} MODELED WINS / ${brief.platformEffect.protectedLosses} LOSSES`,
+    fact: "Modeled blocked-candidate outcomes; not the marginal portfolio effect of removing a control.",
   };
   if (axis === "promotion") return { label: "PORTFOLIO OVERLAP", value: brief.collision.strongestOverlap ? brief.collision.strongestOverlap.redundancy.toUpperCase() : "UNKNOWN", fact: brief.collision.conclusion };
   if (axis === "retirement") return { label: "REDUNDANCY", value: brief.collision.strongestOverlap ? brief.collision.strongestOverlap.redundancy.toUpperCase() : "UNKNOWN", fact: brief.collision.conclusion };
-  return { label: "MOVE KEPT", value: percent(brief.nativeExit.typicalCapture), fact: brief.nativeExit.conclusion };
+  return { label: "PEAK RATIO", value: percent(brief.nativeExit.typicalCapture), fact: "Sampled peak/final-return diagnostic; not an executable exit comparison." };
 }
 
 function plainDiagnosis(brief: ChannelDecisionBrief): string {
   const axis = brief.recommendation.axis;
   if (axis === "entry") {
-    if (brief.entryAtlas) return brief.entryAtlas.conclusion;
+    if (brief.entryAtlas) return "Recorded entry features are associated with managed outcomes. Confirm the relationship within the same policy era and later sessions before changing an entry rule.";
     const weak = brief.entryFrequency.rows.find((row) => row.sessions >= 5 && row.scored >= 5 && (row.typicalResultPerContractUsd ?? 0) <= 0);
-    if (weak) return `The ${weak.entryNumber === 2 ? "second" : `number ${weak.entryNumber}`} entry typically lost $${Math.abs(Math.round(weak.typicalResultPerContractUsd ?? 0)).toLocaleString("en-US")}/ct. Test one fewer entry before changing the exit.`;
+    if (weak) return `Recorded opportunity #${weak.entryNumber} had a negative managed-result median. Its ordinal does not establish an executed entry or the effect of an entry cap.`;
   }
   if (axis === "exit" && (brief.nativeExit.typicalBestMovePct ?? 0) > 0 && (brief.nativeExit.typicalReturnPct ?? 0) < 0) {
-    return "Entries found a favorable move, but the current exit typically finished below the entry price.";
+    return "Stored peaks were positive while the final-return median was negative. Executable paired exits are needed to determine whether the gap was capturable.";
   }
   if (axis === "manager") return "One exit manager deserves a controlled comparison on the same opportunities.";
-  if (axis === "size") return "The current entry and exit shape is promising enough to test one additional size step in the portfolio replay.";
-  if (axis === "admission") return brief.platformEffect.conclusion;
+  if (axis === "size") return "The stored replay proposes a size comparison. Verify its cash, execution and peer-displacement assumptions before treating the step as supported.";
+  if (axis === "admission") return "Blocked candidates have modeled outcomes. The effect of relaxing admission requires a complete account sequence including displaced peer trades.";
   return concise(brief.recommendation.summary);
 }
 
 function plainNextTest(brief: ChannelDecisionBrief): string {
   if (brief.recommendation.axis === "entry") return brief.entryAtlas?.leadingRelationship
     ? brief.entryAtlas.nextTest
-    : "Allow one fewer entry per session and compare the same signal sequence.";
+    : "Compare opportunity timing under the same native manager, then replay admission and displaced peers before changing the entry count.";
   if (brief.recommendation.axis === "exit") return "Compare one exit alternative with the current exit on the same opportunities.";
-  if (brief.recommendation.axis === "manager") return "Compare one manager with the current manager on the same filled positions.";
+  if (brief.recommendation.axis === "manager") return "Compare one manager with the native manager on the same compatible opportunities, preserving stops, executable prices and censors.";
   if (brief.recommendation.axis === "size") return "Replay one contract step with account capacity and displaced opportunities included.";
   if (brief.recommendation.axis === "admission") return "Relax one channel-specific admission rule in paper replay while every other variable stays fixed.";
   return conciseTest(brief.recommendation.nextExperiment);
@@ -216,13 +216,15 @@ export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): Channe
     displacedPeers: point.displacedOtherOpportunities,
     deploymentFrequency: point.deploymentFrequency,
   }));
+  const peakFact = "Recorded sampled-peak diagnostic; it does not establish an executable gain or identify whether entry or management caused the result.";
+  const platformFact = `${brief.platformEffect.candidates} blocked candidates across ${brief.platformEffect.sessions} sessions have modeled outcomes. Selected native policy, actual admission, cash and displaced peers must be verified before attributing a portfolio benefit or loss to a gate.`;
   const typical = brief.metrics.find((metric) => metric.label === "typical result") ?? { label: "typical result", value: "—", fact: "Median logical opportunity." };
   const sample = brief.metrics.find((metric) => metric.label === "evidence") ?? { label: "evidence", value: "—", fact: evidence.fact };
   return {
     summaryVersion: CHANNEL_DECISION_SUMMARY_VERSION,
     channel: brief.channel,
     throughSession: brief.throughSession,
-    sourceLabel: "NIGHTLY PAIRED",
+    sourceLabel: "NIGHTLY EVIDENCE",
     disposition: trialReviewNeedsAttention(brief.trialReview) ? "REVIEW TRIAL" : dispositionForAxis(brief.recommendation.axis),
     diagnosis: trialReviewNeedsAttention(brief.trialReview) ? brief.trialReview!.fact : plainDiagnosis(brief),
     nextTest: trialReviewNeedsAttention(brief.trialReview) ? brief.trialReview!.next : plainNextTest(brief),
@@ -240,15 +242,15 @@ export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): Channe
       ...(brief.platformEffect.state === "available" && brief.recommendation.axis !== "admission" ? [{
         label: "PLATFORM EFFECT",
         value: `${brief.platformEffect.blockedWinners} ↑ / ${brief.platformEffect.protectedLosses} ↓`,
-        fact: brief.platformEffect.conclusion,
+        fact: "Modeled blocked-candidate outcomes; not the marginal portfolio effect of removing a control.",
       }] : []),
     ],
     entry: {
-      conclusion: brief.entryFrequency.conclusion,
+      conclusion: "Recorded opportunity order and native-managed outcomes are descriptive. They do not separately measure entry quality or the effect of changing an entry cap.",
       points: brief.entryFrequency.rows.map((row) => ({ number: row.entryNumber, typicalUsd: row.typicalResultPerContractUsd, sessions: row.sessions, scored: row.scored })),
     },
     exit: {
-      conclusion: brief.nativeExit.conclusion,
+      conclusion: peakFact,
       bestMovePct: brief.nativeExit.typicalBestMovePct,
       retainedPct: brief.nativeExit.typicalReturnPct,
       capture: brief.nativeExit.typicalCapture,
@@ -275,10 +277,11 @@ export function buildChannelDecisionSummary(brief: ChannelDecisionBrief): Channe
     },
     sources: {
       ...brief.evidence,
+      limitations: [...new Set([...brief.evidence.limitations, "Current-configuration identity and sample size do not establish promotion or retirement readiness.", "Recorded opportunity order is not necessarily executed entry order; virtual paths can overlap.", "Sampled peaks are diagnostics; native-stop-preserving executable pairs and portfolio effects require separate evidence."])],
       executed: brief.executed,
       historicalVirtual: brief.historicalVirtual,
       collision: brief.collision,
-      platformEffect: brief.platformEffect,
+      platformEffect: { ...brief.platformEffect, conclusion: platformFact },
     },
   };
 }
@@ -289,7 +292,7 @@ export function buildFleetDecisionSummary(bySlug: Readonly<Record<string, Channe
   const promoteOrRetire = summaries.filter((row) => row.disposition === "REVIEW PROMOTION" || row.disposition === "REVIEW RETIREMENT").length;
   const collecting = summaries.filter((row) => row.disposition === "KEEP COLLECTING").length;
   const lead = summaries.find((row) => row.disposition === "REVIEW TRIAL")
-    ?? summaries.find((row) => row.evidenceState === "DECISION READY" && row.disposition !== "KEEP COLLECTING")
+    ?? summaries.find((row) => row.evidenceState === "CURRENT COHORT" && row.disposition !== "KEEP COLLECTING")
     ?? summaries.find((row) => row.disposition !== "KEEP COLLECTING") ?? null;
   return { throughSession, reports: summaries.length, investigate, promoteOrRetire, collecting,
     lead: lead ? { channel: lead.channel, disposition: lead.disposition } : null };

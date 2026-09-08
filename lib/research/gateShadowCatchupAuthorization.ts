@@ -10,6 +10,7 @@ export interface GateShadowCatchupManifest {
   exactWriteRequired: boolean;
   allowedWriteTableIfSeparatelyAuthorized: string;
   productionWrites: number;
+  publishedSignalIds?: string[];
 }
 
 export interface AuthorizedGateShadowCatchup {

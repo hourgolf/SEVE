@@ -3,6 +3,7 @@ import { buildOperatorPaperCapacityEnvelope } from "@/lib/channels/channelPortfo
 import { etDateOf, type LogicalTrade, type ProfitabilityLedger } from "@/lib/profitability/profitabilityLedger";
 import type { ChannelManagerRunRow } from "@/lib/research/channelManagerEvidence";
 import { parseBoundedRetuneSignalStamp } from "@/lib/research/boundedRetuneRegistry";
+import { deriveVirtualTradeProvenance } from "./virtualTradeProvenance";
 import type {
   AtlasAccountBudget,
   AtlasInput,
@@ -17,6 +18,8 @@ export interface AtlasStrategistRow {
 }
 
 export interface AtlasSignalRow {
+  channel_spec_version_id?: string | null;
+  release_manifest_id?: string | null;
   id: string;
   strategist_id: string;
   signal_type: string;
@@ -74,6 +77,14 @@ export interface AtlasWorkerRunRow {
 }
 
 export interface AtlasVirtualTradeRow {
+  channel_spec_version_id?: string | null;
+  release_manifest_id?: string | null;
+  configuration_epoch_id?: string | null;
+  native_manager_policy_version?: string | null;
+  research_publisher_version?: string | null;
+  stop_pct?: number | string | null;
+  tp_pct?: number | string | null;
+  n_quotes?: number | string | null;
   signal_id: string;
   strategist_id: string;
   slug: string;
@@ -87,6 +98,27 @@ export interface AtlasVirtualTradeRow {
   pnl_per_contract: number | string | null;
   mfe_pct: number | string | null;
   giveback_pct: number | string | null;
+}
+
+/** Policy agreement is not a proof of executable fills or the full native manager. */
+export function virtualPolicyIdentity(signal: AtlasSignalRow, virtual?: AtlasVirtualTradeRow): {
+  configurationEra: string; managerVersion: string | null; verified: boolean;
+} {
+  if (virtual) {
+    try {
+      const { columns, policy } = deriveVirtualTradeProvenance(signal);
+      const matches = Object.entries(columns).every(([key, value]) =>
+        virtual[key as keyof AtlasVirtualTradeRow] === value)
+        && virtual.stop_pct != null && Number(virtual.stop_pct) === policy.scoredStopPct
+        && virtual.tp_pct != null && Number(virtual.tp_pct) === policy.takeProfitPct;
+      if (matches) return {
+        configurationEra: `virtual-reference-policy:${columns.channel_spec_version_id ?? "unbound"}:${policy.policyVersion}:${policy.scoredStopPct}:${policy.takeProfitPct}`,
+        managerVersion: `virtual-reference:${policy.policyVersion}`, verified: true,
+      };
+    } catch { /* Legacy or malformed provenance cannot inherit the current specification. */ }
+  }
+  return { configurationEra: `virtual-policy-unverified:${signal.configuration_epoch_id ?? "unstamped"}`,
+    managerVersion: null, verified: false };
 }
 
 export interface AtlasEquitySnapshotRow {
@@ -532,10 +564,12 @@ export function adaptDecisionAtlasSnapshot(input: {
     const facts = factsByLogical.get(logical);
     const rationale = object(signal.rationale);
     const spec = specBySlug.get(slug);
-    const signalChannelSpecId = signal.configuration_epoch_id
-      ? channelSpecIdBySlugEpoch.get(`${slug}\u0000${signal.configuration_epoch_id}`) : null;
-    const entryPrice = number(exactPath?.entry_ask) ?? number(virtual?.entry_px)
-      ?? number(rationale?.ask) ?? facts?.fillPrice ?? null;
+    const virtualPolicy = virtualPolicyIdentity(signal, virtual);
+    // A virtual P&L belongs to its own modeled entry. Substituting an exact
+    // candidate's different ask manufactures a return that neither path earned.
+    // Missing virtual basis stays unknown rather than borrowing another lane.
+    const entryPrice = virtual ? number(virtual.entry_px)
+      : number(exactPath?.entry_ask) ?? number(rationale?.ask) ?? facts?.fillPrice ?? null;
     const pnl = number(virtual?.pnl_per_contract);
     const returnPct = pnl != null && entryPrice != null && entryPrice > 0 ? pnl / entryPrice : null;
     const mfePct = number(virtual?.mfe_pct);
@@ -546,14 +580,10 @@ export function adaptDecisionAtlasSnapshot(input: {
       session: etDateOf(signal.created_at),
       signalAt: signal.created_at,
       exitAt: virtual?.exit_at ?? null,
-      configurationEra: signalChannelSpecId
-        ? `channel-spec:${signalChannelSpecId}`
-        : spec && signal.configuration_epoch_id === snapshot.currentConfigurationEpochId
-          ? `channel-spec:${currentChannelSpecIdBySlug.get(slug) ?? spec.id}`
-        : `prospective-channel:${signal.configuration_epoch_id ?? facts?.portfolioConfigurationEra ?? "unstamped"}`,
+      configurationEra: virtualPolicy.configurationEra,
       portfolioConfigurationEra: signal.configuration_epoch_id
         ?? facts?.portfolioConfigurationEra ?? "portfolio:unstamped",
-      managerVersion: spec?.managerVersion ?? null,
+      managerVersion: virtualPolicy.managerVersion,
       evidenceLayer: "prospective_virtual",
       accountId: facts?.accountId ?? spec?.accountId ?? null,
       underlying: facts?.underlying ?? strategist?.underlying ?? spec?.symbolScope[0] ?? "UNKNOWN",
@@ -571,15 +601,17 @@ export function adaptDecisionAtlasSnapshot(input: {
       mfePct,
       maePct: null,
       captureRatio: mfePct != null && mfePct > 0 && returnPct != null ? returnPct / mfePct : null,
-      stopExposurePerContractUsd: spec ? spec.riskLimits.maxRiskUsd / spec.quantity : null,
+      stopExposurePerContractUsd: virtualPolicy.verified && entryPrice != null && virtual?.stop_pct != null
+        ? entryPrice * Number(virtual.stop_pct) : null,
       boundedRetuneStamp: parseBoundedRetuneSignalStamp(rationale?.bounded_retune_experiment),
       sourceRefs: [
         `signals:${signal.id}`,
         ...(virtual ? [`virtual_trades:${virtual.signal_id}`] : []),
+        virtualPolicy.verified ? "limitation:virtual-reference-policy-not-full-native-manager"
+          : "limitation:virtual-policy-unverified",
         ...(facts?.refs ?? []),
         ...(exactCandidate ? [`vb_candidate_receipts:${exactCandidate.id}`] : []),
         ...(exactPath ? [`vb_exact_path_receipts:${exactPath.id}`] : []),
-        ...(spec ? [`channel_spec_versions:${spec.id}`] : []),
       ].sort(),
     };
     opportunities.push(base);
@@ -597,15 +629,15 @@ export function adaptDecisionAtlasSnapshot(input: {
       id: `prospective_virtual:${virtual.signal_id}`,
       channel: virtual.slug,
       session: etDateOf(virtual.signal_at), signalAt: virtual.signal_at, exitAt: virtual.exit_at,
-      configurationEra: "prospective-channel:signal-row-missing",
-      portfolioConfigurationEra: "portfolio:signal-row-missing", managerVersion: spec?.managerVersion ?? null,
+      configurationEra: "virtual-policy-unverified:signal-row-missing",
+      portfolioConfigurationEra: "portfolio:signal-row-missing", managerVersion: null,
       evidenceLayer: "prospective_virtual", accountId: spec?.accountId ?? null,
       underlying: spec?.symbolScope[0] ?? "UNKNOWN", occSymbol: virtual.occ, direction: null,
       contractSelected: virtual.occ ? true : null, quoteEligible: null, admissionAllowed: null, filled: null,
       blockedReason: virtual.blocked, quantity: spec?.quantity ?? null, entryPrice,
       resultPerContractUsd: pnl, returnPct, mfePct, maePct: null,
       captureRatio: mfePct != null && mfePct > 0 && returnPct != null ? returnPct / mfePct : null,
-      stopExposurePerContractUsd: spec ? spec.riskLimits.maxRiskUsd / spec.quantity : null,
+      stopExposurePerContractUsd: null,
       boundedRetuneStamp: null,
       sourceRefs: [`virtual_trades:${virtual.signal_id}`, "limitation:signal-row-missing"],
     });
@@ -618,6 +650,7 @@ export function adaptDecisionAtlasSnapshot(input: {
     managerPaths,
     accountBudgets: budgets(snapshot),
     activeChannels: snapshot.activeChannelSpecs.map((spec) => spec.slug),
+    catalogChannels: snapshot.strategists.map((row) => row.slug),
     currentChannelConfigurationEras: Object.fromEntries([...currentChannelSpecIdBySlug]
       .map(([slug, id]) => [slug, `channel-spec:${id}`])),
     channelPremiumCaps: Object.fromEntries(snapshot.activeChannelSpecs.map((spec) =>

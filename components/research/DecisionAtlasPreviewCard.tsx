@@ -26,10 +26,10 @@ function EntrySequence({ model, entryAtlas }: { model: ChannelDecisionSummary; e
   const points = model.entry.points.slice(0, 6);
   const magnitude = Math.max(1, ...points.map((point) => Math.abs(point.typicalUsd ?? 0)));
   if (entryAtlas) return <section className="atlas-view" aria-label="Entry Atlas evidence">
-    <header><b>IS THIS ENTRY FINDING A REAL MOVE?</b><span>entry opportunity, separated from realized exit P&amp;L</span></header>
-    <p>{entryAtlas.conclusion}</p>
+    <header><b>RECORDED ENTRY CONTEXT</b><span>descriptive outcomes under the recorded policy</span></header>
+    <p>{entryAtlas.conclusion} This describes observed paths; it does not independently establish raw signal quality or an executable entry improvement.</p>
     <div className="atlas-source-ladder">
-      <span><small>ENTRY READ</small><b>{entryAtlas.read.toUpperCase()}</b><em>{entryAtlas.bestContext}</em></span>
+      <span><small>PATH READ</small><b>{entryAtlas.read.toUpperCase()}</b><em>{entryAtlas.bestContext}</em></span>
       <span><small>TYPICAL BEST MOVE</small><b>{signed(entryAtlas.metrics.typicalBestMovePct, "%")}</b><em>while the stored path remained observable</em></span>
       <span><small>FAVORABLE PATHS</small><b>{pct(entryAtlas.metrics.favorableMoveRate)}</b><em>reached the fixed +10% research yardstick</em></span>
       <span><small>EVIDENCE</small><b>{entryAtlas.cohort.scoredSessions}s · {entryAtlas.cohort.scoredOpportunities} opportunities</b><em>{entryAtlas.cohort.evidenceLayer.replaceAll("_", " ")}</em></span>
@@ -51,7 +51,7 @@ function EntrySequence({ model, entryAtlas }: { model: ChannelDecisionSummary; e
     </details>
   </section>;
   return <section className="atlas-view" aria-label="Entry sequence evidence">
-    <header><b>DO LATER ENTRIES STILL HELP?</b><span>typical result per contract</span></header>
+    <header><b>RECORDED OPPORTUNITY ORDER</b><span>typical result per contract</span></header>
     <p>{model.entry.conclusion}</p>
     {points.length ? <div className="atlas-entry-sequence">{points.map((point) => {
       const value = point.typicalUsd ?? 0;
@@ -70,14 +70,14 @@ function ExitCapture({ model }: { model: ChannelDecisionSummary }) {
   const retained = Math.max(0, Math.min(best, model.exit.retainedPct ?? 0));
   const kept = best > 0 ? retained / best : 0;
   return <section className="atlas-view" aria-label="Native exit capture">
-    <header><b>HOW MUCH OF THE MOVE DID THE EXIT KEEP?</b><span>typical opportunity</span></header>
+    <header><b>SAMPLED PEAK AND FINAL RETURN</b><span>typical opportunity</span></header>
     <p>{model.exit.conclusion}</p>
-    <div className="atlas-capture-labels"><span>best move <b>{signed(model.exit.bestMovePct, "%")}</b></span><span>kept <b>{pct(Math.max(0, model.exit.capture ?? 0))}</b></span><span>gave back <b>{signed(model.exit.gaveBackPoints, " pts")}</b></span></div>
-    <div className="atlas-capture-track" aria-label={`${pct(model.exit.capture)} of the typical best move retained`}>
+    <div className="atlas-capture-labels"><span>best move <b>{signed(model.exit.bestMovePct, "%")}</b></span><span>peak ratio <b>{pct(model.exit.capture == null ? null : Math.max(0, model.exit.capture))}</b></span><span>gave back <b>{signed(model.exit.gaveBackPoints, " pts")}</b></span></div>
+    {model.exit.capture == null || model.exit.bestMovePct == null ? <p>Sampled-peak comparison unavailable.</p> : <div className="atlas-capture-track" aria-label={`${pct(model.exit.capture)} ratio to the recorded sampled peak`}>
       <i className="kept" style={{ width: `${Math.round(kept * 100)}%` }} />
       <i className="given" style={{ width: `${Math.round((1 - kept) * 100)}%` }} />
-    </div>
-    <div className="atlas-capture-legend"><span><i className="kept" /> retained</span><span><i className="given" /> gave back</span></div>
+    </div>}
+    <p>These summary peak ratios are diagnostics. They do not identify a realizable exit price or separate entry quality from management.</p>
   </section>;
 }
 
@@ -125,12 +125,12 @@ function EvidenceSources({ model }: { model: ChannelDecisionSummary }) {
   return <section className="atlas-view" aria-label="Evidence sources and boundaries">
     <header><b>WHAT EVIDENCE SUPPORTS THIS?</b><span>sources remain separate</span></header>
     <div className="atlas-source-ladder">
-      <span><small>CURRENT EXECUTED</small><b>{sources.executed.state === "available" ? `${sources.executed.sessions}s · ${sources.executed.logicalTrades} trades` : "NO CURRENT SAMPLE"}</b><em>{sources.executed.configurationEra ?? "no configuration era"}</em></span>
+      <span><small>LATEST EXECUTED ERA</small><b>{sources.executed.state === "available" ? `${sources.executed.sessions}s · ${sources.executed.logicalTrades} trades` : "NO EXECUTED SAMPLE"}</b><em>{sources.executed.configurationEra ?? "no configuration era"}</em></span>
       <span><small>HISTORICAL VIRTUAL</small><b>{sources.historicalVirtual.state === "available" ? `${sources.historicalVirtual.sessions}s · ${sources.historicalVirtual.scored} paths` : "NO VIRTUAL SAMPLE"}</b><em>{sources.historicalVirtual.configurationEra ?? "no configuration era"}</em></span>
       <span><small>DECISION COHORT</small><b>{sources.decisionSessions}s · {sources.decisionOpportunities} opportunities</b><em>{sources.exactCurrentAvailable ? "exact current configuration" : sources.configurationEra}</em></span>
-      {sources.platformEffect.state === "available" && <span><small>PLATFORM RULES</small><b>{sources.platformEffect.blockedWinners} opportunities suppressed · {sources.platformEffect.protectedLosses} losses avoided</b><em>{sources.platformEffect.sessions}s · {sources.platformEffect.candidates} exact candidates · {sources.platformEffect.managerCensors} arms withheld</em></span>}
+      {sources.platformEffect.state === "available" && <span><small>PLATFORM RULES</small><b>{sources.platformEffect.blockedWinners} modeled wins · {sources.platformEffect.protectedLosses} modeled losses</b><em>{sources.platformEffect.sessions}s · {sources.platformEffect.candidates} exact candidates · {sources.platformEffect.managerCensors} arms withheld</em></span>}
     </div>
-    <p>{model.evidenceStateFact} Executed, virtual, and manager results are never pooled.</p>
+    <p>{model.evidenceStateFact} Executed, virtual and manager evidence have different scope. Matching median signs do not establish comparable performance.</p>
     {sources.limitations.length > 0 && <ul>{sources.limitations.map((item) => <li key={item}>{item}</li>)}</ul>}
   </section>;
 }
@@ -147,7 +147,7 @@ function EvidenceScopeSummary({ brief, summary }: { brief: ChannelDecisionBrief;
   const executedSign = brief.executed.typicalResultUsd == null ? null : Math.sign(brief.executed.typicalResultUsd);
   const virtualSign = summary?.typicalPerPath == null ? null : Math.sign(summary.typicalPerPath);
   const agreement = executedSign == null || virtualSign == null ? "PARTIAL SOURCES"
-    : executedSign === virtualSign ? "SOURCES AGREE" : "SOURCES DISAGREE";
+    : executedSign === virtualSign ? "MEDIAN SIGNS MATCH" : "MEDIAN SIGNS DIFFER";
   return <section className="atlas-evidence-scopes" aria-label="Channel evidence scopes">
     <nav aria-label="Evidence lens">
       <button type="button" className={lens === "current" ? "on" : ""} onClick={() => setLens("current")}>CURRENT SETTINGS</button>
@@ -176,7 +176,7 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
     brief: comparableStoryReady ? brief : undefined,
     referenceSession: brief.throughSession,
   }) : null;
-  return <section className={`atlas-preview authoritative decision-first${compact ? " compact" : ""}`} aria-label="Decision Atlas paired channel report">
+  return <section className={`atlas-preview authoritative decision-first${compact ? " compact" : ""}`} aria-label="Decision Atlas channel evidence report">
     <header>
       <span><small>SELECTED CHANNEL</small><strong>{brief.channel}</strong><b>{story?.group ?? model.disposition}</b></span>
       <em>{trialAlert ? `TRIAL REVIEW · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · REVIEW REQUIRED` : comparableStoryReady ? `ATLAS · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · ${story ? `${story.freshness} · ${story.maturity}` : model.evidenceState}` : `CURRENT SAMPLE · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · BRIEF NEEDS REFRESH`}</em>
@@ -187,7 +187,7 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
       <span><small>TYPICAL SESSION</small><b>{money(story.typicalSession)}</b></span>
       <span><small>POSITIVE SESSIONS</small><b>{story.positiveSessions}/{story.sessions}</b></span>
       <span><small>TYPICAL BEST MOVE</small><b>{signed(story.typicalBestMovePct, "%")}</b></span>
-      <span><small>TYPICAL MOVE KEPT</small><b>{pct(story.typicalCapture)}</b></span>
+      <span><small>RATIO TO SAMPLED PEAK</small><b>{pct(story.typicalCapture)}</b></span>
       <span><small>WEAK SESSION</small><b>{money(story.weakSession)}</b></span>
     </div> : <div className="atlas-preview-metrics">{model.metrics.map((metric) => <span key={metric.label} title={metric.fact}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div>}
     {!trialAlert && <EvidenceScopeSummary brief={brief} summary={summary} />}

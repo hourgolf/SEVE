@@ -8,6 +8,11 @@ import { dirname, resolve } from "node:path";
 import type { ChannelDecisionBrief, ChannelDecisionBriefBundle } from "../lib/research/channelDecisionBrief";
 import { createServerSupabaseClient } from "./serverSupabase";
 import { atlasPublicationDescriptor, stablePublicationJson, verifyAtlasPublication } from "../lib/research/atlasPublication";
+import { atlasEvidenceEligibility, evidenceJsonHash } from "../lib/research/atlasEvidenceEligibility";
+import type { DecisionAtlasSourceSnapshot } from "../lib/research/decisionAtlasAdapter";
+import type { GateShadowCatchupManifest } from "../lib/research/gateShadowCatchupAuthorization";
+import type { IndependentShadowVerification } from "../lib/research/evidenceReconciliation";
+import type { DecisionAtlas } from "../lib/research/decisionAtlas";
 
 const PUBLISH = process.argv.includes("--publish");
 const arg = (name: string, fallback?: string): string | null => {
@@ -24,6 +29,30 @@ if (!existsSync(briefsFile)) throw new Error(`brief bundle not found: ${briefsFi
 const stable = stablePublicationJson;
 const sha256 = (value: unknown): string => `sha256:${createHash("sha256").update(stable(value)).digest("hex")}`;
 const bundle = JSON.parse(readFileSync(briefsFile, "utf8")) as ChannelDecisionBriefBundle;
+const snapshotFile = arg("snapshot-file");
+const atlasFile = arg("atlas-file");
+const manifestFile = arg("shadow-catchup-manifest");
+const verificationFile = arg("shadow-verification-file");
+if (!snapshotFile || !atlasFile || !manifestFile || !verificationFile) {
+  throw new Error("Publication preflight requires --atlas-file, --snapshot-file, --shadow-catchup-manifest and --shadow-verification-file, including in dry runs.");
+}
+const snapshot = JSON.parse(readFileSync(resolve(snapshotFile), "utf8")) as DecisionAtlasSourceSnapshot;
+const atlas = JSON.parse(readFileSync(resolve(atlasFile), "utf8")) as DecisionAtlas;
+if (atlas.throughSession !== bundle.throughSession || atlas.sourceSnapshotSha256 !== evidenceJsonHash(snapshot)
+  || bundle.sourceInputs?.snapshotSha256 !== evidenceJsonHash(snapshot)
+  || bundle.sourceInputs?.atlasSha256 !== evidenceJsonHash(atlas)) {
+  throw new Error("Publication derivation receipts do not bind Atlas and briefs to the same frozen snapshot.");
+}
+const eligibility = atlasEvidenceEligibility({ throughSession: bundle.throughSession, snapshot,
+  manifest: JSON.parse(readFileSync(resolve(manifestFile), "utf8")) as GateShadowCatchupManifest,
+  verification: JSON.parse(readFileSync(resolve(verificationFile), "utf8")) as IndependentShadowVerification });
+if (eligibility.state !== "eligible" || evidenceJsonHash(bundle.publicationEligibility) !== evidenceJsonHash(eligibility)) {
+  throw new Error(`Publication evidence failed closed: ${eligibility.blockers.join(" ") || "brief evidence receipt does not match its exact inputs"}`);
+}
+const catalog = [...new Set(snapshot.strategists.map((row) => row.slug))].sort();
+if (JSON.stringify(Object.keys(bundle.channels).sort()) !== JSON.stringify(catalog)) {
+  throw new Error("Publication must include the complete channel catalog, including channels without outcomes.");
+}
 if (expectedThrough && bundle.throughSession !== expectedThrough) {
   throw new Error(`brief through ${bundle.throughSession} does not match expected ${expectedThrough}`);
 }

@@ -7,7 +7,10 @@ import {
   adaptDecisionAtlasSnapshot,
   channelConfigurationEra,
   isExactCurrentChannelConfiguration,
+  virtualPolicyIdentity,
 } from "./decisionAtlasAdapter";
+import { virtualPathPolicyStamp } from "./virtualPathPolicy";
+import { deriveVirtualTradeProvenance } from "./virtualTradeProvenance";
 
 const virtual = (signalId: string, signalAt: string, exitAt: string | null) => ({
   signal_id: signalId,
@@ -143,4 +146,15 @@ assert.equal(bounded.opportunities.find((row) => row.id === "prospective_virtual
   .includes("execution_observations:execution-included"), true,
   "signal rationale opportunity_id must join the durable execution trail even when observation payloads omit signal_id");
 
+const stampedSignal = { configuration_epoch_id: null, rationale: { virtual_path_policy: virtualPathPolicyStamp({
+  channel: { premium_stop_pct: 30, take_profit_pct: 12 }, defaultPremiumStopPct: 50, managerVersion: null,
+}) } } as never;
+const stampedVirtual = { ...virtual("policy", "2026-09-04T14:30:00Z", "2026-09-04T15:00:00Z"),
+  ...deriveVirtualTradeProvenance(stampedSignal).columns, stop_pct: 30, tp_pct: 12 };
+assert.equal(virtualPolicyIdentity(stampedSignal, stampedVirtual).verified, true);
+assert.equal(virtualPolicyIdentity(stampedSignal, { ...stampedVirtual, tp_pct: 10 }).verified, false,
+  "a source12% target cannot lend authority to a stored10% exit");
+assert.equal(virtualPolicyIdentity(stampedSignal, virtual("legacy", "2026-09-04T14:30:00Z", null)).verified, false);
+assert.equal(virtualPolicyIdentity(stampedSignal, stampedVirtual).configurationEra.startsWith("channel-spec:"), false,
+  "even a verified virtual reference path is not the full current native manager");
 console.log("decision-atlas adapter selftest: PASS");
