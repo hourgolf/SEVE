@@ -41,6 +41,8 @@ const envArgs = envFile ? ["--env-file", envFile] : [];
 run("scripts/profitability-ledger.ts", [...envArgs, "--as-of", through, "--out-dir", ledgerDir]);
 run("scripts/decision-atlas.ts", [...envArgs, "--through", through,
   "--ledger-file", resolve(ledgerDir, "ledger.json"), "--out-dir", atlasDir,
+  ...(shadowCatchupManifest ? ["--shadow-catchup-manifest", resolve(shadowCatchupManifest)] : []),
+  ...(shadowVerificationFile ? ["--shadow-verification-file", resolve(shadowVerificationFile)] : []),
   ...(virtualCatchupFile && virtualCatchupManifest
     ? ["--virtual-catchup-file", resolve(virtualCatchupFile), "--virtual-catchup-manifest", resolve(virtualCatchupManifest)] : [])]);
 run("scripts/entry-atlas.ts", ["--atlas-file", resolve(atlasDir, "atlas.json"),
