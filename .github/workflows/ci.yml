@@ -67,3 +67,69 @@ jobs:
         run: npm run account-equity-selftest
       - name: immutable broker attribution selftest
         run: npm run broker-reconciliation-selftest
+      - name: fixed-contract policy selftest
+        run: npm run fixed-contract-policy-selftest
+      - name: fixed-contract affordability selftest
+        run: npm run fixed-contract-affordability-selftest
+      - name: fixed-contract ladder selftest
+        run: npm run fixed-contract-ladder-selftest
+      - name: fixed-entry-ledger-model-selftest
+        run: npm run fixed-entry-ledger-model-selftest
+      - name: fixed-entry-ledger-persistence-selftest
+        run: npm run fixed-entry-ledger-persistence-selftest
+      - name: fixed-entry-row-fence-selftest
+        run: npm run fixed-entry-row-fence-selftest
+      - name: fixed-entry-ledger-supabase-selftest
+        run: npm run fixed-entry-ledger-supabase-selftest
+      - name: fixed-entry-command-coordinator-selftest
+        run: npm run fixed-entry-command-coordinator-selftest
+      - name: fixed-entry-sell-booking-selftest
+        run: npm run fixed-entry-sell-booking-selftest
+      - name: fixed-entry-execution-plan-selftest
+        run: npm run fixed-entry-execution-plan-selftest
+      - name: fixed-entry-fill-evidence-selftest
+        run: npm run fixed-entry-fill-evidence-selftest
+      - name: fixed-entry-chain-authorization-selftest
+        run: npm run fixed-entry-chain-authorization-selftest
+      - name: fixed-entry-coverage-materialization-selftest
+        run: npm run fixed-entry-coverage-materialization-selftest
+      - name: fixed-entry-supabase-coverage-selftest
+        run: npm run fixed-entry-supabase-coverage-selftest
+      - name: fixed-entry-broker-transport-selftest
+        run: npm run fixed-entry-broker-transport-selftest
+      - name: fixed-entry-intent-settlement-selftest
+        run: npm run fixed-entry-intent-settlement-selftest
+      - name: fixed-entry-intent-admission-selftest
+        run: npm run fixed-entry-intent-admission-selftest
+      - name: fixed-entry-lifecycle-selftest
+        run: npm run fixed-entry-lifecycle-selftest
+      - name: fixed-entry-management-selftest
+        run: npm run fixed-entry-management-selftest
+      - name: fixed-entry-execution-dispatch-selftest
+        run: npm run fixed-entry-execution-dispatch-selftest
+      - name: fixed-entry-runtime-driver-selftest
+        run: npm run fixed-entry-runtime-driver-selftest
+      - name: fixed-entry-live-management-selftest
+        run: npm run fixed-entry-live-management-selftest
+      - name: fixed-entry-legacy-ownership-selftest
+        run: npm run fixed-entry-legacy-ownership-selftest
+      - name: fixed-entry-legacy-post-fence-selftest
+        run: npm run fixed-entry-legacy-post-fence-selftest
+      - name: fixed-entry-live-authority-selftest
+        run: npm run fixed-entry-live-authority-selftest
+      - name: fixed-entry-reporting-selftest
+        run: npm run fixed-entry-reporting-selftest
+      - name: fixed-entry-reporting-replay-selftest
+        run: npm run fixed-entry-reporting-replay-selftest
+      - name: fixed-manager-comparison-selftest
+        run: npm run fixed-manager-comparison-selftest
+      - name: fixed-manager-enrollment-selftest
+        run: npm run fixed-manager-enrollment-selftest
+      - name: fixed-entry-runtime-clock-selftest
+        run: npm run fixed-entry-runtime-clock-selftest
+      - name: fixed-entry-service-client-selftest
+        run: npm run fixed-entry-service-client-selftest
+      - name: fixed-entry-custody-boundary-selftest
+        run: npm run fixed-entry-custody-boundary-selftest
+      - name: fixed-entry-startup-recovery-selftest
+        run: npm run fixed-entry-startup-recovery-selftest
