@@ -32,7 +32,7 @@ export function EntryFinishMap({ stories, selectedSlug, postureBySlug = {}, scop
       <text x="520" y={Math.max(20, y(maxMove) - 6)}>perfect capture</text>
       {points.map((story) => {
         const finish = story.typicalFinalReturnPct ?? 0;
-        const mature = story.maturity === "DECISION READY";
+        const mature = story.maturity === "SAMPLE AVAILABLE";
         const radius = 4 + Math.min(10, Math.sqrt(story.sessions) * 1.6);
         const posture = postureBySlug[story.channel] ?? "observing";
         const postureLabel = posture === "trading" ? "trading"

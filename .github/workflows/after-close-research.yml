@@ -198,6 +198,10 @@ jobs:
             --publish \
             --expected-through "$SESSION_DATE_ET" \
             --briefs-file "data/decision-atlas/runs/$SESSION_DATE_ET/learning/dashboard-briefs.json" \
+            --snapshot-file "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/snapshot.json" \
+            --atlas-file "data/decision-atlas/runs/$SESSION_DATE_ET/atlas/atlas.json" \
+            --shadow-catchup-manifest data/gate-shadow-catchup-manifest.json \
+            --shadow-verification-file data/gate-shadow-verification.json \
             --receipt-file "data/decision-atlas/runs/$SESSION_DATE_ET/briefs/publication-receipt.json"
       - name: Publish deterministic Sentinel operator packet
         if: github.event_name != 'workflow_dispatch' || inputs.dry_run != true

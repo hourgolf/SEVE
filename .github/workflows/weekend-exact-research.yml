@@ -84,11 +84,23 @@ jobs:
             args+=(--publish)
           fi
           npm run nightly-dark-exact-learning -- "${args[@]}"
+      - name: Independently verify bounded shadow evidence without writes
+        run: |
+          npm run gate-shadow -- \
+            --read-only --virtual-trades-only --stamp-provenance \
+            --session "$EXACT_SESSION_DATE_ET" \
+            --output-dir "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/shadow-verification"
+          npm run verify-shadow-rebuild -- \
+            --allow-read-only-receipt \
+            --session "$EXACT_SESSION_DATE_ET" \
+            --output-dir "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/shadow-verification"
       - name: Rebuild weekend Decision Atlas
         run: |
           npm run nightly-decision-atlas -- \
             --through "$EXACT_SESSION_DATE_ET" \
-            --out-dir "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET"
+            --out-dir "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET" \
+            --shadow-catchup-manifest "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/shadow-verification/gate-shadow-catchup-manifest.json" \
+            --shadow-verification-file "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/shadow-verification/gate-shadow-verification.json"
       - name: Publish concise weekend briefs
         if: vars.DECISION_ATLAS_DASHBOARD_PUBLISH == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
         run: |
@@ -96,6 +108,10 @@ jobs:
             --publish \
             --expected-through "$EXACT_SESSION_DATE_ET" \
             --briefs-file "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/learning/dashboard-briefs.json" \
+            --snapshot-file "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/atlas/snapshot.json" \
+            --atlas-file "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/atlas/atlas.json" \
+            --shadow-catchup-manifest "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/shadow-verification/gate-shadow-catchup-manifest.json" \
+            --shadow-verification-file "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/shadow-verification/gate-shadow-verification.json" \
             --receipt-file "data/decision-atlas/runs/$EXACT_SESSION_DATE_ET/briefs/publication-receipt.json"
       - name: Freeze checksums
         shell: bash

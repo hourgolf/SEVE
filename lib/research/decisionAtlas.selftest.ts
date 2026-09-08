@@ -242,4 +242,8 @@ assert.deepEqual(atlas, buildDecisionAtlas({
   ],
 }), "same frozen input must produce byte-equivalent data");
 
+const noEvidence = buildDecisionAtlas({ generatedAt: "2026-09-07T00:00:00Z", throughSession: "2026-09-04",
+  opportunities: [], managerPaths: [], accountBudgets: [], activeChannels: [], catalogChannels: ["dark-empty"] });
+assert.equal(noEvidence.channels["dark-empty"].decisionCohort.opportunities, 0);
+assert.equal(noEvidence.channels["dark-empty"].disposition, "continue_collecting");
 console.log("decision-atlas selftest: PASS");

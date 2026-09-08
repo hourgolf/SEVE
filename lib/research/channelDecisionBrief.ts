@@ -10,6 +10,7 @@ import type { WeeklyExecutedRow, WeeklyReadout, WeeklyVirtualSummary } from "./w
 import type { ChannelTrailFrontierBook, TrailCandidateSummary } from "./channelTrailFrontier";
 import type { ChannelEntryAtlas, EntryAtlas } from "./entryAtlas";
 import type { ChannelResearchAssignment } from "./channelResearchBooks";
+import type { AtlasEvidenceEligibility } from "./atlasEvidenceEligibility";
 import { trialReviewNeedsAttention, type RosterTrialReview } from "./rosterTrialReview";
 
 export const CHANNEL_DECISION_BRIEF_VERSION = "channel-decision-brief-v1" as const;
@@ -59,6 +60,9 @@ export interface ChannelDecisionBrief {
   };
   decisionDistribution?: {
     label: "DECISION COHORT";
+    /** Actual observed channel window; the report date is not evidence freshness. */
+    fromSession?: string | null;
+    throughSession?: string | null;
     sessions: number;
     opportunities: number;
     positiveSessions: number;
@@ -158,6 +162,8 @@ export interface ChannelDecisionBrief {
 }
 
 export interface ChannelDecisionBriefBundle {
+  sourceInputs?: { snapshotSha256: string; atlasSha256: string };
+  publicationEligibility?: AtlasEvidenceEligibility;
   schemaVersion: 1;
   briefVersion: typeof CHANNEL_DECISION_BRIEF_VERSION;
   generatedAt: string;
@@ -230,6 +236,8 @@ function decisionDistribution(rows: readonly AtlasOpportunity[]): NonNullable<Ch
   const typicalFinalReturnPct = median(rows.map((row) => row.returnPct).filter(finite));
   return {
     label: "DECISION COHORT",
+    fromSession: rows.map((row) => row.session).sort()[0] ?? null,
+    throughSession: rows.map((row) => row.session).sort().at(-1) ?? null,
     sessions: sessions.length,
     opportunities: rows.length,
     positiveSessions: sessionValues.filter((value) => value > 0).length,
@@ -274,11 +282,11 @@ function entryFrequency(rows: readonly AtlasOpportunity[], dossier: AtlasChannel
   const firstWeakEntry = comparableLater.find((row) => (row.typicalResultPerContractUsd ?? 0) <= 0);
   const conclusion = first == null ? "Entry order cannot be separated with the available outcomes."
       : later == null ? "Only the first same-session entry has enough scored evidence to display."
-      : first > 0 && firstWeakEntry ? `Entry ${firstWeakEntry.entryNumber} is the first well-observed same-session entry with a non-positive typical result; test an entry cap before changing the exit.`
+      : first > 0 && firstWeakEntry ? `Recorded opportunity ${firstWeakEntry.entryNumber} has a non-positive typical result; overlapping path order does not identify the effect of an entry cap.`
       : first > 0 && later > 0 ? "Later same-session entries remain positive in the typical path; keep measuring their capital cost."
-        : first > 0 && later <= 0 ? "The first entry is stronger than later same-session entries; an entry-frequency test is warranted."
+        : first > 0 && later <= 0 ? "Later recorded opportunities have weaker modeled outcomes; an actual admission and occupancy replay is required to evaluate an entry cap."
           : first <= 0 && later > 0 ? "Later entries outperform the first; investigate timing before changing the exit."
-            : "Entry quality is weak across entry order; an exit change alone is unlikely to repair it.";
+            : "Managed results are weak across recorded opportunity order; this does not identify entry quality separately from management.";
   const block = dossier.waterfall.blocked[0] ?? null;
   return {
     conclusion,
@@ -299,11 +307,13 @@ function nativeExit(rows: readonly AtlasOpportunity[], frontier: AtlasEntryExitF
   const giveback = median(givebacks);
   const result = frontier?.nativeTypicalResultUsd ?? null;
   const capture = frontier?.nativeTypicalCapture ?? null;
-  const conclusion = result == null ? "The native exit does not yet have comparable scored outcomes."
-    : result > 0 && (capture ?? 0) >= 0.45 ? "The native exit retains a useful share of the move; it remains the control."
-      : (bestMove ?? 0) >= 15 && result <= 0 ? "Entries find favorable movement, but the native exit fails to retain it."
-        : result > 0 && (giveback ?? 0) >= 25 ? "Entries are profitable, but the native exit gives back enough to justify one paired exit test."
-          : result <= 0 ? "The typical entry develops too little retained value; diagnose entry quality before changing the manager."
+  const conclusion = rows[0]?.evidenceLayer === "prospective_virtual"
+    ? "These are virtual reference paths, not verified full native-manager outcomes or broker fills."
+    : result == null ? "The native exit does not yet have comparable scored outcomes."
+    : result > 0 && (capture ?? 0) >= 0.45 ? "Recorded native results and sampled-peak ratios are positive; the native manager remains the control pending executable paired comparisons."
+      : (bestMove ?? 0) >= 15 && result <= 0 ? "Stored peaks exceed final returns; a paired exit test is needed to establish whether that gap was executable."
+        : result > 0 && (giveback ?? 0) >= 25 ? "Managed outcomes are positive with a large sampled-peak gap; a paired executable exit test can assess the difference."
+          : result <= 0 ? "The native managed-result median is non-positive; entry quality and exit contribution are not separately identified."
             : "The native exit remains the control while more paired paths collect.";
   return {
     conclusion,
@@ -360,6 +370,12 @@ function chooseRecommendation(input: {
   entryAtlas?: ChannelEntryAtlas;
 }): ChannelDecisionBrief["recommendation"] {
   const { dossier, native, managers, entries, trail, platformEffect, entryAtlas } = input;
+  if (!dossier.decisionCohort.opportunities || /unstamped|legacy|unverified|virtual-reference-policy/i.test(dossier.decisionCohort.configurationEra)) {
+    return { axis: "collection", label: "VERIFY EVIDENCE",
+      summary: "The available cohort does not have verified policy authority for a roster or manager change.",
+      nextExperiment: "Reconcile source policy, reference-path economics and cohort scope before preparing a channel experiment.",
+      productionChangeAuthorized: false };
+  }
   let axis: ChannelDecisionAxis = "collection";
   let label = "KEEP COLLECTING";
   let summary = dossier.summary;
@@ -466,9 +482,9 @@ export function buildChannelDecisionBriefs(input: {
       : platform.sessions < 5 || platform.candidates < 10
         ? `${platform.fact} Keep collecting until at least 5 sessions and 10 exact blocked candidates.`
         : platform.blockedWinners >= platform.protectedLosses * 2 && (platform.typicalAcrossManagersUsd ?? 0) > 0
-          ? `${platform.fact} The leading admission rule may be suppressing this channel's opportunity and deserves one controlled paper replay.`
+          ? `${platform.fact} The modeled blocked cohort warrants a controlled admission replay with its native policy, cash and displaced peers included.`
           : platform.protectedLosses >= platform.blockedWinners * 2 && (platform.typicalAcrossManagersUsd ?? 0) < 0
-            ? `${platform.fact} The gate is more often protecting the desk than suppressing this channel.`
+            ? `${platform.fact} More blocked candidates have negative modeled outcomes. This does not establish the marginal desk effect of the gate.`
             : `${platform.fact} The gate effect is mixed; retain it while more exact paths collect.`;
     const platformEffect: ChannelDecisionBrief["platformEffect"] = {
       state: platform.state,
@@ -508,9 +524,9 @@ export function buildChannelDecisionBriefs(input: {
       recommendation,
       trialReview,
       metrics: [
-        { label: "typical result", value: money(dossier.lifecycle.typicalOpportunityUsd, " / ct"), fact: "Median logical opportunity in the decision cohort; one large winner cannot dominate it." },
-        { label: "evidence", value: `${dossier.lifecycle.evidenceSessions}s / ${dossier.lifecycle.scoredOpportunities}`, fact: "Independent scored sessions and logical opportunities in the decision cohort." },
-        { label: "exit capture", value: percent(native.typicalCapture), fact: "Typical share of the best available move retained by the native exit." },
+        { label: "typical result", value: money(dossier.lifecycle.typicalOpportunityUsd, " / ct"), fact: "Median recorded opportunity in the selected cohort; assess totals, tails and concentration separately." },
+        { label: "evidence", value: `${dossier.lifecycle.evidenceSessions}s / ${dossier.lifecycle.scoredOpportunities}`, fact: "Scored sessions and recorded opportunities in the selected cohort; overlapping virtual paths are not independent trades." },
+        { label: "exit capture", value: percent(native.typicalCapture), fact: "Typical ratio to the recorded sampled peak; not the share of an executable gain available to a manager." },
         { label: "manager test", value: managers.recommended?.managerId ?? "NATIVE HOLDS", fact: managers.conclusion },
         { label: "size replay", value: bestPoint
           ? currentContracts == null ? `1→${bestPoint.contracts} ct`

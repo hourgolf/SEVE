@@ -22,6 +22,7 @@ const envFile = resolve(arg("env-file") ?? process.env.SEVE_ENV_FILE ?? ".env.lo
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const SESSION = arg("session") ?? "";
+const ALLOW_READ_ONLY_RECEIPT = process.argv.includes("--allow-read-only-receipt");
 if (!/^\d{4}-\d{2}-\d{2}$/.test(SESSION)) {
   throw new Error("--session YYYY-MM-DD is required");
 }
@@ -74,7 +75,10 @@ async function main(): Promise<void> {
   const receiptIssues = [
     receipt.version !== "gate-shadow-rebuild-v1" ? "receipt_version" : null,
     receipt.session !== SESSION ? "receipt_session" : null,
-    receipt.mode !== "publish-and-verify" ? "receipt_mode" : null,
+    receipt.mode !== "publish-and-verify"
+      && !(ALLOW_READ_ONLY_RECEIPT && receipt.mode === "read-only"
+        && receipt.remote.upserts === 0 && publishedIds.length === 0 && receipt.remote.eventInserts === 0)
+      ? "receipt_mode" : null,
     receipt.reconstruction.paths !== local.length ? "receipt_path_count" : null,
     receipt.remote.upserts !== publishedIds.length ? "receipt_upsert_id_count" : null,
     uniquePublishedIds.size !== publishedIds.length ? "receipt_duplicate_upsert_ids" : null,

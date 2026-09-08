@@ -44,7 +44,7 @@ assert(summary.diagnosis.length <= 180);
 assert(summary.nextTest.length <= 180);
 assert.match(summary.nextTest, /^[A-Z]/);
 assert.equal(summary.disposition, "TEST ENTRY TIMING");
-assert.equal(summary.evidenceState, "DECISION READY");
+assert.equal(summary.evidenceState, "CURRENT COHORT");
 assert.deepEqual(summary.keepFixed, ["exit", "manager", "size"]);
 assert.equal(summary.sizing.steps[1].marginalResultUsd, 75);
 assert.equal(summary.sizing.steps[1].marginalDrawdownUsd, 35);
@@ -55,7 +55,7 @@ negativeCapture.nativeExit.typicalReturnPct = -10;
 negativeCapture.nativeExit.typicalBestMovePct = 20;
 negativeCapture.nativeExit.typicalCapture = -.5;
 assert.deepEqual(buildChannelDecisionSummary(negativeCapture).metrics[2], {
-  label: "EXIT RESULT", value: "BELOW ENTRY", fact: "The exit keeps half of the move.",
+  label: "EXIT RESULT", value: "BELOW ENTRY", fact: "Sampled peak/final-return diagnostic; not an executable exit comparison.",
 });
 
 const fleet = buildFleetDecisionSummary(Object.fromEntries(axes.map((axis) => [axis, brief(axis)])), "2026-08-07");
@@ -65,3 +65,8 @@ assert.equal(fleet.promoteOrRetire, 2);
 assert.equal(fleet.collecting, 1);
 
 console.log("channel-decision-summary selftest: PASS");
+
+assert.equal(summary.sourceLabel, "NIGHTLY EVIDENCE");
+assert.match(summary.evidenceStateFact, /Counts alone/);
+assert(!summary.diagnosis.includes("Test one fewer"));
+assert.equal(buildChannelDecisionSummary(brief("entry")).exit.conclusion.includes("does not establish an executable gain"), true);

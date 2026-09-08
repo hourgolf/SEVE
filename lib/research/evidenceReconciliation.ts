@@ -132,6 +132,7 @@ export function buildEvidenceReconciliation(input: {
     }
   }
   const failedVerifications = verifications.filter((row) => !row.passed);
+  const boundedVerificationPresent = verifications.some((row) => row.session === input.atlas.throughSession);
   const channelForSignal = (id: string): string | null => {
     const source = sourceSignalById.get(id);
     return source ? strategistById.get(source.strategist_id) ?? null : null;
@@ -198,8 +199,10 @@ export function buildEvidenceReconciliation(input: {
     const nonVirtualGap = rowsCoverage.some((row) => row.source !== "virtual native paths"
       && row.state !== "complete" && row.state !== "not_applicable");
     const state: ChannelEvidenceReconciliation["state"] = missingVirtualSignalIds.length || independentVerifierIssues.length
-      ? "needs_recovery" : nonVirtualGap ? "limited" : "ready";
+      ? "needs_recovery" : nonVirtualGap || !boundedVerificationPresent || !logical.size ? "limited" : "ready";
     const limitations = [
+      ...(!boundedVerificationPresent ? ["No independent bounded shadow verification matches this report session; row presence is not payload correctness."] : []),
+      ...(!logical.size ? ["No observed logical opportunity supports a channel readiness assessment."] : []),
       ...rowsCoverage.filter((row) => row.state === "partial" || row.state === "missing")
         .map((row) => `${row.source}: ${row.missing} expected row${row.missing === 1 ? "" : "s"} are not linked.`),
       ...(sequentialCandidates.length ? [

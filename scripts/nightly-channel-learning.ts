@@ -19,6 +19,7 @@ import type { GateShadowCatchupManifest } from "../lib/research/gateShadowCatchu
 import { buildOperatorExperimentPacket, renderOperatorExperimentPacket } from "../lib/research/operatorExperimentPacket";
 import type { ChannelTrailFrontierBook } from "../lib/research/channelTrailFrontier";
 import { buildChannelResearchBooks, renderChannelResearchBooks } from "../lib/research/channelResearchBooks";
+import { atlasEvidenceEligibility, evidenceJsonHash } from "../lib/research/atlasEvidenceEligibility";
 
 const arg = (name: string, fallback: string): string => {
   const index = process.argv.indexOf(`--${name}`);
@@ -50,6 +51,14 @@ if (shadowVerificationFile && !existsSync(resolve(shadowVerificationFile))) {
 }
 const independentShadowVerifications = shadowVerificationFile
   ? [JSON.parse(readFileSync(resolve(shadowVerificationFile), "utf8")) as IndependentShadowVerification] : [];
+const publicationEligibility = atlasEvidenceEligibility({ throughSession: atlas.throughSession, snapshot,
+  manifest: catchupManifests[0], verification: independentShadowVerifications[0] });
+if (atlas.sourceSnapshotSha256 !== evidenceJsonHash(snapshot)
+  || briefs.sourceInputs?.snapshotSha256 !== evidenceJsonHash(snapshot)
+  || briefs.sourceInputs?.atlasSha256 !== evidenceJsonHash(atlas)) {
+  publicationEligibility.state = "blocked";
+  publicationEligibility.blockers.push("Atlas and brief derivation receipts do not match the same frozen snapshot.");
+}
 if (briefs.throughSession !== atlas.throughSession) {
   throw new Error(`briefs through ${briefs.throughSession} do not match Atlas through ${atlas.throughSession}`);
 }
@@ -88,7 +97,9 @@ const operatorPacket = buildOperatorExperimentPacket({ briefs, experiments, life
   atlas, snapshot, capacity: portfolioCapacity });
 const hash = (value: unknown): string => `sha256:${createHash("sha256")
   .update(typeof value === "string" ? value : JSON.stringify(value)).digest("hex")}`;
-const headline = evidence.state === "recovery_proposed"
+const headline = publicationEligibility.state !== "eligible"
+  ? `Diagnostic report only: publication evidence is ${publicationEligibility.state}. ${publicationEligibility.blockers[0]}`
+  : evidence.state === "recovery_proposed"
   ? `Repair ${evidence.summary.virtualRowsNeedingRepair} independently identified virtual path${evidence.summary.virtualRowsNeedingRepair === 1 ? "" : "s"} before scoring new decisions.`
   : executionResilience.state === "block" || executionCapacity.execution.state === "block"
     ? "Repair execution trace continuity before preparing sizing changes."
@@ -99,6 +110,7 @@ const packet = {
   generatedAt: atlas.generatedAt,
   throughSession: atlas.throughSession,
   headline,
+  publicationEligibility,
   evidence,
   experiments,
   nextSevenActions: retiredSevenActionProgram,
@@ -108,6 +120,7 @@ const packet = {
   lifecycle,
   researchBooks,
   nextActions: [
+    ...(publicationEligibility.state !== "eligible" ? publicationEligibility.blockers : []),
     ...(evidence.state === "recovery_proposed" ? ["Review the exact virtual_trades-only recovery proposal; publish only after separate approval and verify every readback."] : []),
     ...(executionCapacity.execution.state === "block" ? ["Investigate orphaned execution traces before relying on replayed capacity."] : []),
     ...(executionResilience.state === "limited" ? ["Review restart/trace exceptions and require the first guarded broker receipt before declaring the submit-once correction proven live."] : []),
@@ -122,6 +135,7 @@ const packet = {
 };
 const dashboardBriefs: ChannelDecisionBriefBundle = {
   ...briefs,
+  publicationEligibility,
   channels: Object.fromEntries(Object.entries(briefs.channels).map(([channel, brief]) => {
     const evidenceRow = evidence.channels[channel];
     const experiment = experiments.plans[channel];
