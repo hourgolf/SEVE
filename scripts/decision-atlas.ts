@@ -37,6 +37,7 @@ import { createServerSupabaseClient } from "./serverSupabase";
 import { createFixedEntryServiceClient } from "../worker/src/fixedEntryServiceClient";
 import { readFixedManagerComparisonEvidence } from "../worker/src/fixedEntryManagerComparisonEvidence";
 import { etSessionCloseUtc } from "../lib/research/afterCloseResearch";
+import { prepareAtlasReportScope } from "../lib/research/atlasReportScope";
 
 const arg = (name: string): string | null => {
   const index = process.argv.indexOf(`--${name}`);
@@ -291,6 +292,11 @@ async function main(): Promise<void> {
   }
   const catchup = applyLocalVirtualCatchup(snapshot);
   snapshot = catchup.snapshot;
+  const scopeManifest=arg("shadow-catchup-manifest"), scopeVerification=arg("shadow-verification-file");
+  const reportScope=prepareAtlasReportScope({snapshot,throughSession,
+    manifest:scopeManifest?JSON.parse(readFileSync(resolve(scopeManifest),"utf8")):undefined,
+    verification:scopeVerification?JSON.parse(readFileSync(resolve(scopeVerification),"utf8")):undefined});
+  snapshot=reportScope.snapshot;
   const normalized = adaptDecisionAtlasSnapshot({ snapshot, generatedAt, throughSession });
   const atlas = buildDecisionAtlas(normalized);
   atlas.sourceSnapshotSha256 = evidenceJsonHash(snapshot);
@@ -318,6 +324,7 @@ async function main(): Promise<void> {
     equitySelection: "latest 500 account snapshots before the evidence-window end; not a historical equity series",
     timingsMs,
     localVirtualCatchup: catchup.metadata,
+    reportScope: reportScope.receipt,
     sourceRows: {
       logicalTrades: snapshot.ledger.logicalTrades.length,
       positionContext: snapshot.positions?.length ?? 0,
@@ -354,6 +361,8 @@ async function main(): Promise<void> {
     scheduleActivationAuthorized: false,
   };
   mkdirSync(resolve(outputDir, "channels"), { recursive: true });
+  writeFileSync(resolve(outputDir, "raw-snapshot.json"), `${JSON.stringify(reportScope.rawSnapshot,null,2)}\n`);
+  writeFileSync(resolve(outputDir, "report-scope.json"), `${JSON.stringify(reportScope.receipt,null,2)}\n`);
   writeFileSync(resolve(outputDir, "snapshot.json"), snapshotJson);
   writeFileSync(resolve(outputDir, "atlas.json"), atlasJson);
   writeFileSync(resolve(outputDir, "atlas.md"), report);
