@@ -60,7 +60,8 @@ export function observeFixedNativeManagement(intent: FixedEntryIntent, snapshot:
   const rows = snapshot.positions.filter(row => row.status === "open");
   if (rows.length > 1 || rows.some(row => !fixedPositionIdentityMatches(intent, row))) throw new Error("fixed_manager:row_identity_or_multiplicity");
   const row = rows[0]; if (!row) return noExit();
-  let mark = bid;
+  // A rejected NBBO cannot still trigger an exit through its discarded bid.
+  let mark = quote?.bid ?? null;
   if (mark !== null) result.priceBasis = "executable-bid";
   else if (input.source === "cycle" && input.brokerMark) {
     const brokerAge = input.nowMs - input.brokerMark.observedAtMs;

@@ -4,6 +4,7 @@
 export function isFixedEntryProtocolObservation(row: { reason?: unknown; payload?: unknown }): boolean {
   const payload = row.payload;
   return (payload !== null && typeof payload === "object" && !Array.isArray(payload)
-    && Object.prototype.hasOwnProperty.call(payload, "fixed_entry_protocol"))
+    && (Object.prototype.hasOwnProperty.call(payload, "fixed_entry_protocol")
+      || Object.prototype.hasOwnProperty.call(payload, "fixed_entry_admission")))
     || (typeof row.reason === "string" && row.reason.startsWith("fixed_entry_protocol:"));
 }

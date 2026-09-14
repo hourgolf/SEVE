@@ -92,3 +92,7 @@ export function captureManagerShadowObservation(input: ManagerShadowObservationI
 }
 
 export type { ChannelConfig, ShadowDecision };
+
+export function captureFixedAdmissionObservation(row: ExecutionObservationDraft): void {
+  enqueue(row);
+}

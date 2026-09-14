@@ -8,7 +8,7 @@ import { parseFixedProtocolRecord, parseFixedStoredObservation } from "./fixedEn
 import { FIXED_OBSERVATION_COLUMNS, fixedClaimStorage, applyFixedRowCas } from "./fixedEntryLedgerSupabase.js";
 import { fixedPositionIdentityMatches, type FixedCoveragePorts,
   type FixedMaterializedPosition } from "./fixedEntryCoverageMaterialization.js";
-import { assertFixedEntryServiceClient } from "./fixedEntryServiceClient.js";
+import { assertFixedEntryServiceClient, readFixedAdmissionSnapshot } from "./fixedEntryServiceClient.js";
 import type { FixedAdmissionHistory, FixedIntentSeed } from "./fixedEntryIntentAdmission.js";
 import { fixedEntryOwnershipPresent } from "../../lib/channels/fixedEntryOwnership.js";
 type Client = Pick<SupabaseClient, "from">;
@@ -64,27 +64,77 @@ export async function discoverFixedEntryIntents(client: Client): Promise<FixedEn
  * quota. Legacy root positions remain conservative occupancy evidence; their
  * presence blocks entry without claiming that this read audited broker fills.
  */
+export interface FixedAdmissionReadEvidence {
+  startedAtMs: number; completedAtMs: number; complete: boolean;
+  counts: { observations: number; strategists: number; positions: number } | null;
+}
 export async function readFixedAdmissionHistory(client: Client, seed: FixedIntentSeed,
-  now: () => number): Promise<FixedAdmissionHistory> {
+  now: () => number, observe?: (read: FixedAdmissionReadEvidence) => void): Promise<FixedAdmissionHistory> {
   assertFixedEntryServiceClient(client);
   const startedAtMs = now();
-  const intents = await discoverFixedEntryIntents(client);
-  const entries: FixedAdmissionHistory["intents"] = [];
-  for (const intent of intents) {
-    const [records, positions] = await Promise.all([readFixedIntentRecords(client, intent), readFixedIntentPositions(client, intent)]);
-    entries.push({ intent, snapshot: { records, positions } });
+  let complete = false, counts: FixedAdmissionReadEvidence["counts"] = null;
+  try {
+    const raw = await readFixedAdmissionSnapshot(client);
+    const history = fixedAdmissionHistoryFromSnapshot(raw, seed, startedAtMs);
+    counts = (raw as { counts: NonNullable<FixedAdmissionReadEvidence["counts"]> }).counts;
+    complete = true;
+    return history;
+  } finally {
+    try { observe?.({ startedAtMs, completedAtMs: now(), complete, counts }); } catch { /* telemetry only */ }
   }
+}
+
+/** One database statement supplies every inventory under the same MVCC
+ * snapshot. Counts/identities remain checked; a failed or missing RPC must not
+ * fall back to an empty history or freshen its clock at response completion. */
+export function fixedAdmissionHistoryFromSnapshot(raw: unknown, seed: FixedIntentSeed,
+  startedAtMs: number): FixedAdmissionHistory {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("fixed_store:admission_snapshot_invalid");
+  const value = raw as Record<string, unknown>;
+  if (value.schema !== "fixed-admission-snapshot-v1" || value.complete !== true
+      || !value.counts || typeof value.counts !== "object") throw new Error("fixed_store:admission_snapshot_incomplete");
+  function inventory<T extends { id: string }>(key: string): T[] {
+    const count = (value.counts as Record<string, unknown>)[key];
+    const rows = value[key];
+    if (!Number.isSafeInteger(count) || Number(count) < 0 || Number(count) > 100_000
+        || !Array.isArray(rows) || rows.length !== count
+        || rows.some(row => !row || typeof row !== "object" || typeof row.id !== "string" || !row.id)
+        || new Set(rows.map(row => row.id)).size !== rows.length) throw new Error("fixed_store:admission_snapshot_inventory_invalid");
+    return rows as T[];
+  }
+  const observations = inventory<ExecutionObservationDraft>("observations");
+  const strategists = inventory<{ id: string; slug: string }>("strategists");
+  const rows = inventory<FixedMaterializedPosition>("positions");
+  const intents = observations.filter(row => row.reason === "fixed_entry_protocol:intent").map(row => {
+    const record = parseFixedProtocolRecord(row.payload?.fixed_entry_record);
+    const intent = record?.kind === "intent" ? parseFixedEntryIntent(record.body.intent) : null;
+    if (!intent) throw new Error("fixed_store:discovered_intent_invalid");
+    parseFixedStoredObservation(intent, row);
+    return intent;
+  });
+  const byId = new Map(intents.map(intent => [intent.id, intent]));
+  if (byId.size !== intents.length) throw new Error("fixed_store:admission_snapshot_intent_duplicate");
+  const parsed = new Map<string, ReturnType<typeof parseFixedStoredObservation>[]>();
+  for (const row of observations) {
+    const intent = byId.get(row.trace_id);
+    if (!intent) throw new Error("fixed_store:protocol_record_without_original_intent");
+    const records = parsed.get(intent.id) ?? [];
+    records.push(parseFixedStoredObservation(intent, row));
+    parsed.set(intent.id, records);
+  }
+  const entries: FixedAdmissionHistory["intents"] = intents.map(intent => ({ intent, snapshot: {
+    records: parsed.get(intent.id)!,
+    positions: rows.filter(row => (row.entry_features?.fixed_entry_coverage as { intentId?: string } | undefined)?.intentId === intent.id),
+  } }));
   const strategistIds = new Set([seed.strategistId, ...intents.map(i => i.strategistId)]);
   // Stable channel identity must include a prior legacy strategist even before
   // the first fixed intent exists. Current-seed + fixed-intent IDs alone omit
   // a replaced strategist's already-consumed session entry.
-  const strategists = await completeRows<{ id: string; slug: string }>(client, "strategists", "id,slug", []);
   if (strategists.some(row => typeof row.slug !== "string" || !row.slug)) throw new Error("fixed_store:strategist_inventory_invalid");
   for (const row of strategists) if (row.slug === seed.slug) strategistIds.add(row.id);
   let legacySessionEntries = 0;
   const etDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York",
     year: "numeric", month: "2-digit", day: "2-digit" });
-  const rows = await completeRows<FixedMaterializedPosition>(client, "positions", FIXED_POSITION_COLUMNS, []);
   for (const row of rows) {
       const features = row.entry_features ?? {};
       if (fixedEntryOwnershipPresent(row)) {
@@ -105,7 +155,7 @@ export async function readFixedAdmissionHistory(client: Client, seed: FixedInten
       }
       legacySessionEntries++;
   }
-  // Timestamp the START of the multi-read, not its end. Slow/truncated history
+  // Timestamp the START of the snapshot read, not its end. Slow/truncated history
   // must not look fresh merely because the final request has just completed.
   return { intents: entries, observedAtMs: startedAtMs, legacySessionEntries };
 }

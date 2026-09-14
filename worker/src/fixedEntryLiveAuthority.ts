@@ -1,3 +1,4 @@
+import { FIXED_ORIGINAL_CREDENTIAL_REF } from "./fixedEntryLegacyOwnership.js";
 /** Fresh read-only authority for the original fixed entry. It rechecks native
  * constraints and receipt/portfolio truth, but never generates another signal,
  * changes its original OCC or derives quantity from a dollar budget.
@@ -104,10 +105,10 @@ export function makeFixedEntryLiveAuthority(client: Client, input: {
         const originalAccount = c.accounts.find(a => a.id === seed.accountId);
         if (!root?.fixedContractAdmission || root.executionPosture !== "paper" || !ch
             || ch.slug !== seed.slug || ch.account_id !== seed.accountId || ch.executor !== "stream"
-            || !originalAccount || originalAccount.mode !== "paper" || originalAccount.cred_ref !== "2"
+            || !originalAccount || originalAccount.mode !== "paper" || originalAccount.cred_ref !== FIXED_ORIGINAL_CREDENTIAL_REF
             || originalAccount.is_armed !== true || originalAccount.is_halted !== false
             || canonicalJson(receiptBoundRc54ConfigurationWriteStamp(runtime, seed.slug)) !== canonicalJson(seed.writeStamp)) return denied;
-        // The immutable MACD original owns account2 SPY. No second executable
+        // The immutable MACD original owns PAPER2/LAB SPY (credential slot 3). No second executable
         // source may share that route during this narrowly approved cutover.
         if (runtime.roots.some(r => r.slug !== seed.slug && r.accountId === seed.accountId
             && r.underlying === seed.underlying && r.executionPosture === "paper")) return denied;

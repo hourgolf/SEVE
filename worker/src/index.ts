@@ -1,3 +1,4 @@
+import { captureFixedAdmissionObservation } from "./executionObservation.js";
 import { observedCandidate, finalDecisionEvidence } from "./decisionTrace.js";
 // ============================================================================
 //  SEVE streaming worker — entrypoint (Phase A · SHADOW).
@@ -484,6 +485,7 @@ const fixedRuntime = fixedServiceClient ? makeFixedEntryRuntimeDriver(fixedServi
     apiForAccount,quote:fixedManagementQuote,eventPolicy:{enabled:policy.EVENT_STANDDOWN,
       beforeMinutes:policy.EVENT_FLATTEN_MIN_BEFORE,afterMinutes:policy.EVENT_RESUME_MIN_AFTER}}),
   executionSettings:()=>({spreadCapture:config.spreadCapture,ladder:{...config.spreadCaptureLadder}}),
+  onAdmission:captureFixedAdmissionObservation,
   onCommand:async()=>{fixedClock?.kick("sweep");},
   onCoverage:async()=>{fixedClock?.kick("sweep");},
   onReporting:makeFixedEntryReportingReplay(fixedServiceClient,BOOT_ID,{

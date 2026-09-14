@@ -21,7 +21,19 @@ async function main() {
   }
   assert.equal(observeFixedNativeManagement(h.intent, s, { ...base, quote: { bid: 1, ask: 1.1, observedAtMs: nowMs - 120001 } }).exit, null);
   assert.equal(observeFixedNativeManagement(h.intent, s, { ...base, quote: { bid: 1, ask: 1.1, observedAtMs: nowMs + 1 } }).exit, null);
+  for (const ask of [0.9, NaN, Infinity]) {
+    const bad = { ...base, quote: { bid: 1, ask, observedAtMs: nowMs } };
+    assert.equal(observeFixedNativeManagement(h.intent, s, bad).exit, null,
+      "invalid ask cannot trigger a stop from a discarded bid");
+    assert.equal(observeFixedNativeManagement(h.intent, s, { ...bad, fundHalted: true }).exit?.reason, "halt_flatten");
+    assert.equal(observeFixedNativeManagement(h.intent, s, { ...bad, eventWindow: true }).exit?.reason, "event_flatten");
+  }
+  assert.equal(observeFixedNativeManagement(h.intent, s, { ...base,
+    quote: { bid: 3, ask: 2.9, observedAtMs: nowMs } }).exit, null, "crossed quote cannot trigger a target");
   const brokerMark = { price: 1, observedAtMs: nowMs };
+  assert.equal(observeFixedNativeManagement(h.intent, s, { ...base, source: "cycle", brokerMark,
+    quote: { bid: 1, ask: 0.9, observedAtMs: nowMs } }).priceBasis, "cycle-broker-mark",
+    "existing fresh cycle broker-mark fallback remains explicitly identified");
   assert.equal(observeFixedNativeManagement(h.intent, s, { ...base, quote: null, brokerMark }).exit, null);
   assert.equal(observeFixedNativeManagement(h.intent, s, { ...base, source: "cycle", quote: null, brokerMark }).exit?.reason, "premium_stop");
   assert.equal(observeFixedNativeManagement(h.intent, s, { ...base, source: "cycle", quote: null,
