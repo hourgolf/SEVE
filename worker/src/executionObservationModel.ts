@@ -1,3 +1,4 @@
+import { quoteEvidence } from "../../lib/execution/quoteEvidence.js";
 // Phase 1D pure evidence model. It turns strategy decisions and broker results
 // into immutable, deterministic append-only rows. No fetches, writes, orders, or
 // policy mutation live here; the runtime adapter owns best-effort persistence.
@@ -119,6 +120,7 @@ export function buildDecisionObservation(input: DecisionObservationInput): Execu
       })
     : null;
   const detail = (jsonSafe(d.detail ?? {}) ?? {}) as Record<string, unknown>;
+  const quote = quoteEvidence(d.detail?.bid, d.detail?.ask);
   const age = Number.isFinite(input.chainAgeMs) && input.chainAgeMs >= 0 ? Math.round(input.chainAgeMs) : null;
   return {
     id: deterministicEvidenceUuid("seve-execution-observation-v1", { traceId, eventKind: "decision" }),
@@ -142,9 +144,9 @@ export function buildDecisionObservation(input: DecisionObservationInput): Execu
     // Alpaca's snapshot does not expose one authoritative per-contract source
     // timestamp here. Preserve measured snapshot age; do not invent quote_at.
     quote_age_ms: age,
-    bid: nonnegativeOrNull(d.detail?.bid),
-    ask: nonnegativeOrNull(d.detail?.ask),
-    mid: nonnegativeOrNull(d.detail?.mid) ?? (() => {
+    bid: quote.bid,
+    ask: quote.ask,
+    mid: !quote.valid ? null : nonnegativeOrNull(d.detail?.mid) ?? (() => {
       const bid = nonnegativeOrNull(d.detail?.bid), ask = nonnegativeOrNull(d.detail?.ask);
       return bid != null && ask != null ? (bid + ask) / 2 : null;
     })(),
@@ -163,6 +165,8 @@ export function buildDecisionObservation(input: DecisionObservationInput): Execu
     configuration_epoch_id:
       input.configurationWriteStamp?.configuration_epoch_id ?? null,
     payload: {
+      quoteEvidence: { ...quote, rawMid: detail.mid ?? null,
+        source: d.occ ? "alpaca_snapshot" : null, snapshotAgeMs: age },
       decisionDetail: detail,
       status: d.status,
       ...(input.configurationWriteStamp
@@ -317,5 +321,31 @@ export function buildPositionRouteObservation(
       parentPositionId: input.parentPositionId ?? null,
       source: "post_insert_execution_context",
     },
+  };
+}
+
+/** Admission is a separate stage of the original candidate, never a broker
+ * rejection or another strategy signal. Reconcile action keeps legacy SQL
+ * entry counters from counting this supplementary receipt as a candidate. */
+export function buildFixedAdmissionObservation(input: DecisionObservationInput, result: {
+  stage: "admission_attempted" | "admission_result";
+  state: string; reason: string | null; intentId: string | null;
+  startedAtMs: number;
+  historyReads?: readonly { startedAtMs: number; completedAtMs: number; complete: boolean; counts: unknown }[];
+}): ExecutionObservationDraft | null {
+  const original = buildDecisionObservation(input);
+  if (!original) return null;
+  return { ...original,
+    id: deterministicEvidenceUuid("seve-fixed-admission-observation-v1", {
+      traceId: original.trace_id, stage: result.stage, state: result.state,
+      reason: result.reason, intentId: result.intentId }),
+    action: "reconcile", reason: `fixed_entry_admission:${result.stage}`,
+    blocked_reason: "observation_only",
+    payload: { ...original.payload, fixed_entry_admission: {
+      schema: "fixed-entry-admission-v1", ...result,
+      completedAtMs: result.stage === "admission_result" ? input.observedAtMs : null,
+      sourceDecisionId: original.id, sourceAction: input.decision.action,
+      submissionConfirmed: false,
+    } },
   };
 }

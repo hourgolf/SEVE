@@ -20,8 +20,8 @@ async function main() {
       rows.push(...(data ?? [])); if ((data?.length ?? 0) < 500) break;
     }
   }
-  rows = rows.filter(row => !isFixedEntryProtocolObservation(row));
+  rows = rows.filter(row => !isFixedEntryProtocolObservation(row) || row.payload?.fixed_entry_admission?.schema === "fixed-entry-admission-v1");
   const result = rows.map(readDecisionStageEvidence);
-  console.log(JSON.stringify({ productionWrites: 0, rows: rows.length, traces: result.filter(x => x.state === "observed").length, evidence: result }, null, 2));
+  console.log(JSON.stringify({ productionWrites: 0, rows: rows.length, traces: result.filter(x => x.state === "observed" || x.state === "admission-observed").length, evidence: result }, null, 2));
 }
 main().catch(e => { console.error(e.message); process.exitCode = 1; });

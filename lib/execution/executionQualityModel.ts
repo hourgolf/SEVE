@@ -1,3 +1,4 @@
+import { quoteEvidence } from "./quoteEvidence.js";
 // Phase 1K-F pure execution-quality receipt. This model describes what happened
 // between an executable decision quote and a positive paper fill. It has no
 // fetches, writes, orders, alerts, or policy authority.
@@ -143,8 +144,9 @@ export function buildExecutionQualityReceipt(input: ExecutionQualityReceiptInput
   const fillObservedAt = new Date(input.fillObservedAtMs);
   if ([triggerAt, submittedAt, fillObservedAt].some((date) => Number.isNaN(date.getTime()))) return null;
 
-  const bid = positive(input.decisionBid) ? round(input.decisionBid) : null;
-  const ask = positive(input.decisionAsk) ? round(input.decisionAsk) : null;
+  const quote = quoteEvidence(input.decisionBid, input.decisionAsk, true);
+  const bid = quote.bid == null ? null : round(quote.bid);
+  const ask = quote.ask == null ? null : round(quote.ask);
   const validNbbo = bid != null && ask != null && ask >= bid;
   const reference = validNbbo ? bid : null; // long-option exit sells to the bid
   const spreadPct = validNbbo && bid + ask > 0 ? round(((ask - bid) / ((ask + bid) / 2)) * 100) : null;
@@ -216,6 +218,9 @@ export function buildExecutionQualityReceipt(input: ExecutionQualityReceiptInput
     snapshot_age_ms: optionalAge(input.snapshotAgeMs),
     provider_quote_event_age_ms: optionalAge(input.providerQuoteEventAgeMs),
     source_version: input.sourceVersion,
-    payload: (jsonSafe(input.payload ?? {}) ?? {}) as Record<string, unknown>,
+    payload: { ...((jsonSafe(input.payload ?? {}) ?? {}) as Record<string, unknown>),
+      quoteEvidence: { ...quote, source: "alpaca_chain_snapshot",
+        snapshotAgeMs: optionalAge(input.snapshotAgeMs),
+        providerQuoteEventAgeMs: optionalAge(input.providerQuoteEventAgeMs) } },
   };
 }

@@ -40,3 +40,13 @@ export function createFixedEntryServiceClient(url: string, serviceKey: string,
 export function assertFixedEntryServiceClient(client: Pick<SupabaseClient, "from">): void {
   if (!trusted.has(client)) throw new Error("fixed_store:trusted_service_client_required");
 }
+
+export const FIXED_ADMISSION_SNAPSHOT_RPC = "fixed_entry_admission_snapshot_v1";
+/** The trusted factory retains the full SDK client internally. GET invokes a
+ * STABLE, service-only read function; no caller-supplied endpoint or SQL. */
+export async function readFixedAdmissionSnapshot(client: Pick<SupabaseClient, "from">): Promise<unknown> {
+  assertFixedEntryServiceClient(client);
+  const { data, error } = await (client as SupabaseClient).rpc(FIXED_ADMISSION_SNAPSHOT_RPC, {}, { get: true });
+  if (error) throw new Error("fixed_store:admission_snapshot_unavailable");
+  return data;
+}

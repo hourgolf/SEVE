@@ -11,7 +11,7 @@ import { fixedEtClock } from "./fixedEntryManagement.js";
 import { isTradingDay, sessionCloseMin } from "../../engine/market-calendar.js";
 import { inEventWindow } from "../../engine/market-events.js";
 import { parseFixedEntryIntent } from "./fixedEntryLedgerModel.js";
-import { FIXED_ORIGINAL_ACCOUNT_ID } from "./fixedEntryLegacyOwnership.js";
+import { FIXED_ORIGINAL_ACCOUNT_ID, FIXED_ORIGINAL_CREDENTIAL_REF } from "./fixedEntryLegacyOwnership.js";
 type Client = Pick<SupabaseClient, "from">;
 const ACCOUNT_COLUMNS = "id,name,mode,cred_ref,is_armed,is_halted,master_daily_stop_usd";
 export function makeFixedEntryLiveManagement(client: Client, input: {
@@ -25,9 +25,9 @@ export function makeFixedEntryLiveManagement(client: Client, input: {
   const paperApi = (account: AccountRow): Api | null => {
     // No synthetic/default account or missing credential reference can stand in
     // for the original MACD account. The explicit resolver must return paper.
-    // This change is approved only for the existing second paper route. A
+    // This change is approved only for the existing PAPER2/LAB route (credential slot 3). A
     // mutable account-row reassignment cannot silently redirect old intents.
-    if (account.id !== FIXED_ORIGINAL_ACCOUNT_ID || account.mode !== "paper" || account.cred_ref !== "2") return null;
+    if (account.id !== FIXED_ORIGINAL_ACCOUNT_ID || account.mode !== "paper" || account.cred_ref !== FIXED_ORIGINAL_CREDENTIAL_REF) return null;
     const api = input.apiForAccount(account);
     return api?.paperHost.replace(/\/$/, "") === "https://paper-api.alpaca.markets" ? api : null;
   };

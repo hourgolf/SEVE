@@ -9,6 +9,8 @@ import { verifyFixedIntentSettlement } from "./fixedEntryIntentSettlement.js";
 import { fixedEntryOwnershipPresent } from "../../lib/channels/fixedEntryOwnership.js";
 import { fixedPositionIdentityMatches, type FixedMaterializedPosition } from "./fixedEntryCoverageMaterialization.js";
 import { loadStoredReceiptBoundControlPlane } from "../../lib/channels/channelControlPlanePersistence.js";
+// PAPER2/LAB uses credential slot 3; display order is not a credential index.
+export const FIXED_ORIGINAL_CREDENTIAL_REF = "3";
 export const FIXED_ORIGINAL_ACCOUNT_ID = "56daa293-e6bc-447d-83ac-2bfafb4d0ac1";
 export function fixedLegacyProtectionScope(accountId: string, occ: string): boolean {
   return accountId === FIXED_ORIGINAL_ACCOUNT_ID && occ.startsWith("SPY");

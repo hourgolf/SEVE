@@ -3,7 +3,7 @@ import { fixedEntryIntentFixture } from "./fixedEntryLedger.fixtures.js";
 import { fixedOrderCommand } from "./fixedEntryLedgerModel.js";
 import { fixedProtocolObservation, fixedProtocolRecord } from "./fixedEntryLedgerPersistence.js";
 import { createFixedEntryServiceClient } from "./fixedEntryServiceClient.js";
-import { readFixedIntentRecords, discoverFixedEntryIntents, makeFixedSupabaseCoveragePorts, readFixedAdmissionHistory } from "./fixedEntrySupabaseCoverage.js";
+import { readFixedIntentRecords, discoverFixedEntryIntents, makeFixedSupabaseCoveragePorts, readFixedAdmissionHistory, fixedAdmissionHistoryFromSnapshot } from "./fixedEntrySupabaseCoverage.js";
 import { fixedCoverageHarness } from "./fixedEntryCoverage.fixtures.js";
 import { coordinateFixedCommand } from "./fixedEntryCommandCoordinator.js";
 import { materializeFixedEntryCoverage } from "./fixedEntryCoverageMaterialization.js";
@@ -24,6 +24,7 @@ async function main() {
   let positionRows: Record<string, unknown>[] = [];
   const retiredStrategist = "00000000-0000-4000-8000-000000000081";
   let strategistRows: { id: string; slug: string }[] = [{ id: intent.strategistId, slug: intent.slug }];
+  let snapshotUnavailable = false;
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const method = init?.method ?? "GET";
@@ -31,6 +32,13 @@ async function main() {
     assert.equal(url.origin, "https://fixture.supabase.co");
     const offset = Number(url.searchParams.get("offset") ?? 0), limit = Number(url.searchParams.get("limit") ?? 200);
     calls.push({ method, path: url.pathname, offset, limit, filters: Object.fromEntries(url.searchParams) });
+    if (url.pathname.endsWith("/rpc/fixed_entry_admission_snapshot_v1")) {
+      if (snapshotUnavailable) return new Response(JSON.stringify({ message: "missing RPC" }), { status: 404 });
+      return new Response(JSON.stringify({ schema: "fixed-admission-snapshot-v1", complete: true,
+        counts: { observations: rows.length, strategists: strategistRows.length, positions: positionRows.length },
+        observations: rows, strategists: strategistRows, positions: positionRows }),
+        { status: 200, headers: { "content-type": "application/json" } });
+    }
     if (url.pathname.endsWith("/strategists")) {
       return new Response(JSON.stringify(strategistRows.slice(offset, offset + limit)), { status: 200,
         headers: { "content-type": "application/json", "content-range": `0-${strategistRows.length - 1}/${strategistRows.length}` } });
@@ -92,10 +100,27 @@ async function main() {
   positionRows = [position, legacy,
     { ...legacy, id: "00000000-0000-4000-8000-000000000091", opened_at: "2026-09-08T01:00:00Z" },
     { ...legacy, id: "00000000-0000-4000-8000-000000000092", runner_of: legacy.id }];
+  const historyCallStart = calls.length;
   const history = await readFixedAdmissionHistory(client, intent, () => 1234);
   assert.equal(history.legacySessionEntries, 1, "count ET root entries, exclude previous ET day, runners and every fixed generation");
   assert.equal(history.observedAtMs, 1234);
   assert.equal(history.intents.length, 1);
+  assert.equal(calls.length - historyCallStart, 1, "complete history uses exactly one GET");
+  assert.ok(calls.at(-1)!.path.endsWith("/rpc/fixed_entry_admission_snapshot_v1"));
+  const envelope = { schema: "fixed-admission-snapshot-v1", complete: true,
+    counts: { observations: rows.length, strategists: strategistRows.length, positions: positionRows.length },
+    observations: rows, strategists: strategistRows, positions: positionRows };
+  for (const change of [
+    { complete: false }, { counts: { ...envelope.counts, positions: 100001 } },
+    { positions: positionRows.slice(1) }, { observations: [{ ...rows[0], account_id: "wrong" }] },
+    { positions: [positionRows[0], positionRows[0], ...positionRows.slice(2)] },
+    { observations: [{ ...rows[0], reason: "fixed_entry_protocol:command" }] },
+  ]) assert.throws(() => fixedAdmissionHistoryFromSnapshot({ ...envelope, ...change }, intent, 1234));
+  snapshotUnavailable = true;
+  const beforeUnavailable = calls.length;
+  await assert.rejects(readFixedAdmissionHistory(client, intent, () => 1234), /snapshot_unavailable/);
+  assert.equal(calls.length - beforeUnavailable, 1, "missing function never falls back to an empty history");
+  snapshotUnavailable = false;
   const savedPositions = structuredClone(positionRows), savedRecords = structuredClone(rows);
   rows.length = 0; // A separate pre-fixed rollout scenario: no prior fixed IDs to rescue attribution.
   strategistRows = [{ id: retiredStrategist, slug: intent.slug }, { id: intent.strategistId, slug: "retired-current-placeholder" }];

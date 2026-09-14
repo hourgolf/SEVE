@@ -12,7 +12,7 @@ import { assertFixedEntryServiceClient } from "./fixedEntryServiceClient.js";
 import { makeFixedEntryBrokerTransport } from "./fixedEntryBrokerTransport.js";
 import { fixedClaimStorage, applyFixedRowCas } from "./fixedEntryLedgerSupabase.js";
 import { discoverFixedEntryIntents, readFixedIntentRecords, readFixedIntentPositions,
-  readFixedPosition, readFixedAdmissionHistory, makeFixedSupabaseCoveragePorts } from "./fixedEntrySupabaseCoverage.js";
+  readFixedPosition, readFixedAdmissionHistory, makeFixedSupabaseCoveragePorts, type FixedAdmissionReadEvidence } from "./fixedEntrySupabaseCoverage.js";
 import { admitFixedEntryIntent, type FixedIntentSeed } from "./fixedEntryIntentAdmission.js";
 import { parseFixedEntryIntent, type FixedEntryIntent } from "./fixedEntryLedgerModel.js";
 import { inspectFixedEntryInventory } from "./fixedEntryLedgerInventory.js";
@@ -25,6 +25,7 @@ import { evaluateFixedContinuationAffordability, type OptionsAffordabilitySnapsh
 import { buildFixedEntryExecutionPlan, type FixedEntryExecutionPlan } from "./fixedEntryExecutionPlan.js";
 import type { FixedCommandClaim } from "./fixedEntryCommandCoordinator.js";
 import { observedOpportunityId } from "./planShadowModel.js";
+import { buildFixedAdmissionObservation, type ExecutionObservationDraft } from "./executionObservationModel.js";
 type Source = "cycle" | "sweep";
 type Client = Pick<SupabaseClient, "from">;
 export interface FixedRuntimeEntryAuthority {
@@ -56,6 +57,7 @@ export interface FixedRuntimeBindings {
   /** Replay terminal/lineage/manager reporting from complete durable evidence,
    * including already-settled intents; failures retry on subsequent passes. */
   onReporting(intent: FixedEntryIntent): Promise<void>;
+  onAdmission?(row: ExecutionObservationDraft): void;
   status(intentId: string | null, state: string, reasons: readonly string[]): Promise<void>;
 }
 export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bindings: FixedRuntimeBindings): FixedEntryExecutionDriver & {
@@ -200,40 +202,62 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
       }
     },
     async enter(d: ShadowDecision, ch: ChannelConfig, spotClose: number, ctx: ExecCtx) {
-      if (d.blocked || d.action !== "enter" || d.qty !== 4 || ch.slug !== "vb-macd-state"
-          || d.slug !== ch.slug || !d.occ || !d.direction || !ctx.paperMode || !ctx.configurationWriteStamp
-          || ch.account_id !== ctx.accountId || !Number.isFinite(spotClose) || spotClose <= 0) {
-        await report(null, "declined", [d.blocked ?? "fixed-entry-context-invalid"]); return;
+      const startedAtMs = bindings.now();
+      const historyReads: FixedAdmissionReadEvidence[] = [];
+      const evidence = (stage: "admission_attempted" | "admission_result", state: string, reason: string | null, intentId: string | null) => {
+        try {
+          const row = buildFixedAdmissionObservation({ channel: ch, decision: d, accountId: ctx.accountId,
+            decisionAtMs: ctx.decisionAtMs, observedAtMs: bindings.now(), chainAgeMs: ctx.chain.ageMs,
+            configurationWriteStamp: ctx.configurationWriteStamp }, { stage, state, reason, intentId, startedAtMs, historyReads: structuredClone(historyReads) });
+          if (row) bindings.onAdmission?.(row);
+        } catch { /* Reporting cannot grant, duplicate or delay order authority. */ }
+      };
+      let admissionReported = false;
+      const finish = async (intentId: string | null, state: string, reason: string) => {
+        admissionReported = true;
+        evidence("admission_result", state, reason, intentId);
+        await report(intentId, state, [reason]);
+      };
+      evidence("admission_attempted", "attempted", null, null);
+      try {
+        if (d.blocked || d.action !== "enter" || d.qty !== 4 || ch.slug !== "vb-macd-state"
+            || d.slug !== ch.slug || !d.occ || !d.direction || !ctx.paperMode || !ctx.configurationWriteStamp
+            || ch.account_id !== ctx.accountId || !Number.isFinite(spotClose) || spotClose <= 0) {
+          await finish(null, "declined", d.blocked ?? "fixed-entry-context-invalid"); return;
+        }
+        const now = bindings.now(), quote = ctx.chain.quoteObservation(d.occ, now);
+        const quoteAge = typeof quote.localAgeMs === "number" ? quote.localAgeMs : NaN;
+        if (!Number.isFinite(quoteAge) || quoteAge < 0 || quoteAge > 120_000) {
+          await finish(null, "declined", "fixed-entry-quote-stale"); return;
+        }
+        const seed: FixedIntentSeed = { sessionDateEt: ctx.todayET, strategistId: ch.id,
+          accountId: ctx.accountId, slug: "vb-macd-state", underlying: "SPY", occ: d.occ,
+          optionSide: d.direction, quantity: 4, sourceBarAt: new Date(ctx.decisionAtMs).toISOString(),
+          createdAt: new Date(now).toISOString(), reason: d.reason,
+          // Use the SAME deterministic identity as the actual bar-loop decision
+          // observation. Strategy detail does not supply authoritative lineage.
+          opportunityId: observedOpportunityId({ strategistId: ch.id, accountId: ctx.accountId,
+            occ: d.occ, direction: d.direction, reason: d.reason, decisionAtMs: ctx.decisionAtMs,
+            configurationEpochId: ctx.configurationWriteStamp.configuration_epoch_id }),
+          writeStamp: structuredClone(ctx.configurationWriteStamp),
+          executionPlan: buildFixedEntryExecutionPlan({ ...bindings.executionSettings(), quote: {
+            bid: Number(quote.bid), ask: Number(quote.ask), observedAt: new Date(now - quoteAge).toISOString() } }),
+          evidence: { ...structuredClone(d.detail ?? {}), entry_underlying: spotClose } };
+        const admitted = await admitFixedEntryIntent({ storage, now: bindings.now,
+          history: original => readFixedAdmissionHistory(client, original, bindings.now, read => { historyReads.push(read); }),
+          async authorizeCurrent(original) {
+            const gate = await bindings.entryAuthority(original, null);
+            const affordability = evaluateFixedContinuationAffordability({ policy: original.writeStamp.entry_policy.fixedContractAdmission,
+              slug: original.slug, quantity: 4, provenBoughtQty: 0, bid: gate.bid, ask: gate.ask,
+              quoteAgeMs: gate.quoteAgeMs, account: gate.account, nowMs: bindings.now() });
+            return gate.allowed && fresh(gate.validUntilMs) && affordability.allowed;
+          } }, seed);
+        await finish(admitted.intent?.id ?? null, admitted.state, admitted.reason);
+        if (admitted.intent) await recover(admitted.intent, "cycle");
+      } catch (error) {
+        if (!admissionReported) evidence("admission_result", "unconfirmed", "fixed-entry-attempt-unconfirmed", null);
+        throw error;
       }
-      const now = bindings.now(), quote = ctx.chain.quoteObservation(d.occ, now);
-      const quoteAge = typeof quote.localAgeMs === "number" ? quote.localAgeMs : NaN;
-      if (!Number.isFinite(quoteAge) || quoteAge < 0 || quoteAge > 120_000) {
-        await report(null, "declined", ["fixed-entry-quote-stale"]); return;
-      }
-      const seed: FixedIntentSeed = { sessionDateEt: ctx.todayET, strategistId: ch.id,
-        accountId: ctx.accountId, slug: "vb-macd-state", underlying: "SPY", occ: d.occ,
-        optionSide: d.direction, quantity: 4, sourceBarAt: new Date(ctx.decisionAtMs).toISOString(),
-        createdAt: new Date(now).toISOString(), reason: d.reason,
-        // Use the SAME deterministic identity as the actual bar-loop decision
-        // observation. Strategy detail does not supply authoritative lineage.
-        opportunityId: observedOpportunityId({ strategistId: ch.id, accountId: ctx.accountId,
-          occ: d.occ, direction: d.direction, reason: d.reason, decisionAtMs: ctx.decisionAtMs,
-          configurationEpochId: ctx.configurationWriteStamp.configuration_epoch_id }),
-        writeStamp: structuredClone(ctx.configurationWriteStamp),
-        executionPlan: buildFixedEntryExecutionPlan({ ...bindings.executionSettings(), quote: {
-          bid: Number(quote.bid), ask: Number(quote.ask), observedAt: new Date(now - quoteAge).toISOString() } }),
-        evidence: { ...structuredClone(d.detail ?? {}), entry_underlying: spotClose } };
-      const admitted = await admitFixedEntryIntent({ storage, now: bindings.now,
-        history: original => readFixedAdmissionHistory(client, original, bindings.now),
-        async authorizeCurrent(original) {
-          const gate = await bindings.entryAuthority(original, null);
-          const affordability = evaluateFixedContinuationAffordability({ policy: original.writeStamp.entry_policy.fixedContractAdmission,
-            slug: original.slug, quantity: 4, provenBoughtQty: 0, bid: gate.bid, ask: gate.ask,
-            quoteAgeMs: gate.quoteAgeMs, account: gate.account, nowMs: bindings.now() });
-          return gate.allowed && fresh(gate.validUntilMs) && affordability.allowed;
-        } }, seed);
-      await report(admitted.intent?.id ?? null, admitted.state, [admitted.reason]);
-      if (admitted.intent) await recover(admitted.intent, "cycle");
     },
     async exit(_d, row, ctx) {
       // Re-evaluate original native management; a current-roster exit decision

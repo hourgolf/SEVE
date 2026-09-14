@@ -40,7 +40,7 @@ async function main() {
     event_policy: "standdown", entry_dte: 0, strike_offset: 0, premium_stop_pct: 99, take_profit_pct: 99,
     pyramid_adds: 0, stall_minutes: 0, stall_max_favor_pct: 0, gap_min: 0, runner_frac: 0, runner_giveback_pct: 0 }));
   const accounts: AccountRow[] = [...new Set(candidate.workerProjection.roots.map(r => r.accountId))].map((id,i) => ({
-    id, name: id, mode: "paper", cred_ref: id === macd.accountId ? "2" : `fixture-${i}`, is_armed: true,
+    id, name: id, mode: "paper", cred_ref: id === macd.accountId ? "3" : `fixture-${i}`, is_armed: true,
     is_halted: false, master_daily_stop_usd: 0 }));
   let stored: StoredReceiptBoundControlPlaneRead = { state: "receipt-bound", compiled: candidate, error: null,
     databaseIdentity: { releaseManifestDatabaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -116,6 +116,9 @@ async function main() {
     const check = (s: FixedIntentSeed = seed) => binding.entryAuthority(s, null);
     assert.equal((await check()).allowed, true, "actual receipt, native gates and full portfolio accept original four-contract signal above old caps");
     assert.equal((await check()).ask, 10);
+    accounts.find(a => a.id === intent.accountId)!.cred_ref = "2";
+    assert.equal((await check()).allowed, false, "display PAPER2 must not resolve through credential slot 2");
+    accounts.find(a => a.id === intent.accountId)!.cred_ref = "3";
     peerMode = hidePeer = true;
     assert.equal((await check()).allowed, false, "peer buys filling between positions and orders remain visible in confirming positions");
     assert.equal(hidePeer, false);

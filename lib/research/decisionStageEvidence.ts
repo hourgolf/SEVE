@@ -1,6 +1,12 @@
 // Feature-detect additive traces; legacy zero quote/fill fields are not evidence
 // that an unvisited stage observed a zero price or a confirmed zero fill.
 export function readDecisionStageEvidence(row: Record<string, any>) {
+  if (row.payload?.fixed_entry_admission?.schema === "fixed-entry-admission-v1") {
+    return { state: "admission-observed" as const, id: row.id ?? null, traceId: row.trace_id ?? null,
+      channel: row.channel_slug ?? null, accountId: row.account_id ?? null,
+      admission: row.payload.fixed_entry_admission,
+      limitations: ["Admission evidence is not another signal or proof of broker submission."] };
+  }
   const trace = row.payload?.decisionDetail?.decisionTrace;
   if (trace?.schema !== "decision-stage-v1") return { state: "unavailable" as const, reason: "legacy_or_missing_trace", id: row.id ?? null };
   const num = (v: unknown) => typeof v === "number" && Number.isFinite(v) ? v : null;
