@@ -1,3 +1,4 @@
+import { QUOTE_TRIGGER_MAX_AGE_MS } from "./quoteValidation.js";
 // ============================================================================
 //  Worker config — env + tunable policy constants.
 //
@@ -284,7 +285,7 @@ export const policy = {
   // routine hiccups — fail-toward-not-firing must not become fail-toward-never-protecting) but
   // well before a fast 0DTE leaves a stale bid behind as a fantasy trigger price. The mandatory
   // halt/EOD/event flattens are NOT price-gated and ignore this entirely.
-  QUOTE_TRIGGER_MAX_AGE_MS: 120_000,
+  QUOTE_TRIGGER_MAX_AGE_MS,
   // GIVEBACK (arm-high ratchet) trail, per-channel (2026-07-08, A13): engage once the peak mark
   // clears entry × engageMult, then exit if it gives back > givebackPct of the peak GAIN. power is
   // byte-identical to its prior POWER_TRAIL_* scalars (+100% / keep-60%); momo-shape armed for the

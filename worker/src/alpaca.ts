@@ -330,7 +330,7 @@ export async function snapshotChain(symbol: string, spot: number, fromDate: stri
       optType: cp === "C" ? "call" : "put",
       expiration: `20${yymmdd.slice(0, 2)}-${yymmdd.slice(2, 4)}-${yymmdd.slice(4, 6)}`,
       bid, ask,
-      providerQuoteAt: typeof s.latestQuote?.t === "string" && Number.isFinite(Date.parse(s.latestQuote.t)) ? s.latestQuote.t : null,
+      providerQuoteAt: typeof s.latestQuote?.t === "string" ? s.latestQuote.t : null,
       bidSize: Number.isInteger(s.latestQuote?.bs) && s.latestQuote.bs >= 0 ? s.latestQuote.bs : null,
       askSize: Number.isInteger(s.latestQuote?.as) && s.latestQuote.as >= 0 ? s.latestQuote.as : null,
       feed: config.optFeed,

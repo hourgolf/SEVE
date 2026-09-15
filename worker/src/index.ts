@@ -42,7 +42,6 @@ import { updateShadowManagement } from "./shadowManage.js";
 import { archiveQuotesToStorage, maybeArchiveTick } from "./archive.js";
 import { maybePublishForensicsTick } from "./forensics.js";
 import { executeEntry, executeExit, executeReconcile, executeAdd, premiumExitReason, seedRemaining, entryKey, noteRowHeld, type ExecCtx, type ExitQualityPolicy } from "./execute.js";
-import { freshExecutableBid } from "./exitRules.js";
 import { computeFeatures } from "../../engine/engine";
 import { sessionCloseMin } from "../../engine/market-calendar";
 import { inEventWindow } from "../../engine/market-events";
@@ -1730,8 +1729,9 @@ async function fastExitSweep(): Promise<void> {
         // Evaluate the dark controls at the same executable observation that
         // precedes the real wall-clock flatten. This call writes evidence only.
         const bellQ = chain?.byOcc(r.occ_symbol);
-        const bellAge = chain?.ageMs ?? Infinity;
-        const bellBid = freshExecutableBid(bellQ?.bid, bellAge);
+        const bellObservation = chain?.executableQuote(r.occ_symbol);
+        const bellAge = bellObservation?.ageMs ?? Infinity;
+        const bellBid = bellObservation?.quote.bid ?? null;
         if (bellBid != null) {
           const bellPeak = Math.max(peakBidByKey.get(r.id) ?? r.peak_mark ?? r.avg_entry_price, bellBid);
           observeShadowManagers({ ch, row: r, accountId: g.account.id, bid: bellBid,
@@ -1768,7 +1768,7 @@ async function fastExitSweep(): Promise<void> {
       // ---- PRICE-TRIGGERED exits below — EXECUTABLE-BID basis (audit 2026-07-11, 1b #6) ----
       // We are LONG options: a liquidation SELLS, so every trigger evaluates the BID — the
       // price a buyer will actually pay — NOT the mid (a mid-based stop fires late/at a level
-      // no order can realize on a wide spread; operator decision 2026-07-11). freshExecutableBid
+      // no order can realize on a wide spread; operator decision 2026-07-11). the per-contract reader
       // also enforces the QUOTE-AGE guard (policy.QUOTE_TRIGGER_MAX_AGE_MS): a stale chain or a
       // missing/zero bid SKIPS the price exits this tick — fail toward NOT firing on a fantasy
       // price. The mandatory halt/EOD/event flattens above already ran (wall-clock/operator-
@@ -1776,15 +1776,16 @@ async function fastExitSweep(): Promise<void> {
       // The MID stays computed as a labeled DIAGNOSTIC only (skip + fire info lines).
       const q = chain?.byOcc(r.occ_symbol);
       const midDiag = q?.mid ?? 0; // diagnostic only — never a trigger or peak input (1b #6)
-      const chainAgeMs = chain?.ageMs ?? Infinity;
-      const bid = freshExecutableBid(q?.bid, chainAgeMs);
+      const executable = chain?.executableQuote(r.occ_symbol);
+      const chainAgeMs = executable?.ageMs ?? Infinity;
+      const bid = executable?.quote.bid ?? null;
       if (bid == null) {
         // Throttled visibility (≤1/min/row): a row skipped here is running WITHOUT price
         // protection — silent would hide an outage; unthrottled would flood at 10s cadence.
         const last = sweepSkipLogged.get(r.id) ?? 0;
         if (Date.now() - last >= 60_000) {
           sweepSkipLogged.set(r.id, Date.now());
-          info(`fast-exit: ${ch.slug} ${r.occ_symbol} price exits skipped — ${chainAgeMs > policy.QUOTE_TRIGGER_MAX_AGE_MS ? `chain stale (${Number.isFinite(chainAgeMs) ? `${Math.round(chainAgeMs / 1000)}s` : "never seeded"})` : `no executable bid (bid ${q?.bid ?? "—"})`}; mid ${midDiag.toFixed(2)} diagnostic — mandatory flattens unaffected`);
+          info(`fast-exit: ${ch.slug} ${r.occ_symbol} price exits skipped — ${chainAgeMs > policy.QUOTE_TRIGGER_MAX_AGE_MS ? "held-contract quote invalid or stale" : `no executable bid (bid ${q?.bid ?? "—"})`}; mid ${midDiag.toFixed(2)} diagnostic — mandatory flattens unaffected`);
         }
         continue;
       }

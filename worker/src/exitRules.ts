@@ -156,10 +156,7 @@ export function trancheSplit(qty: number, frac: number): { sell: number; retain:
  *   · the bid is missing/zero/negative — no posted buyer = no executable price (a zero-bid
  *     collapsed option can't be salvaged by a price stop anyway; the mandatory halt/EOD/event
  *     flattens still clear it — they never price-gate). */
-export function freshExecutableBid(bid: number | null | undefined, ageMs: number, maxAgeMs: number = policy.QUOTE_TRIGGER_MAX_AGE_MS): number | null {
-  if (!(ageMs <= maxAgeMs)) return null; // NaN/Infinity-safe: only a provably fresh quote passes
-  return bid != null && bid > 0 ? bid : null;
-}
+export { freshExecutableBid } from "./quoteValidation.js";
 
 // ---- PARTIAL-EXIT remainder arithmetic (audit 2026-07-11, 1b #2 — pure, selftest-covered) ----
 /** How a row's qty splits when its exit sell PARTIALLY filled (partial-then-

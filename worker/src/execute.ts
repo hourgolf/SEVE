@@ -26,7 +26,7 @@ import { info } from "./log.js";
 import { pushManual } from "./alerts.js";
 import * as alpaca from "./alpaca.js";
 import * as store from "./store.js";
-import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, freshExecutableBid, currentLotOrderTagPnl, confirmedReconciliationExit } from "./exitRules.js";
+import { trancheSplit, findRowExitFill, countCoidAttempts, partialRemainder, currentLotOrderTagPnl, confirmedReconciliationExit } from "./exitRules.js";
 import type { ChainStore } from "./state.js";
 import type { ShadowDecision } from "./decide.js";
 import { captureObservedPositionPlan } from "./planShadow.js";
@@ -246,7 +246,7 @@ async function placeFill(
   const submittedAtMs = Date.now();
   try {
     let result: { id: string; fill: number; filledQty: number; status: string; crossedQty: number };
-    if (config.spreadCapture && q && q.ask > q.bid && q.bid > 0) {
+    if (config.spreadCapture && q && ctx.chain.executableQuote(occ) && q.ask > q.bid) {
       const r = await alpaca.limitLadderFill({ symbol: occ, side, qty, coidBase, bid: q.bid, ask: q.ask, ladder: config.spreadCaptureLadder }, ctx.api);
       if (r.filledQty > 0) {
         const ref = side === "buy" ? "ask" : "bid";
@@ -466,7 +466,7 @@ export async function executeExit(
 
   // 1b #6 (audit 2026-07-11): the reconcile ESTIMATE fallback is fresh-quote-guarded — a STALE
   // bid must never become a silently-booked exit price; alp.current_price (cycle-fresh) backs it.
-  const liveBid = freshExecutableBid(ctx.chain.byOcc(occ)?.bid, ctx.chain.ageMs) ?? 0;
+  const liveBid = ctx.chain.executableBid(occ) ?? 0;
   const reconcileClose = async (why: string, gated = true) => {
     // GATED (the read-based "lot drained" path): require the orphan to persist 2 consecutive cycles
     // before booking, so a transient empty read can't book-and-close a row that reappears next cycle (the
@@ -643,7 +643,7 @@ async function executeTranche(
   split: { sell: number; retain: number }, runner: RunnerCfg, quality: ExitQualityContext | null,
 ): Promise<void> {
   const occ = row.occ_symbol;
-  let exitPx = ctx.alpacaByOcc.get(occ)?.current_price ?? (ctx.chain.byOcc(occ)?.bid ?? 0);
+  let exitPx = ctx.alpacaByOcc.get(occ)?.current_price ?? (ctx.chain.executableBid(occ) ?? 0);
   // DETERMINISTIC per-row tranche coid (review hardening): a retry after an unsettled poll must
   // never place a SECOND tranche sell — the first may have filled late (the paid-for $0-booking
   // class). One coid per row + the recovery scan below make the tranche idempotent; Alpaca's
@@ -748,7 +748,7 @@ export async function executeReconcile(d: ShadowDecision, row: store.PositionRow
   // (exit − avg_entry)×row.qty — only at the lot's confirmed sell price. A live
   // bid can explain the unresolved row but cannot prove that the broker lot left.
   // row.qty is the unsold share.
-  const { px: mark, estimated } = reconcileExitPx(row.occ_symbol, ctx.allOrders, freshExecutableBid(ctx.chain.byOcc(row.occ_symbol)?.bid, ctx.chain.ageMs) ?? 0);
+  const { px: mark, estimated } = reconcileExitPx(row.occ_symbol, ctx.allOrders, ctx.chain.executableBid(row.occ_symbol) ?? 0);
   if (estimated && mark > 0) {
     capturePositionOutcome({ eventKind: "reconciliation_unresolved", eventAtMs: Date.now(), positionId: row.id,
       opportunityId: opportunityFor(row), quantity: row.qty, avgEntryPrice: row.avg_entry_price,

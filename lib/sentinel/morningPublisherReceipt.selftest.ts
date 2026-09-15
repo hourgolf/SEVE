@@ -20,4 +20,7 @@ assert.equal(auditMorningPublisherReceipt({ events: [start, event("morning-publi
 assert.equal(auditMorningPublisherReceipt({ events: [start, { ...sentinel, meta: { ...sentinel.meta, publisherVersion: "sentinel-publisher-v2" } }, finish], evidenceSession, targetSession }).state, "partial");
 assert.equal(auditMorningPublisherReceipt({ events: [start, sentinel, finish, { ...finish, meta: { publisherRunId: "other" } }], evidenceSession, targetSession }).state, "complete");
 
-console.log("morning-publisher-receipt-selftest: 9/9 passed");
+assert.equal(auditMorningPublisherReceipt({ events: [start, sentinel, {...finish,created_at:"2026-07-22T16:48:00Z"}], evidenceSession, targetSession }).state, "partial");
+assert.equal(auditMorningPublisherReceipt({ events: [start, sentinel, {...finish,created_at:"2026-07-23T13:00:00Z"}], evidenceSession, targetSession }).state, "partial");
+assert.equal(auditMorningPublisherReceipt({ events: [start,sentinel,{...finish,meta:{...finish.meta,targetSession:"2026-07-23"}}], evidenceSession,targetSession }).state,"conflict");
+console.log("morning-publisher-receipt-selftest: 12/12 passed");

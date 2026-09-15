@@ -69,8 +69,8 @@ export interface MorningClock {
 }
 
 export type RemoteMorningPlan =
-  | { action: "skip"; code: "outside-window" | "closed-session" | "already-published"; detail: string; targetSession?: string; evidenceSession?: string }
-  | { action: "block"; code: "calendar-coverage" | "forensics-missing" | "forensics-stale" | "forensics-conflict"; detail: string; targetSession: string; evidenceSession: string }
+  | { action: "skip"; code: "not-yet-due" | "closed-session" | "already-published"; detail: string; targetSession?: string; evidenceSession?: string }
+  | { action: "block"; code: "missed-window" | "calendar-coverage" | "forensics-missing" | "forensics-stale" | "forensics-conflict"; detail: string; targetSession: string; evidenceSession: string }
   | { action: "publish"; code: "partial-evidence"; detail: string; targetSession: string; evidenceSession: string; report: RemoteForensicsReport };
 
 const parts = (nowMs: number): MorningClock => {
@@ -110,8 +110,11 @@ export function deriveRemoteMorningPlan(input: {
   if (input.completedTarget === clock.date) {
     return { action: "skip", code: "already-published", detail: `finish receipt already exists for ${clock.date}`, targetSession: clock.date, evidenceSession };
   }
-  if (!input.forceWindow && (clock.minute < REMOTE_MORNING_WINDOW_START_MIN || clock.minute > REMOTE_MORNING_WINDOW_END_MIN)) {
-    return { action: "skip", code: "outside-window", detail: `ET minute ${clock.minute} is outside 07:00-09:25`, targetSession: clock.date, evidenceSession };
+  if (!input.forceWindow && clock.minute < REMOTE_MORNING_WINDOW_START_MIN) {
+    return { action: "skip", code: "not-yet-due", detail: "Publication window has not opened (07:00 ET)", targetSession: clock.date, evidenceSession };
+  }
+  if (!input.forceWindow && clock.minute > REMOTE_MORNING_WINDOW_END_MIN) {
+    return { action: "block", code: "missed-window", detail: "Publication deadline passed without a verified completion receipt (09:25 ET)", targetSession: clock.date, evidenceSession };
   }
   // A Sentinel row alone is not a completed hosted publication. It may have
   // been emitted by the local rich publisher, or it may be the middle row of

@@ -13,6 +13,7 @@ import {
   buildManagerShadowTerminalObservation,
   censorManagerShadowRun,
   decodeManagerShadowRun,
+  isReadOnlyHistoricalManagerRun,
   managerEnrollmentEligible,
   recordManagerQuoteMiss,
   type ManagerEnrollmentInput,
@@ -69,7 +70,7 @@ export async function replayFixedManagerCohorts(client:Pick<SupabaseClient,"from
       {nowMs:Date.now(),quoteMaxAgeMs:config.managerShadowQuoteMaxAgeMs});
     for (const item of persisted) {
       runs.set(item.run.id,item);enrolledPositions.add(item.run.positionId);
-      if (item.run.status === "terminal") pendingTerminalReceipts.add(item.run.id);
+      if (item.run.status === "terminal" && !isReadOnlyHistoricalManagerRun(item.run)) pendingTerminalReceipts.add(item.run.id);
     }
     return true;
   } catch { return false; }
@@ -103,7 +104,7 @@ async function hydrate(): Promise<boolean> {
     if (!run) { rejected++; continue; }
     runs.set(run.id, { run, sourceBootId: row.source_boot_id as string });
     enrolledPositions.add(run.positionId);
-    if (run.status === "terminal") pendingTerminalReceipts.add(run.id);
+    if (run.status === "terminal" && !isReadOnlyHistoricalManagerRun(run)) pendingTerminalReceipts.add(run.id);
   }
   hydrated = true;
   info(`manager-shadow-book: hydrated ${runs.size} retained runs${rejected ? `; rejected ${rejected} incompatible rows` : ""}`);
@@ -180,7 +181,7 @@ async function flushTerminalReceipts(): Promise<void> {
 }
 
 async function attributeActualCloses(): Promise<void> {
-  const pending = [...runs.values()].filter((item) => item.run.actualCloseAt == null);
+  const pending = [...runs.values()].filter((item) => item.run.actualCloseAt == null && !isReadOnlyHistoricalManagerRun(item.run));
   const ids = [...new Set(pending.map((item) => item.run.positionId))];
   const positions = await store.loadManagerShadowActualPositions(ids);
   if (positions == null) return;

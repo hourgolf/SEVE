@@ -591,6 +591,24 @@ function stateFrom(value: unknown): ManagerState | null {
   return { ...value } as ManagerState;
 }
 
+/** Compatibility imports are evidence readers, never today's repair writers. */
+export function isReadOnlyHistoricalManagerRun(run: Pick<ManagerShadowRun, "minimumModeledQty">): boolean {
+  return run.minimumModeledQty === 4;
+}
+
+/** The original v2 cohort used a four-contract eligibility floor through
+ * July 17. Preserve that historical field; current enrollment stays at two.
+ * Only finalized records from that era may take this compatibility path. */
+function compatibleStoredMinimum(row: ManagerShadowDbRow): boolean {
+  if (!isManagerId(row.manager_id)) return false;
+  if (row.minimum_modeled_qty === minimumModeledQty(row.manager_id)) return true;
+  const entry = Date.parse(row.entry_at), admitted = Date.parse(row.admitted_at ?? "");
+  const start = Date.parse("2026-07-13T04:00:00Z"), end = Date.parse("2026-07-18T04:00:00Z");
+  return row.minimum_modeled_qty === 4 && row.original_qty >= 4
+    && entry >= start && entry < end && admitted >= entry && admitted < end
+    && (row.status === "terminal" || row.status === "censored");
+}
+
 export function decodeManagerShadowRun(row: ManagerShadowDbRow): ManagerShadowRun | null {
   if (!UUID.test(row.id) || !UUID.test(row.position_id) || !UUID.test(row.strategist_id) || !UUID.test(row.account_id)
       || row.source_boot_id == null || !UUID.test(row.source_boot_id)
@@ -606,7 +624,7 @@ export function decodeManagerShadowRun(row: ManagerShadowDbRow): ManagerShadowRu
       || !Number.isInteger(row.admission_delay_ms) || (row.admission_delay_ms as number) < 0
       || !["pending_quote", "observing", "no_eligible_quote_before_actual_close"].includes(row.evidence_state ?? "")
       || !Number.isInteger(row.original_qty) || row.original_qty < 1
-      || row.minimum_modeled_qty !== minimumModeledQty(row.manager_id)
+      || !compatibleStoredMinimum(row)
       || (row.economic_mode !== "whole_lot_executable" && row.economic_mode !== "normalized_fractional")
       || (row.status !== "active" && row.status !== "terminal" && row.status !== "censored")
       || !Number.isInteger(row.consecutive_quote_misses) || row.consecutive_quote_misses < 0) return null;
