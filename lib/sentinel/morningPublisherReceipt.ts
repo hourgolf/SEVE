@@ -1,4 +1,4 @@
-import { remoteMorningRunId, REMOTE_MORNING_PUBLISHER_VERSION } from "./remoteMorningPublisher.js";
+import { remoteMorningRunId, remoteMorningClock, REMOTE_MORNING_WINDOW_START_MIN, REMOTE_MORNING_WINDOW_END_MIN, REMOTE_MORNING_PUBLISHER_VERSION } from "./remoteMorningPublisher.js";
 
 export interface MorningPublisherEvent {
   message: string;
@@ -40,6 +40,8 @@ export function auditMorningPublisherReceipt(input: {
   const finishes = matching.filter((row) => row.message === "morning-publisher: finish");
   const errors = matching.filter((row) => row.message === "morning-publisher: error");
   const facts: string[] = [];
+  const contextConflict = [...starts, ...finishes].some(row => row.meta?.targetSession !== input.targetSession || row.meta?.evidenceSession !== input.evidenceSession);
+  if (contextConflict) facts.push("lifecycle receipt session identity conflicts with its run ID");
   if (errors.length) facts.push(`${errors.length} hosted error receipt(s)`);
   if (starts.length !== 1) facts.push(`start receipts ${starts.length}; expected 1`);
   if (sentinels.length !== 1) facts.push(`Sentinel receipts ${sentinels.length}; expected 1`);
@@ -53,12 +55,18 @@ export function auditMorningPublisherReceipt(input: {
     facts.push("receipt order is not start -> Sentinel -> finish");
   }
 
+  const timely = [clocks[1], clocks[2]].every(ms => {
+    if (ms == null) return false;
+    const clock = remoteMorningClock(ms);
+    return clock.date === input.targetSession && clock.minute >= REMOTE_MORNING_WINDOW_START_MIN && clock.minute <= REMOTE_MORNING_WINDOW_END_MIN;
+  });
+  if (sentinels.length && finishes.length && !timely) facts.push("publication or completion is outside the target-session delivery window");
   let state: MorningPublisherReceiptState;
   const ordered = clocks.every((clock) => clock != null)
     && (clocks[0] as number) <= (clocks[1] as number)
     && (clocks[1] as number) <= (clocks[2] as number);
-  if (starts.length > 1 || sentinels.length > 1 || finishes.length > 1) state = "conflict";
-  else if (starts.length === 1 && sentinels.length === 1 && finishes.length === 1 && ordered) state = errors.length ? "recovered" : "complete";
+  if (contextConflict || starts.length > 1 || sentinels.length > 1 || finishes.length > 1) state = "conflict";
+  else if (starts.length === 1 && sentinels.length === 1 && finishes.length === 1 && ordered && timely) state = errors.length ? "recovered" : "complete";
   else if (errors.length) state = "error";
   else if (matching.length === 0) state = "missing";
   else state = "partial";

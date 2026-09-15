@@ -133,3 +133,11 @@ jobs:
         run: npm run fixed-entry-custody-boundary-selftest
       - name: fixed-entry-startup-recovery-selftest
         run: npm run fixed-entry-startup-recovery-selftest
+      - name: Exact-contract executable quote regression
+        run: npm run executable-quote-selftest
+      - name: Historical manager compatibility
+        run: npm run manager-shadow-book-selftest
+      - name: Publication deadline and receipt integrity
+        run: npm run remote-morning-publisher-selftest && npm run morning-publisher-receipt-selftest && npm run morning-publisher-cli-selftest
+      - name: Session lifecycle evidence
+        run: npm run session-lifecycle-evidence-selftest

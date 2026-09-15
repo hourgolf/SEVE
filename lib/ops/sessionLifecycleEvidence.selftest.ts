@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {summarizeSessionLifecycle} from './sessionLifecycleEvidence';
+const channels=[{slug:'test',strategistId:'s',posture:'paper'}];
+assert.equal(summarizeSessionLifecycle({channels,positions:[],observations:[],managers:[]})[0].state,'unexercised');
+const p={id:'p',strategist_id:'s',status:'closed',runner_of:null,closed_at:'2026-09-15T15:00:00Z',realized_pnl:10,channel_spec_version_id:'v',release_manifest_id:'r',configuration_epoch_id:'e'};
+const summary=summarizeSessionLifecycle({channels,positions:[p,{...p,id:'runner',runner_of:'p'}],observations:[],managers:[{position_id:'p',status:'terminal'}]})[0];
+assert.equal(summary.rootTrades,1);assert.equal(summary.runnerRows,1);assert.equal(summary.state,'evidence-present');
+assert.equal(summarizeSessionLifecycle({channels,positions:[p],observations:[],managers:[]})[0].state,'needs-review');
+const o={id:'o',channel_slug:'test',position_id:null,event_kind:'decision',action:'reconcile',reason:'fixed_entry_admission:admission_attempted',trace_id:'trace',channel_spec_version_id:'v',release_manifest_id:'r'};
+assert.equal(summarizeSessionLifecycle({channels,positions:[],observations:[o],managers:[]})[0].state,'needs-review');
+assert.equal(summarizeSessionLifecycle({channels,positions:[],observations:[o,{...o,id:'out',reason:'fixed_entry_admission:admission_result'}],managers:[]})[0].state,'evidence-present');
+console.log('session lifecycle evidence: unexercised, runner lineage and missing admission outcomes passed');

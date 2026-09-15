@@ -537,7 +537,12 @@
     "fixed-entry-runtime-clock-selftest": "tsx worker/src/fixedEntryRuntimeClock.selftest.ts",
     "fixed-entry-service-client-selftest": "tsx worker/src/fixedEntryServiceClient.selftest.ts",
     "fixed-entry-custody-boundary-selftest": "tsx worker/src/fixedEntryCustodyBoundary.selftest.ts",
-    "fixed-entry-startup-recovery-selftest": "tsx worker/src/fixedEntryStartupRecovery.selftest.ts"
+    "fixed-entry-startup-recovery-selftest": "tsx worker/src/fixedEntryStartupRecovery.selftest.ts",
+    "executable-quote-selftest": "tsx worker/src/executableQuote.selftest.ts",
+    "session-lifecycle-evidence": "tsx scripts/session-lifecycle-evidence.ts",
+    "session-lifecycle-evidence-selftest": "tsx lib/ops/sessionLifecycleEvidence.selftest.ts",
+    "morning-publisher-cli-selftest": "tsx scripts/remote-morning-publisher.selftest.ts",
+    "morning-publication-status": "tsx scripts/morning-publication-status.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1086.0",

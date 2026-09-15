@@ -1,18 +1,18 @@
-// Remote, Mac-independent pre-open Sentinel publisher.
+// Bounded pre-open Sentinel publisher, scheduled independently of the worker.
 //
-// This is intentionally a separate Railway cron/service, never imported by the
+// Scheduled ownership belongs to the always-on Mini, never imported by the
 // order executor. It reads one bounded forensics row plus compact event receipts,
 // self-gates to 07:00-09:25 ET, and publishes a truthfully PARTIAL Sentinel v3
 // artifact until terrain/IV/full-scan inputs have their own durable cloud source.
 //
 // Local review (zero writes): npm run remote-morning-publisher -- --dry-run --force-window
-// Hosted cron: bounded retries begin early because GitHub schedules are
-// best-effort and may arrive late. The first finish receipt is the idempotency
+// Mini schedule: bounded retries run before the deadline. The first verified
+// finish receipt is the idempotency
 // boundary for every later invocation.
 
 import { appendFileSync } from "node:fs";
 import { previousTradingDay } from "@/engine/market-calendar";
-import { buildRemoteSentinelMeta, deriveRemoteMorningPlan, remoteMorningClock, remoteMorningRunId, REMOTE_MORNING_PUBLISHER_VERSION, type PriorSentinelReceipt, type RemoteForensicsReport } from "@/lib/sentinel/remoteMorningPublisher";
+import { buildRemoteSentinelMeta, deriveRemoteMorningPlan, remoteMorningClock, remoteMorningRunId, REMOTE_MORNING_PUBLISHER_VERSION, REMOTE_MORNING_WINDOW_START_MIN, REMOTE_MORNING_WINDOW_END_MIN, type PriorSentinelReceipt, type RemoteForensicsReport } from "@/lib/sentinel/remoteMorningPublisher";
 import { auditMorningPublisherReceipt, type MorningPublisherEvent } from "@/lib/sentinel/morningPublisherReceipt";
 import { createServerSupabaseClient } from "./serverSupabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -21,6 +21,7 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const FORCE_WINDOW = process.argv.includes("--force-window");
 const atIndex = process.argv.indexOf("--at");
 const AT_MS = atIndex >= 0 && process.argv[atIndex + 1] ? Date.parse(process.argv[atIndex + 1]) : null;
+if (FORCE_WINDOW && !DRY_RUN) throw new Error("--force-window is test-only and requires --dry-run");
 if (AT_MS != null && !DRY_RUN) throw new Error("--at is test-only and requires --dry-run");
 if (AT_MS != null && !Number.isFinite(AT_MS)) throw new Error("--at must be a valid ISO timestamp");
 const timeoutMs = Math.max(10_000, Math.min(120_000, Number(process.env.MORNING_PUBLISHER_TIMEOUT_MS ?? 60_000)));
@@ -35,7 +36,7 @@ const writeHostedSummary = (summary: Record<string, unknown>): void => {
   const target = String(summary.targetSession ?? "—");
   const evidence = String(summary.evidenceSession ?? "—");
   if (process.env.GITHUB_ACTIONS === "true") {
-    const annotation = action === "block" ? "error" : action === "skip" && code === "outside-window" ? "warning" : "notice";
+    const annotation = action === "block" ? "error" : "notice";
     console.log(`::${annotation} title=Morning publisher ${action}/${code}::${detail}`);
   }
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
   const nowMs = AT_MS ?? Date.now();
   const targetDate = remoteMorningClock(nowMs).date;
   const evidenceDate = previousTradingDay(targetDate);
+  const expectedRunId = remoteMorningRunId(evidenceDate, targetDate);
   const [reportRead, sentinelRead, lifecycleRead] = await withDeadline(Promise.all([
     // A pre-open catch-up may already have created today's incomplete row.
     // Bind the input to the exact prior trading session instead of treating
@@ -78,15 +80,20 @@ async function main(): Promise<void> {
     sb.from("forensics_reports").select("report_date,generated_at,payload")
       .eq("report_date", evidenceDate).maybeSingle(),
     sb.from("events").select("message,created_at,meta").like("message", "sentinel:%").order("created_at", { ascending: false }).limit(25),
-    sb.from("events").select("message,created_at,meta").in("message", ["morning-publisher: start", "morning-publisher: finish"]).order("created_at", { ascending: false }).limit(50),
+    sb.from("events").select("message,created_at,meta", { count: "exact" }).contains("meta", { publisherRunId: expectedRunId }).order("created_at", { ascending: false }).limit(20),
   ]), "publisher inputs");
   for (const [label, result] of [["forensics", reportRead], ["sentinel", sentinelRead], ["lifecycle", lifecycleRead]] as const) {
     if (result.error) throw new Error(`${label} read failed: ${result.error.message}`);
   }
 
-  const completedTarget = (lifecycleRead.data ?? []).some((row) => row.message === "morning-publisher: finish" && row.meta?.targetSession === targetDate)
-    ? targetDate
-    : null;
+  if (lifecycleRead.count == null || lifecycleRead.count > 20 || lifecycleRead.count !== lifecycleRead.data?.length) {
+    throw new Error("Incomplete or unbounded publication receipt inventory");
+  }
+  const priorAudit = auditMorningPublisherReceipt({ events: lifecycleRead.data ?? [], evidenceSession: evidenceDate, targetSession: targetDate });
+  const completedTarget = priorAudit.state === "complete" || priorAudit.state === "recovered" ? targetDate : null;
+  if (!completedTarget && (lifecycleRead.data ?? []).some(row => row.message === "morning-publisher: finish")) {
+    throw new Error(`Completion receipt exists without a valid publication chain: ${priorAudit.state}`);
+  }
   const plan = deriveRemoteMorningPlan({
     nowMs,
     report: (reportRead.data as RemoteForensicsReport | null) ?? null,
@@ -107,6 +114,10 @@ async function main(): Promise<void> {
     throw new Error(plan.detail);
   }
 
+  const publishClock = remoteMorningClock(Date.now());
+  if (!DRY_RUN && (publishClock.date !== targetDate || publishClock.minute < REMOTE_MORNING_WINDOW_START_MIN || publishClock.minute > REMOTE_MORNING_WINDOW_END_MIN)) {
+    throw new Error("Publication window expired while reading evidence; no late publication");
+  }
   const publishedAt = new Date().toISOString();
   const matchingPacket = ((sentinelRead.data ?? []) as PriorSentinelReceipt[]).find((row) =>
     row.meta?.session === plan.evidenceSession
@@ -122,7 +133,7 @@ async function main(): Promise<void> {
 
   const priorLifecycle = lifecycleRead.data ?? [];
   const hasStart = priorLifecycle.some((row) => row.message === "morning-publisher: start" && row.meta?.publisherRunId === runId);
-  const hasSentinel = (sentinelRead.data ?? []).some((row) => row.meta?.publisherRunId === runId);
+  const hasSentinel = priorLifecycle.some((row) => row.meta?.publisherRunId === runId);
   if (!hasStart) {
     const start = await withDeadline(sb.from("events").insert({ level: "INFO", message: "morning-publisher: start", meta: { ...summary, startedAt: publishedAt } }), "start receipt");
     if (start.error) throw new Error(`start receipt failed: ${start.error.message}`);

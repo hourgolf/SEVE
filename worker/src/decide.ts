@@ -29,7 +29,6 @@ import { etParts, occSymbol, type AlpacaPosition, type AlpacaOrder } from "./alp
 import { peakBidSince, realizedTodayByChannel, writeShadowEvent, type ChannelConfig, type FundState, type PositionRow } from "./store.js";
 import type { ChainStore } from "./state.js";
 import { entryStateByKey, entryKey } from "./execute.js";
-import { freshExecutableBid } from "./exitRules.js";
 import {
   rc54A13GivebackReached,
   rc54BankTargetReached,
@@ -252,7 +251,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
 
   // audit 2026-07-11 (1b #6): the bar-close premium checks trigger on the EXECUTABLE BID —
   // we are long, a liquidation SELLS, and the mid is a price no buyer posted (parity with the
-  // fast sweep: one trigger basis, no drift). freshExecutableBid enforces the same quote-age
+  // fast sweep: one trigger basis, no drift). the per-contract reader enforces the same quote-age
   // guard (policy.QUOTE_TRIGGER_MAX_AGE_MS). Fallback when the chain quote is stale/missing/
   // zero-bid: the broker's CYCLE-FRESH mark (alp.current_price, read from getPositions THIS
   // cycle — not a stale chain relic), so bar-granularity stop protection survives a chain
@@ -260,7 +259,7 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
   // not firing. The mid is kept as a diagnostic only (exit detail below).
   const rowQuote = row ? ctx.chain.byOcc(row.occ_symbol) : undefined;
   const midDiag = rowQuote?.mid ?? 0; // diagnostic — never a trigger input (1b #6)
-  const mark = row ? (freshExecutableBid(rowQuote?.bid, ctx.chain.ageMs) ?? alp?.current_price ?? 0) : 0;
+  const mark = row ? (ctx.chain.executableBid(row.occ_symbol) ?? alp?.current_price ?? 0) : 0;
   const entryPx = row?.avg_entry_price ?? 0;
   const rc54Profile = row ? rc54ManagerProfileFromRow(row) : null;
   const receiptBoundPolicy = row ? receiptBoundEntryPolicyFromRow(row) : null;

@@ -57,10 +57,10 @@ const wrongTarget = buildRemoteSentinelMeta(ready, "2026-07-21T13:00:05Z", {
 });
 assert.equal(wrongTarget.operatorPacket, null);
 
-assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-21T10:59:00Z"), report: report(), priorSentinel: null }).code, "outside-window");
+assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-21T10:59:00Z"), report: report(), priorSentinel: null }).code, "not-yet-due");
 assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-21T11:00:00Z"), report: report(), priorSentinel: null }).action, "publish");
 assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-21T13:25:00Z"), report: report(), priorSentinel: null }).action, "publish");
-assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-21T13:26:00Z"), report: report(), priorSentinel: null }).code, "outside-window");
+assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-21T13:26:00Z"), report: report(), priorSentinel: null }).code, "missed-window");
 assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-21T15:17:00Z"), report: report(), priorSentinel: null, completedTarget: "2026-07-21" }).code, "already-published");
 assert.equal(deriveRemoteMorningPlan({ nowMs: Date.parse("2026-07-19T13:00:00Z"), report: report("2026-07-17"), priorSentinel: null }).code, "closed-session");
 assert.equal(deriveRemoteMorningPlan({ nowMs: edt, report: null, priorSentinel: null }).code, "forensics-missing");

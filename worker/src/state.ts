@@ -12,6 +12,7 @@
 
 import type { Bar } from "../../engine/types";
 import type { ChainQuote } from "./alpaca.js";
+import { freshExecutableBid } from "./quoteValidation.js";
 
 export class BarStore {
   private bars: Bar[] = [];
@@ -62,6 +63,23 @@ export class ChainStore {
     for (const x of qs) this.provenance.set(x.occ, { seenAtMs: this.updatedMs, refreshId: this.refreshId });
   }
   byOcc(occ: string): ChainQuote | undefined { return this.q.get(occ); }
+  /** A different strike refreshing cannot freshen this contract. Provider time
+   * wins when supplied; local receipt time is an explicit fallback only when
+   * no provider clock was supplied. Never repair a malformed/future clock. */
+  executableQuote(occ: string, atMs = Date.now()): { quote: ChainQuote; ageMs: number; clockBasis: "provider" | "local-receipt" } | null {
+    const quote = this.q.get(occ), seen = this.provenance.get(occ);
+    if (!quote || quote.occ !== occ || !seen || !Number.isFinite(atMs)) return null;
+    const localAge = atMs - seen.seenAtMs;
+    const providerPresent = quote.providerQuoteAt != null;
+    const providerMs = providerPresent ? Date.parse(quote.providerQuoteAt!) : seen.seenAtMs;
+    const ageMs = atMs - providerMs;
+    if (freshExecutableBid(quote.bid, localAge) === null || freshExecutableBid(quote.bid, ageMs) === null
+        || !Number.isFinite(quote.ask) || quote.ask < quote.bid) return null;
+    return { quote, ageMs, clockBasis: providerPresent ? "provider" : "local-receipt" };
+  }
+  executableBid(occ: string, atMs = Date.now()): number | null {
+    return this.executableQuote(occ, atMs)?.quote.bid ?? null;
+  }
   /** Copies a per-contract observation without refreshing or filtering the chain. */
   quoteObservation(occ: string, atMs: number): Record<string, unknown> {
     const q = this.q.get(occ), seen = this.provenance.get(occ);

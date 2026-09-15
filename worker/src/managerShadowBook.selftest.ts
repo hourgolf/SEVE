@@ -8,6 +8,7 @@ import {
   buildManagerShadowTerminalObservation,
   censorManagerShadowRun,
   decodeManagerShadowRun,
+  isReadOnlyHistoricalManagerRun,
   encodeManagerShadowRun,
   managerAllocation,
   managerEconomicMode,
@@ -229,6 +230,21 @@ check("wrong policy epoch fails hydration", decodeManagerShadowRun(mutate(encode
 check("wrong shadow-book epoch fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { shadow_book_version: "future" })), null);
 check("invalid quote-age policy fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { quote_max_age_ms: 0 })), null);
 check("wrong cutoff policy fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { cutoff_minutes_before_close: 10 })), null);
+// Legacy minimum-four records retain their original economics and identity.
+const legacyTerminal = mutate(encodedTerminal!, { minimum_modeled_qty: 4 });
+const legacyCensored = mutate(encodedCensored!, { minimum_modeled_qty: 4 });
+truth("finalized historical minimum-four terminal hydrates", decodeManagerShadowRun(legacyTerminal));
+truth("finalized historical minimum-four censor hydrates", decodeManagerShadowRun(legacyCensored));
+const legacyRun = decodeManagerShadowRun(legacyTerminal)!;
+truth("historical restored run is read-only", isReadOnlyHistoricalManagerRun(legacyRun));
+check("current run retains live observer writes", isReadOnlyHistoricalManagerRun(runs[0]), false);
+check("historical minimum preserved after round trip", encodeManagerShadowRun(legacyRun, {sourceBootId:boot, terminalBootId:boot})?.minimum_modeled_qty, 4);
+check("historical terminal economics preserved", legacyRun.terminalPnl, encodedTerminal!.terminal_pnl);
+check("historical deterministic identity preserved", legacyRun.id, encodedTerminal!.id);
+check("active minimum-four is not silently grandfathered", decodeManagerShadowRun(mutate(encodedBank!, {minimum_modeled_qty:4})), null);
+check("arbitrary minimum is not grandfathered", decodeManagerShadowRun(mutate(encodedTerminal!, {minimum_modeled_qty:3})), null);
+check("historical compatibility still validates PnL", decodeManagerShadowRun(mutate(legacyTerminal, {terminal_pnl:999})), null);
+check("modern row cannot claim historic floor", decodeManagerShadowRun(mutate(legacyTerminal, {entry_at:"2026-09-14T14:00:00Z"})), null);
 check("wrong schema fails hydration", decodeManagerShadowRun(mutate(encodedBank!, { schema_version: 1 })), null);
 check("fractional allocation cannot masquerade as integer", decodeManagerShadowRun(mutate(encodedBank!, { allocation: { ...bank5!, bankQty: 2.5, runnerQty: 2.5 } })), null);
 check("terminal missing trigger fails hydration", decodeManagerShadowRun(mutate(encodedTerminal!, { terminal_trigger: null })), null);
