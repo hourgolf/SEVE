@@ -1,3 +1,4 @@
+import { buildForensicsExecutionSummary } from "../research/forensicsExecutionSummary";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { buildRemoteSentinelMeta, deriveRemoteMorningPlan, remoteMorningClock, remoteMorningRunId, type RemoteForensicsReport } from "./remoteMorningPublisher";
@@ -8,7 +9,9 @@ const report = (date = "2026-07-20"): RemoteForensicsReport => ({
   generated_at: `${date}T20:30:00Z`,
   payload: {
     generatedAt: `${date}T20:30:00Z`,
-    benchedVsLive: { liveTotal: 482, benchedTotal: 20, sameWeek: true, benched: [] },
+    executionSummary: buildForensicsExecutionSummary({date,observedAt:`${date}T20:30:00Z`,from:`${date}T04:00:00Z`,toExclusive:`${date}T23:59:59Z`,
+      rows:[482,0,0,0].map((pnl,i)=>({id:`p${i}`,account_id:"account",qty:2,realized_pnl:pnl,strategists:{slug:"channel"}}))}),
+    benchedVsLive: { liveTotal: 82, benchedTotal: 20, sameWeek: true, benched: [] },
     giveback: { date, nPeakers: 3, nClosed: 4, peakedUsd: 1_000, keptUsd: 482, givenBackUsd: 518, capturePct: 48, byChannel: [] },
     oneAccountShadow: { today: { date, dayPnl: 450, admitted: 4, rejected: 1 } },
     ratchetShadow: { scored: 4, actualUsd: 482, ratchetUsd: 650, deltaUsd: 168 },
@@ -35,6 +38,10 @@ assert.equal(meta.brief, null);
 assert.equal((meta.remoteSummary as { liveTotal: number; nClosed: number }).liveTotal, 482);
 assert.equal((meta.remoteSummary as { liveTotal: number; nClosed: number }).nClosed, 4);
 assert.equal(meta.interpretiveProvider, "none");
+const legacyReport=report(); delete legacyReport.payload.executionSummary;
+const legacyMeta=buildRemoteSentinelMeta({...ready,report:legacyReport},"2026-07-21T13:00:05Z");
+assert.equal((legacyMeta.remoteSummary as {liveTotal:unknown}).liveTotal,null,"never promote subset or simulated PnL to full-session total");
+assert.match(String(legacyMeta.digest),/total unavailable/);
 const operatorPacket = deriveSentinelOperatorPacket({
   session: "2026-07-20", forDate: "2026-07-21", generatedAt: "2026-07-20T21:30:00.000Z",
   release: { state: "ok", source: "fixture", asOf: "2026-07-20T21:30:00.000Z", detail: "sealed", releaseId: "rc", configurationSha256: "a".repeat(64) },
