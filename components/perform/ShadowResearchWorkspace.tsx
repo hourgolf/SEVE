@@ -238,7 +238,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
         ? shadowResearch.dryPowderBySlug[row.slug]
         : selected ? shadowResearch.dryPowderBySession[selected.session]?.[row.slug] : undefined,
       managerEvidence: surface.managerEvidence.book?.channels[row.slug],
-      retuneEvidence: shadowResearch.boundedRetunes.experiments.find((experiment) => experiment.definition.channel === row.slug)?.evidence,
+      retuneEvidence: shadowResearch.boundedRetuneError ? undefined : shadowResearch.boundedRetunes.experiments.find((experiment) => experiment.definition.channel === row.slug)?.evidence,
     }),
   }));
   const atlasWorking = atlasReads.filter((item) => item.label
@@ -267,7 +267,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   const focusedPassport = surface.channelWorkspace.bySlug[focusSlug];
   const focusedSummary = rows.find((row) => row.slug === focusSlug);
   const focusedManagerEvidence = surface.managerEvidence.book?.channels[focusSlug];
-  const focusedRetuneEvidence = shadowResearch.boundedRetunes.experiments
+  const focusedRetuneEvidence = shadowResearch.boundedRetuneError ? undefined : shadowResearch.boundedRetunes.experiments
     .find((experiment) => experiment.definition.channel === focusSlug)?.evidence;
   const focusedExecuted = shadowResearch.currentExecutedBySlug[focusSlug];
   const focusedComparison = shadowResearch.pairedCurrent.find((item) =>
@@ -339,6 +339,22 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       quality={shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "established" : totals.scored >= 5 ? "building" : "checking"}
       detail="Virtual opportunities are hypothetical and are never combined with account profit and loss."
     />
+    <form className="srw-controls" key={`${shadowResearch.dateRange.from}:${shadowResearch.dateRange.through}`} onSubmit={(event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const values = new FormData(form);
+      const from = String(values.get("from")); const through = String(values.get("through"));
+      if (from > through) { form.querySelector<HTMLInputElement>("input[name=through]")?.setCustomValidity("End date must follow start date"); form.reportValidity(); return; }
+      shadowResearch.setDateRange(from, through);
+    }} aria-label="Research source date range">
+      <label>From <input type="date" name="from" required min="2026-06-01" defaultValue={shadowResearch.dateRange.from} /></label>
+      <label>Through <input type="date" name="through" required min="2026-06-01" defaultValue={shadowResearch.dateRange.through} onChange={event => event.currentTarget.setCustomValidity("")} /></label>
+      <button type="submit">Load range</button>
+      <span>{shadowResearch.state === "ok" || shadowResearch.state === "empty" ? `${shadowResearch.sourceCounts.virtual.toLocaleString()} virtual rows · source count verified` : "Source count awaiting verification"}</span>
+    </form>
+    {shadowResearch.boundedRetuneError ? <div className="srw-empty error" role="status">Experiment comparisons unavailable · {shadowResearch.boundedRetuneError}. Other research evidence remains separate.</div>
+      : shadowResearch.sourceCounts.retuneSignals != null ? <p>{shadowResearch.sourceCounts.retuneSignals.toLocaleString()} experiment signals · source count verified · selected range only</p> : null}
+    <p>Complete row counts do not establish quote-path quality. Missing, stale or sampled quotes can still limit entry and exit comparisons.</p>
     <nav className="srw-view-mode" aria-label="Research presentation">
       <button type="button" className={viewMode === "decisions" ? "on" : ""} aria-pressed={viewMode === "decisions"} onClick={() => setViewMode("decisions")}><b>DECISIONS</b><small>what the evidence suggests</small></button>
       <button type="button" className={viewMode === "data" ? "on" : ""} aria-pressed={viewMode === "data"} onClick={() => setViewMode("data")}><b>DATA</b><small>full virtual ledger</small></button>
@@ -364,7 +380,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     </div>
     {shadowResearch.state === "loading" || shadowResearch.state === "idle" ? <div className="srw-empty">loading bounded research ledger…</div>
       : shadowResearch.state === "error" ? <div className="srw-empty error">research read failed · {shadowResearch.error}</div>
-      : !selected ? <div className="srw-empty">no reconstructed virtual paths since the Day 1 cohort</div>
+      : !selected ? <div className="srw-empty">no reconstructed virtual paths in the selected date range</div>
       : <>
         <section className="srw-atlas-brief" aria-label="Decision Atlas research summary">
           <span><small>DECISION ATLAS</small><b>WHERE SHOULD WE LOOK NEXT?</b></span>

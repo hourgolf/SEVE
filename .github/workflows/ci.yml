@@ -23,6 +23,8 @@ jobs:
         run: npx tsc --noEmit
       - name: typecheck worker
         run: npm run typecheck --prefix worker
+      - name: complete research reads and quote coverage
+        run: npx tsx lib/research/completeResearchRead.selftest.ts && npx tsx lib/research/quotePathCoverage.selftest.ts
       - name: golden (manage state machine)
         run: npm run golden
       - name: market-calendar selftest

@@ -106,7 +106,7 @@ export function MobileRackRow({
   const currentExecuted = pairedCurrent
     ? researchEvidence?.currentExecutedBySlug[pairedCurrent.executedSlug]
     : researchEvidence?.currentExecutedBySlug[slug];
-  const retuneEvidence = researchEvidence?.boundedRetunes.experiments
+  const retuneEvidence = researchEvidence?.boundedRetuneError ? undefined : researchEvidence?.boundedRetunes.experiments
     .find((experiment) => experiment.definition.channel === slug)?.evidence;
 
   const persistPatch = (patch: Partial<StrategistConfig>) => {
