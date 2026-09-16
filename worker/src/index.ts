@@ -1,4 +1,5 @@
 import { captureFixedAdmissionObservation } from "./executionObservation.js";
+import { executeAccountBatches } from "./accountExecution.js";
 import { observedCandidate, finalDecisionEvidence, observedDecisionStage } from "./decisionTrace.js";
 // ============================================================================
 //  SEVE streaming worker — entrypoint (Phase A · SHADOW).
@@ -1469,7 +1470,8 @@ async function cycle(trigger: string): Promise<void> {
         decisions.push(...batch.decisions);
       }
       if (cursor !== finalized.length) throw new Error("RC5 release arbitration mapping mismatch");
-      for (const batch of releaseBatches) await executeDecisionBatch(batch, deskStack);
+      await executeAccountBatches(releaseBatches, batch => batch.group.account.id,
+        batch => executeDecisionBatch(batch, deskStack));
     }
 
     // ---- SHARED diagnostics, once per symbol (account-independent) ----

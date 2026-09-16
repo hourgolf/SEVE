@@ -482,6 +482,17 @@ export async function getPositionById(id: string): Promise<{ realized_pnl: numbe
   return data ? { realized_pnl: Number((data as any).realized_pnl ?? 0), status: String((data as any).status), close_reason: (data as any).close_reason ?? null, closed_at: (data as any).closed_at ?? null } : null;
 }
 
+/** Exact row revalidation inside the exit claim. Unknown state is not sell
+ * authority. The bounded read throws on failure so cycle/sweep logs and retries.
+ * Include closed rows: a completed tranche must invalidate its old parent.
+ */
+export async function readPositionForExit(id: string): Promise<PositionRow | null> {
+  const { data, error } = await sb.from("positions").select("*").eq("id", id)
+    .abortSignal(AbortSignal.timeout(2_000)).maybeSingle();
+  if (error) throw new Error("exit_position:read_unavailable");
+  return data ? mapOpenPositions({ data: [data], error: null })[0] : null;
+}
+
 // Ride-to-close reconstruction — PARITY with scripts/day-report.ts reconstructRide (keep
 // them in sync): hold from entry to the 15:25 flatten, exiting early only on the −50%
 // premium stop. Reads the option_quotes that keep flowing AFTER an early manual close (the

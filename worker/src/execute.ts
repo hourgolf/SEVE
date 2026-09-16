@@ -1,6 +1,7 @@
 import { fixedEntryExecutionDriver, fixedEntryOwnershipPresent, fixedEntryRequested } from "./fixedEntryExecutionDispatch.js";
 import { brokerTrace, quoteObservation, observedDecisionStage } from "./decisionTrace.js";
 import { completedBrokerObservation } from "./executionTiming.js";
+import { legacyExitSnapshotMatches } from "./exitGuard.js";
 // ============================================================================
 //  Phase B execution core — the streaming worker as a REAL order-placer for
 //  channels marked strategists.executor='stream'.
@@ -431,6 +432,11 @@ export async function executeExit(
   qualityPolicy?: ExitQualityPolicy,
 ): Promise<void> {
   if (fixedEntryOwnershipPresent(row)) return fixedEntryExecutionDriver().exit(d, row, ctx);
+  if (!legacyExitSnapshotMatches(row, await store.readPositionForExit(row.id))) {
+    await store.journal("WARN", `${d.slug}: exit ${row.occ_symbol} suppressed — position changed since decision; fresh management pass required`,
+      { kind: "stale-exit-suppressed", position_id: row.id, slug: d.slug, reason: d.reason });
+    return;
+  }
   const occ = row.occ_symbol;
   const alp = ctx.alpacaByOcc.get(occ);
   const heldQty = ctx.remainingByOcc.get(occ) ?? (alp ? Math.max(0, Math.round(alp.qty)) : 0);

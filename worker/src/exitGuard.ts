@@ -7,9 +7,9 @@
 //  Contains:
 //   · makeExitGuard (1b #8) — per-row exit claim set. The fast sweep no longer
 //     shares the full-cycle mutex, so a cycle and a sweep CAN both reach an
-//     executeExit for the same row in one interleaving; this guard makes the
-//     double-exit structurally impossible (belt-and-suspenders on top of
-//     execute.ts's deterministic per-row exit coid, which Alpaca dedups).
+//     executeExit for the same row in one interleaving. The in-flight guard
+//     serializes them; legacyExitSnapshotMatches also invalidates an old parent
+//     snapshot after a completed tranche releases its claim.
 //   · sweepExitAllowed (1b #9) — the degraded-pass predicate: when the orders
 //     snapshot is unavailable, ONLY the mandatory operator/calendar flattens
 //     may place sells (bounded by min(held,row) + the deterministic coid);
@@ -23,6 +23,25 @@
 // ============================================================================
 
 import type { PositionRow } from "./store.js";
+import { isDeepStrictEqual } from "node:util";
+import { fixedEntryOwnershipPresent } from "../../lib/channels/fixedEntryOwnership.js";
+
+/** An in-flight mutex does not retire a completed parent. A caller may already
+ * have prepared its snapshot when another pass banks a tranche and releases the
+ * mutex. Validate the original row under the caller's exit claim, before any
+ * sell; never redirect the old parent decision onto its new runner.
+ */
+export function legacyExitSnapshotMatches(expected: PositionRow, current: PositionRow | null): boolean {
+  if (!current || expected.status !== "open" || current.status !== "open"
+      || fixedEntryOwnershipPresent(current)
+      || !Number.isSafeInteger(current.qty) || current.qty <= 0
+      || !Number.isFinite(current.avg_entry_price) || current.avg_entry_price <= 0) return false;
+  const keys = ["id", "strategist_id", "occ_symbol", "underlying", "opt_type", "qty",
+    "avg_entry_price", "strike", "expiration", "opened_at", "runner_of",
+    "channel_spec_version_id", "release_manifest_id", "configuration_epoch_id"] as const;
+  return keys.every(key => (expected[key] ?? null) === (current[key] ?? null))
+    && isDeepStrictEqual(expected.entry_features ?? null, current.entry_features ?? null);
+}
 
 // ---- 1b #8: per-row exit in-flight claim -----------------------------------
 export interface ExitGuard {
