@@ -1,5 +1,6 @@
 "use client";
 
+import { readForensicsExecutionSummary } from "@/lib/research/forensicsExecutionSummary";
 import { useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
@@ -112,6 +113,7 @@ export function ForensicsPanel({
   if (error) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}><div className="chart-empty">couldn&apos;t load — {error}</div></Shell>;
   if (!report) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}><div className="chart-empty">no report yet — run <code>npm run day-report</code> same-week (with APP_URL + PUSH_SECRET set) to publish</div></Shell>;
 
+  const execution = readForensicsExecutionSummary(report.payload.executionSummary, report.report_date);
   const scToday = report.payload.overrideToday ?? null;
   const showToday = scWin === "today" && !!scToday;
   const sc = showToday ? scToday! : report.payload.overrideScorecard;
@@ -139,6 +141,10 @@ export function ForensicsPanel({
 
   return (
     <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}>
+      <div className="au-fund">
+        <span>All-account closed ledger: <b>{execution ? signedUsd(execution.grossPnlUsd) : "unavailable in this report"}</b></span>
+        {execution && <span>{execution.nClosedTranches} closed tranches · {execution.nUnattributedTranches} without account attribution · before fees · broker reconciliation is separate</span>}
+      </div>
       {/* ── ONE-ACCOUNT — the dream team in a single live-sized cash pool ── */}
       <Inst
         k="oneacct" label="Account capacity" question="Would one paper account block otherwise useful trades?"
@@ -210,7 +216,7 @@ export function ForensicsPanel({
 
       {/* ── GIVE-BACK — is the desk keeping its peaks? ── */}
       <Inst
-        k="giveback" label="Profit protection" question="How much of each trade's best move did the exit retain?"
+        k="giveback" label="Sampled peak comparison" question="How do realized results compare with recorded mid-quote peaks?"
         mid={gb && gb.capturePct != null ? (
           <>
             {trend.length >= 2 && <CaptureSparkline pts={trend} />}
@@ -218,23 +224,24 @@ export function ForensicsPanel({
           </>
         ) : <span className="mut">accruing — first point at the next post-close publish</span>}
         stat={gb && gb.capturePct != null
-          ? <span className={gb.capturePct >= 50 ? "pos" : "neg"}>kept {gb.capturePct}% <span className="mut neg">{signedUsd(-gb.givenBackUsd)}</span></span>
+          ? <span className="mut">realized / sampled peak {gb.capturePct}%</span>
           : <span className="mut">—</span>}
       >
         {gb && gb.capturePct != null && (
           <>
             <div className="au-fund">
-              <span>kept <b className={gb.capturePct >= 50 ? "pos" : "neg"}>{gb.capturePct}%</b> of peak</span>
-              <span>gave back <b className="neg">{signedUsd(-gb.givenBackUsd)}</b></span>
+              <span>Realized / sampled peak <b>{gb.capturePct}%</b></span>
+              <span>Sampled peak minus realized <b>{signedUsd(gb.givenBackUsd)}</b></span>
               <span title={gb.unit === "position_tranche" ? "Exit-path analysis is tranche-specific; this is not a logical-trade count." : "Legacy report: count unit was not persisted."}>{gb.nPeakers}/{gb.nClosed} {gb.unit === "position_tranche" ? "tranches peaked" : "legacy rows peaked"}</span>
             </div>
+            <p className="mut">Only eligible tranches with a positive sampled mid-quote peak are included. The subset kept {signedUsd(gb.keptUsd)}; it is not the session total. Sparse mid quotes can produce ratios above 100%; this is not an executable exit-capture estimate.</p>
             {gb.byChannel.length > 0 && (
               <div className="fx-rows">
                 {gb.byChannel.map((c) => (
                   <div className="fx-row" key={c.key}>
                     <span className="fx-name">{c.key}</span>
-                    <span className="fx-mid">kept {c.capturePct}% · {c.n}t</span>
-                    <span className="au-pnl neg">{signedUsd(-c.givenBackUsd)}</span>
+                    <span className="fx-mid">realized / sampled peak {c.capturePct}% · {c.n}t</span>
+                    <span className="au-pnl">peak minus realized {signedUsd(c.givenBackUsd)}</span>
                   </div>
                 ))}
               </div>
@@ -294,9 +301,9 @@ export function ForensicsPanel({
           if (showBvToday) {
             if (!bvl?.sameWeek) return <span className="mut">same-week only (7d quotes)</span>;
             if (!bvl.benched.length) return <span className="mut">no benched channel signaled</span>;
-            return <span>Σ bench <b className={cls(bvl.benchedTotal)}>{signedUsd(bvl.benchedTotal)}</b> vs live <b className={cls(bvl.liveTotal)}>{signedUsd(bvl.liveTotal)}</b></span>;
+            return <span>Σ bench <b className={cls(bvl.benchedTotal)}>{signedUsd(bvl.benchedTotal)}</b> vs armed subset <b className={cls(bvl.liveTotal)}>{signedUsd(bvl.liveTotal)}</b></span>;
           }
-          return <span>Σ bench <b className={cls(benchedCum!.benchedTotal)}>{signedUsd(benchedCum!.benchedTotal)}</b> vs live <b className={cls(benchedCum!.liveTotal)}>{signedUsd(benchedCum!.liveTotal)}</b> <span className="mut">{benchedCum!.sessions}s</span></span>;
+          return <span>Σ bench <b className={cls(benchedCum!.benchedTotal)}>{signedUsd(benchedCum!.benchedTotal)}</b> vs armed subset <b className={cls(benchedCum!.liveTotal)}>{signedUsd(benchedCum!.liveTotal)}</b> <span className="mut">{benchedCum!.sessions}s</span></span>;
         })()}
         stat={(() => {
           const tot = showBvToday ? (ranAny ? bvl!.benchedTotal : null) : benchedCum!.benchedTotal;
@@ -304,6 +311,7 @@ export function ForensicsPanel({
           return tot < 0 ? <span className="pos">Removing them avoided additional losses</span> : <span className="neg">Their missed opportunity deserves review</span>;
         })()}
       >
+        <p className="mut">The armed subset uses channel status when each report was generated and excludes research-ineligible trades. It is not all-account PnL or proof that the bench could trade concurrently.</p>
         <div className="sb-toggle-row">
           <span className="roster-toggle sc-toggle" title="the day's replay vs the accrued book">
             <button type="button" className={showBvToday ? "on" : ""} onClick={() => setBvWin("today")}>today</button>

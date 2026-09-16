@@ -31,7 +31,7 @@ export async function persistFixedManagerEnrollment(client:Pick<SupabaseClient,"
   assertFixedEntryServiceClient(client);
   const result:{run:ManagerShadowRun;sourceBootId:string}[] = [];
   for (const cohort of cohorts) {
-    const read = () => readCompleteFixedRows<ManagerShadowDbRow & {configuration_epoch_id?:string|null}>(client,
+    const read = () => readCompleteFixedRows<ManagerShadowDbRow & {configuration_epoch_id?:string|null;channel_spec_version_id?:string|null;release_manifest_id?:string|null}>(client,
       "manager_shadow_runs","*",[["position_id",cohort.position.id]]);
     let stored = await read();
     // Each persisted arm retains its own actual admission clock. Missing arms
@@ -56,6 +56,8 @@ export async function persistFixedManagerEnrollment(client:Pick<SupabaseClient,"
       for (const row of rows) {
         const run = decodeManagerShadowRun(row), e = expected.find(e => e.id === row.id)!;
         if (!run || typeof row.source_boot_id !== "string" || !row.source_boot_id
+            || row.channel_spec_version_id !== intent.writeStamp.channel_spec_version_id
+            || row.release_manifest_id !== intent.writeStamp.release_manifest_id
             || row.configuration_epoch_id !== intent.writeStamp.configuration_epoch_id
             || run.accountId !== intent.accountId || run.strategistId !== intent.strategistId
             || run.channelSlug !== intent.slug || run.occSymbol !== intent.occ || run.optionSide !== intent.optionSide
@@ -72,7 +74,8 @@ export async function persistFixedManagerEnrollment(client:Pick<SupabaseClient,"
       const rows = missing.map(run => {
         const row = encodeManagerShadowRun(run,{sourceBootId:bootId});
         if (!row) throw new Error("fixed_manager:invalid_encoded_cohort");
-        return {...row,configuration_epoch_id:intent.writeStamp.configuration_epoch_id};
+        return {...row,channel_spec_version_id:intent.writeStamp.channel_spec_version_id,
+          release_manifest_id:intent.writeStamp.release_manifest_id,configuration_epoch_id:intent.writeStamp.configuration_epoch_id};
       });
       const inserted = await client.from("manager_shadow_runs").upsert(rows,{onConflict:"id",ignoreDuplicates:true});
       if (inserted.error) throw new Error("fixed_manager:enrollment_write_unconfirmed");

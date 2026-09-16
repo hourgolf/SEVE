@@ -1,3 +1,4 @@
+import { readForensicsExecutionSummary, type ForensicsExecutionSummary } from "../research/forensicsExecutionSummary";
 import {
   calendarCoverageKnown,
   isTradingDay,
@@ -28,6 +29,7 @@ export interface RemoteForensicsReport {
   generated_at: string;
   payload: {
     generatedAt?: string;
+    executionSummary?: ForensicsExecutionSummary;
     benchedVsLive?: {
       sameWeek?: boolean;
       benched?: Array<{ slug?: string; ran?: boolean; trades?: number; pnl?: number }>;
@@ -182,13 +184,15 @@ export function buildRemoteSentinelMeta(
   const giveback = report.giveback;
   const shadow = report.oneAccountShadow?.today;
   const ratchet = report.ratchetShadow;
-  const liveTotal = Number(report.benchedVsLive?.liveTotal ?? shadow?.dayPnl ?? 0);
-  const nClosed = Number(giveback?.nClosed ?? 0);
+  const execution = readForensicsExecutionSummary(report.executionSummary, plan.evidenceSession);
+  const liveTotal = execution?.grossPnlUsd ?? null;
+  const nClosed = execution?.nClosedTranches ?? null;
   const facts: string[] = [];
-  if (giveback?.capturePct != null) facts.push(`kept ${Math.round(giveback.capturePct)}% of observed peak gains; ${dollars(Number(giveback.givenBackUsd ?? 0))} given back`);
+  facts.push(execution ? `all-account closed ledger: ${dollars(execution.grossPnlUsd)} before fees across ${execution.nClosedTranches} closed tranches`
+    : "all-account closed ledger total unavailable; roster subsets and simulations are not substitutes");
+  if (giveback?.capturePct != null) facts.push(`positive sampled-mid-peak subset: ${giveback.nPeakers ?? "unknown"}/${giveback.nClosed ?? "unknown"} eligible tranches; realized / sampled peak ${Math.round(giveback.capturePct)}%. Sparse mid quotes can produce ratios above 100%; this is not an executable exit-capture estimate.`);
   if (ratchet?.scored) facts.push(`ratchet shadow ${ratchet.scored} scored: delta ${dollars(Number(ratchet.deltaUsd ?? 0))} vs actual`);
   if (shadow) facts.push(`shared-book shadow admitted ${Number(shadow.admitted ?? 0)}, rejected ${Number(shadow.rejected ?? 0)}`);
-  if (!facts.length) facts.push("durable post-close report is current; no detailed remote scan facts were available");
 
   const priorMeta = priorSentinel?.meta ?? null;
   const parsedPacket = priorMeta?.session === plan.evidenceSession
@@ -234,7 +238,7 @@ export function buildRemoteSentinelMeta(
     lens: null,
     operatorPacket: priorPacket,
     interpretiveProvider: "none",
-    remoteSummary: { liveTotal, nClosed, facts },
+    remoteSummary: { liveTotal, nClosed, source: execution ? "positions_ledger" : "unavailable", feesIncluded: false, facts },
     inputs: {
       forensicsReportDate: plan.report.report_date,
       forensicsGeneratedAt: plan.report.generated_at,

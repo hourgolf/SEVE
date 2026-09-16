@@ -20,6 +20,8 @@
 //  (7-day retention — run it same-week). Exit reasons parse the `events` journal.
 // ============================================================================
 
+import { latestImmutableExecutionAccountRoutes, type ExecutionAccountObservation } from "../lib/ops/brokerReconciliation";
+import { buildForensicsExecutionSummary } from "../lib/research/forensicsExecutionSummary";
 import { upcomingEvents, tableHorizonDays } from "../engine/market-events";
 import {
   upsertLedger, loadLedger, scorecardLines, scorecardData, type LedgerEntry,
@@ -222,16 +224,33 @@ async function main() {
   // ---- trades -------------------------------------------------------------------
   // Paginated (audit M5): an UNPAGINATED read silently drops late-day closes past 1000 rows —
   // exactly where the exit reasons live (the same failure mode the events read below had).
+  const sessionFrom = new Date(etWallToUtcMs(DATE, 0, 0)).toISOString();
+  const nextDate = new Date(Date.parse(`${DATE}T12:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const sessionTo = new Date(etWallToUtcMs(nextDate, 0, 0)).toISOString();
   const posRaw: Array<Record<string, unknown>> = [];
+  let positionsComplete = false;
   for (let from = 0; from < 50_000; from += 1000) {
-    const { data } = await sb.from("positions")
+    const { data, error } = await sb.from("positions")
       .select("id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason,runner_of,strategists(slug,name)")
-      .eq("status", "closed").gte("closed_at", `${DATE}T13:00:00Z`).lte("closed_at", `${DATE}T22:00:00Z`)
+      .eq("status", "closed").gte("closed_at", sessionFrom).lt("closed_at", sessionTo)
       .order("opened_at").order("id").range(from, from + 999); // id tiebreak (audit [18]): opened_at is not a total order
-    const batch = (data ?? []) as typeof posRaw;
+    if (error || !data) throw new Error("Closed-position report read failed");
+    const batch = data as typeof posRaw;
     posRaw.push(...batch);
-    if (batch.length < 1000) break;
+    if (batch.length < 1000) { positionsComplete = true; break; }
   }
+  if (!positionsComplete) throw new Error("Closed-position report inventory exceeded bound");
+  const routeRows: ExecutionAccountObservation[] = [];
+  for (let from = 0; from < posRaw.length; from += 200) {
+    const ids = posRaw.slice(from, from + 200).map(p => String(p.id));
+    routeRows.push(...await pageAll<ExecutionAccountObservation>(() => sb.from("execution_observations")
+      .select("id,position_id,account_id,event_at").in("position_id", ids)
+      .eq("reason", "position_account_route_bound").order("id"), { ...REPORT_PAGE_OPTS, max: 50_000 }));
+  }
+  const accountRoutes = latestImmutableExecutionAccountRoutes(routeRows);
+  const executionSummary = buildForensicsExecutionSummary({ date: DATE, observedAt: new Date().toISOString(),
+    from: sessionFrom, toExclusive: sessionTo, rows: posRaw.map((p: any) => ({ ...p,
+      account_id: accountRoutes.get(p.id)?.accountId ?? null })) });
   // Paginate past PostgREST's 1000-row cap — a busy session logs ~2k events, and an
   // UNORDERED capped fetch silently drops the tail (which is where the late-day exit
   // reasons AND the MGMT close shadows live → "exit —" / "managed-exit none" mirages).
@@ -251,14 +270,12 @@ async function main() {
   const { data: stratRaw } = await sb.from("strategists").select("id,slug,name,executor,status,account_id,strategist_config(muted,daily_stop_usd)");
   const execBySlug = new Map<string, { executor: string; armed: boolean; muted: boolean }>();
   const nameBySlug = new Map<string, string>();
-  const accountByStrategist = new Map<string, string | null>();
   const accountNameById = new Map(((acctRows ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]));
   const dailyStopBySlug = new Map<string, number>(); // for the foul-out replay (live decide.ts:304 gate)
   for (const s of (stratRaw ?? []) as any[]) {
     const cfg = Array.isArray(s.strategist_config) ? s.strategist_config[0] : s.strategist_config;
     execBySlug.set(s.slug, { executor: String(s.executor ?? "cron"), armed: s.status === "armed", muted: !!cfg?.muted });
     nameBySlug.set(s.slug, s.name ?? s.slug);
-    accountByStrategist.set(String(s.id), s.account_id ? String(s.account_id) : null);
     dailyStopBySlug.set(s.slug, Number(cfg?.daily_stop_usd ?? 0));
   }
   const execOf = (slug: string) => execBySlug.get(slug)?.executor ?? "cron";
@@ -286,7 +303,7 @@ async function main() {
     allTrades.push({
       id: p.id, slug, name, cp: p.opt_type, strike: Number(p.strike), qty, occ: p.occ_symbol,
       strategistId: p.strategist_id,
-      accountId: accountByStrategist.get(p.strategist_id) ?? null,
+      accountId: accountRoutes.get(p.id)?.accountId ?? null,
       runnerOf: p.runner_of ?? null,
       entry, exit, pnl, openedAt: p.opened_at, closedAt: p.closed_at,
       peak, mfePct, gavePct,
@@ -641,10 +658,10 @@ async function main() {
   try {
     bvl = await benchedVsLive(DATE);
     if (bvl.sameWeek) {
-      console.log(`\nbenched would-be vs live actual (cut channels — did they earn the bench?)`);
+      console.log(`\nbenched simulation vs currently armed research subset`);
       if (!bvl.benched.length) console.log(`  no benched channel signaled today${bvl.skipped.length ? ` (${bvl.skipped.length} silent)` : ""}`);
       for (const b of bvl.benched) console.log(`  ${b.name.padEnd(24)} ${b.ran ? `${String(b.trades).padStart(2)}t  ${sgn(b.pnl).padStart(7)}  [${b.useSpec ? "spec" : "builtin"}/${b.underlying}]` : `— ${b.note}`}`);
-      if (bvl.benched.some((b) => b.ran)) console.log(`  ── Σ benched would-be ${sgn(bvl.benchedTotal)} vs Σ live actual ${sgn(bvl.liveTotal)} → arming the (comparable) bench today would have ${bvl.benchedTotal >= 0 ? "ADDED" : "COST"} $${Math.abs(bvl.benchedTotal).toLocaleString()} (one day = noise; cull rests on the 5-window evidence)`);
+      if (bvl.benched.some((b) => b.ran)) console.log(`  ── Σ benched would-be ${sgn(bvl.benchedTotal)} vs Σ currently armed subset ${sgn(bvl.liveTotal)} → arming the (comparable) bench today would have ${bvl.benchedTotal >= 0 ? "ADDED" : "COST"} $${Math.abs(bvl.benchedTotal).toLocaleString()} (one day = noise; cull rests on the 5-window evidence)`);
     } else {
       console.log(`\nbenched would-be vs live: skipped (${DATE} outside the 7-day option_quotes window — run same-week)`);
     }
@@ -725,6 +742,8 @@ async function main() {
   const giveback = {
     date: DATE,
     unit: "position_tranche" as const,
+    peakBasis: "sampled_mid_during_position" as const,
+    scope: "research_eligible_positive_sampled_peak" as const,
     nPeakers: gbPeakers.length,
     nClosed: trades.length,
     peakedUsd: Math.round(gbPeaked),
@@ -735,17 +754,18 @@ async function main() {
       .map((e) => ({ key: e.name, capturePct: e.peaked > 0 ? Math.round((e.kept / e.peaked) * 100) : 0, givenBackUsd: Math.round(e.peaked - e.kept), n: e.n }))
       .sort((a, b) => b.givenBackUsd - a.givenBackUsd),
   };
-  console.log(`\nGIVE-BACK (peak→close, tranche path) — ${giveback.nPeakers}/${giveback.nClosed} position tranches peaked +; kept ${giveback.capturePct ?? "—"}% of peak · $${giveback.givenBackUsd} given back (peaked ${sgn(giveback.peakedUsd)} → kept ${sgn(giveback.keptUsd)})`);
+  console.log(`\nSAMPLED MID-PEAK SUBSET (eligible tranche paths) — ${giveback.nPeakers}/${giveback.nClosed} position tranches peaked +; kept ${giveback.capturePct ?? "—"}% of peak · $${giveback.givenBackUsd} given back (peaked ${sgn(giveback.peakedUsd)} → kept ${sgn(giveback.keptUsd)})`);
 
   // ---- publish to the §03 dashboard panel (override scorecard + benched-vs-live) ----------
   const [ledgerNow, fouloutNow] = await Promise.all([loadLedger(), loadFoulout()]);
   const payload = {
     generatedAt: new Date().toISOString(),
+    executionSummary,
     overrideScorecard: scorecardData(ledgerNow),
     // TODAY's slice of the same ledger (panel toggle: today ⇄ cumulative)
     overrideToday: scorecardData(Object.fromEntries(Object.entries(ledgerNow).filter(([, e]) => e.date === DATE))),
     overrideFouloutScorecard: fouloutScorecardData(fouloutNow), // capital-path re-score (additive; panel may ignore)
-    benchedVsLive: bvl ? { sameWeek: bvl.sameWeek, benched: bvl.benched, skipped: bvl.skipped, benchedTotal: bvl.benchedTotal, liveTotal: bvl.liveTotal } : null,
+    benchedVsLive: bvl ? { liveScope: "research_eligible_currently_armed" as const, sameWeek: bvl.sameWeek, benched: bvl.benched, skipped: bvl.skipped, benchedTotal: bvl.benchedTotal, liveTotal: bvl.liveTotal } : null,
     giveback,
     // full deterministic replay each night — the banked curve self-heals on re-runs
     oneAccountShadow: oas ? { params: oas.params, navEnd: oas.navEnd, totalPnl: oas.totalPnl, actualPnl: oas.actualPnl,

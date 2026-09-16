@@ -141,3 +141,5 @@ jobs:
         run: npm run remote-morning-publisher-selftest && npm run morning-publisher-receipt-selftest && npm run morning-publisher-cli-selftest
       - name: Session lifecycle evidence
         run: npm run session-lifecycle-evidence-selftest
+      - name: Forensics session totals and scope
+        run: npx tsx lib/research/forensicsExecutionSummary.selftest.ts

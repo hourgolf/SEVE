@@ -1,5 +1,6 @@
 "use client";
 
+import type { ForensicsExecutionSummary } from "@/lib/research/forensicsExecutionSummary";
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useRefreshTick } from "./useRefreshTick";
@@ -71,6 +72,7 @@ export interface RatchetShadowPayload {
   slotAware?: SlotAwareBankUI[] | null;  // ground-truth reads per channel (A4 + momo); absent on catch-up days
 }
 export interface ForensicsPayload {
+  executionSummary?: ForensicsExecutionSummary;
   generatedAt: string;
   overrideScorecard: OverrideScorecard;
   /** TODAY's slice of the same ledger (panel toggle; absent on pre-07-03 payloads) */

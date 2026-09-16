@@ -16,6 +16,8 @@ async function main() {
   await coordinateFixedCommand(h.commandPorts,h.intent,h.buy);await materializeFixedEntryCoverage(h.coverage,h.intent);
   const cohorts = buildFixedEntryReporting(h.intent,await h.coverage.snapshot(h.intent)).cohorts;
   assert.equal(cohorts[0].censorCode,null);
+  const stamp = { channel_spec_version_id:h.intent.writeStamp.channel_spec_version_id,
+    release_manifest_id:h.intent.writeStamp.release_manifest_id, configuration_epoch_id:h.intent.writeStamp.configuration_epoch_id };
   const boot = "00000000-0000-4000-8000-000000000004";
   const db = new Map<string,ManagerShadowDbRow & {configuration_epoch_id:string}>();
   let loseResponse = true,failRead = false,updates = 0;
@@ -25,7 +27,11 @@ async function main() {
     if (method === "POST") {
       assert.ok(new Headers(init?.headers).get("prefer")?.includes("resolution=ignore-duplicates"));
       const rows = JSON.parse(String(init?.body)) as (ManagerShadowDbRow & {configuration_epoch_id:string})[];
-      for (const row of rows) if (!db.has(row.id)) db.set(row.id,structuredClone(row));
+      // Production inheritance rejects a partially supplied immutable stamp.
+      for (const row of rows) {
+        for (const [key,value] of Object.entries(stamp)) assert.equal((row as unknown as Record<string,unknown>)[key],value);
+        if (!db.has(row.id)) db.set(row.id,structuredClone(row));
+      }
       if (loseResponse) {loseResponse=false;return new Response("{}",{status:503});}
       return new Response(null,{status:201});
     }
@@ -52,7 +58,7 @@ async function main() {
     observedAtMs:h.coverage.now()+1000,snapshotFetchedAtMs:h.coverage.now()+1000,isBell:true}).run;
   assert.equal(terminal.status,"terminal");
   db.set(terminal.id,{...encodeManagerShadowRun(terminal,{sourceBootId:boot,terminalBootId:boot})!,
-    configuration_epoch_id:h.intent.writeStamp.configuration_epoch_id});
+    ...stamp});
   const frozenTerminal = structuredClone(db.get(terminal.id));
   const censored = cohorts.map(c => ({...c,censorCode:"fixed_partial_or_multiple_coverage_generations"}));
   const later = await persist(censored,h.coverage.now()+5_000);
@@ -66,7 +72,7 @@ async function main() {
   const saved = new Map([...db].map(([id,row]) => [id,structuredClone(row)]));
   db.clear();
   db.set(first[0].run.id,{...encodeManagerShadowRun(first[0].run,{sourceBootId:boot})!,
-    configuration_epoch_id:h.intent.writeStamp.configuration_epoch_id});
+    ...stamp});
   const delayedNow = h.coverage.now()+60_000;
   const recovered = await persist(cohorts,delayedNow);
   assert.equal(recovered.find(r => r.run.id===first[0].run.id)!.run.admittedAt,first[0].run.admittedAt);
@@ -78,6 +84,9 @@ async function main() {
   db.clear();for(const [id,row] of saved) db.set(id,row);
   const row = [...db.values()][0],qty = row.original_qty;row.original_qty=1;
   await assert.rejects(persist(),/immutable_enrollment_conflict/);row.original_qty=qty;
+  const stamped = row as typeof row & {release_manifest_id:string};
+  const release = stamped.release_manifest_id; stamped.release_manifest_id="wrong-release";
+  await assert.rejects(persist(),/immutable_enrollment_conflict/); stamped.release_manifest_id=release;
   failRead=true;await assert.rejects(persist(),/inventory_unavailable/);
   console.log("fixedEntryManagerEnrollment: PASS · exact original cohort/account, durable readback, response loss/restart, late censor, active-only exclusion, preserved terminal economics and immutable conflict");
 }
