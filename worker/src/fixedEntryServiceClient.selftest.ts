@@ -26,12 +26,16 @@ async function main(){
   const {loadConfig,loadReceiptBoundControlPlane,realizedTodayByChannel}=await import("./store.js");
   const {makeFixedEntryLiveAuthority}=await import("./fixedEntryLiveAuthority.js");
   const {fixedEntryIntentFixture}=await import("./fixedEntryLedger.fixtures.js");
+  const intent=fixedEntryIntentFixture();
+  let originalAccountPresent=false;
   const tables:string[]=[];
   const routed=createFixedEntryServiceClient("https://fixture.supabase.co",token,async(input,init)=>{
     assert.ok(init?.signal instanceof AbortSignal,"all original authority store reads use the bounded client");
     const table=new URL(String(input)).pathname.split("/").at(-1)!;tables.push(table);
-    const data=table==="fund_state"?{id:1,mode:"paper",is_halted:false,total_capital_usd:100_000}:[];
-    return new Response(JSON.stringify(data),{headers:{"content-type":"application/json","content-range":"0-0/0"}});
+    const data=table==="fund_state"?{id:1,mode:"paper",is_halted:false,total_capital_usd:100_000}
+      :table==="accounts"&&originalAccountPresent?[{id:intent.accountId,cred_ref:"fixture"}]:[];
+    return new Response(JSON.stringify(data),{headers:{"content-type":"application/json",
+      "content-range":`0-0/${Array.isArray(data)?data.length:1}`}});
   });
   const globalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw new Error("unbounded store fallback forbidden");};
   try{
@@ -40,7 +44,9 @@ async function main(){
     assert.equal(await realizedTodayByChannel("fixture","2026-09-08",routed),0);
     const authority=makeFixedEntryLiveAuthority(routed,{now:Date.now,liveMode:()=>true,infrastructureReady:()=>true,
       workerCompatibilityVersion:"fixture",apiForAccount:()=>null,bars:()=>[],chain:()=>null});
-    assert.equal((await authority.exclusiveContract(fixedEntryIntentFixture())).allowed,true);
+    assert.equal((await authority.exclusiveContract(intent)).allowed,false,"missing original account denies exclusivity");
+    originalAccountPresent=true;
+    assert.equal((await authority.exclusiveContract(intent)).allowed,true);
     assert.ok(["fund_state","strategists","accounts","release_manifests","positions"].every(table=>tables.includes(table)));
   }finally{globalThis.fetch=globalFetch;}
   console.log("fixedEntryServiceClient: PASS · real SDK receives deadline, underlying request aborted, caller and Request cancellation retained without detached races");
