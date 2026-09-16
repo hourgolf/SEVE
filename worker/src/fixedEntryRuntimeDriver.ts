@@ -26,6 +26,12 @@ import { buildFixedEntryExecutionPlan, type FixedEntryExecutionPlan } from "./fi
 import type { FixedCommandClaim } from "./fixedEntryCommandCoordinator.js";
 import { observedOpportunityId } from "./planShadowModel.js";
 import { buildFixedAdmissionObservation, type ExecutionObservationDraft } from "./executionObservationModel.js";
+/** Only bounded internal error codes may enter the journal; never raw server errors. */
+export function fixedReportingFailure(error: unknown): { state: string; reasons: string[] } {
+  const code = error instanceof Error && /^fixed_(reporting|manager|store):[a-z_]+$/.test(error.message)
+    ? error.message : "durable-reporting-replay-required";
+  return { state: code === "fixed_reporting:manager_cohort_busy" ? "reporting-deferred" : "reporting-unconfirmed", reasons: [code] };
+}
 type Source = "cycle" | "sweep";
 type Client = Pick<SupabaseClient, "from">;
 export interface FixedRuntimeEntryAuthority {
@@ -70,6 +76,7 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
   // not this map, own orders and booking across processes and restarts.
   const running = new Map<string, Promise<FixedLifecycleResult>>();
   const reporting = new Set<string>();
+  const reportingConfirmed = new Set<string>(); // telemetry only; never suppresses a replay
   const report = async (intentId: string | null, state: string, reasons: readonly string[]) => {
     try { await bindings.status(intentId, state, reasons); return true; } catch { return false; }
   };
@@ -80,7 +87,10 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
     // Reporting I/O must never hold the next native-management pass hostage.
     // No permanent process-local success cache: settled recovery retries too.
     void Promise.resolve().then(() => bindings.onReporting(structuredClone(intent)))
-      .catch(() => report(intent.id, "reporting-unconfirmed", ["durable-reporting-replay-required"]))
+      .then(async () => {
+        if (!reportingConfirmed.has(intent.id) && await report(intent.id, "reporting-confirmed", [])) reportingConfirmed.add(intent.id);
+      })
+      .catch(error => { const failure = fixedReportingFailure(error); return report(intent.id, failure.state, failure.reasons); })
       .finally(() => reporting.delete(intent.id));
   };
   const seedOf = (intent: FixedEntryIntent): FixedIntentSeed => {

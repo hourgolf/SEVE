@@ -10,7 +10,10 @@ import { fixedStartupRecoveryNeeded } from "./fixedEntryStartupRecovery.js";
 async function main(stopDuringFinalRead=false) {
   Object.assign(process.env, { ALPACA_KEY: "fixture", ALPACA_SECRET: "fixture", SUPABASE_URL: "https://fixture.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "fixture" });
-  const { makeFixedEntryRuntimeDriver } = await import("./fixedEntryRuntimeDriver.js");
+  const { makeFixedEntryRuntimeDriver, fixedReportingFailure } = await import("./fixedEntryRuntimeDriver.js");
+  assert.deepEqual(fixedReportingFailure(new Error("fixed_reporting:manager_cohort_busy")), {state:"reporting-deferred",reasons:["fixed_reporting:manager_cohort_busy"]});
+  assert.deepEqual(fixedReportingFailure(new Error("fixed_reporting:write_unconfirmed")), {state:"reporting-unconfirmed",reasons:["fixed_reporting:write_unconfirmed"]});
+  assert.deepEqual(fixedReportingFailure(new Error("untrusted response with secret")), {state:"reporting-unconfirmed",reasons:["durable-reporting-replay-required"]});
   const { requestFixedManualClose, readFixedManualCloseStatus } = await import("../../lib/positions/fixedManualCloseServer.js");
   const h = fixedCoverageHarness(); await coordinateFixedCommand(h.commandPorts, h.intent, h.buy);
   let now = h.coverage.now(), held = 2, bid = 1, posts = 0, dbUnavailable = false, statusFails = false;
@@ -84,6 +87,7 @@ async function main(stopDuringFinalRead=false) {
   dbUnavailable=true;assert.equal(await fixedStartupRecoveryNeeded(client),true,"unknown discovery cannot prove an empty history");
   dbUnavailable=false;for(const [id,row] of originalHistory)h.db.set(id,row);
   let reportingAttempts = 0, reportingFails = true;
+  const reportingStates: string[] = [];
   const bindings: FixedRuntimeBindings = {
     now: () => now,
     submissionEnabled:()=>!stopped,
@@ -100,7 +104,7 @@ async function main(stopDuringFinalRead=false) {
     executionSettings: () => ({ spreadCapture: false, ladder: h.intent.executionPlan.ladder }),
     onCommand: async () => {}, onCoverage: async () => {},
     onReporting: async () => { reportingAttempts++; if (reportingFails) throw new Error("fixture reporting unavailable"); },
-    status: async () => { if (statusFails) throw new Error("fixture status failure"); },
+    status: async (_id, state) => { if (statusFails) throw new Error("fixture status failure"); reportingStates.push(state); },
   };
   const realNow = Date.now;
   Date.now = () => now; // transport observation clock, never used with a real network
@@ -149,6 +153,7 @@ async function main(stopDuringFinalRead=false) {
     assert.deepEqual(await restarted.recoverAll("sweep"), { complete: true, unresolved: [] }); assert.equal(posts, 2);
     await new Promise(resolve => setImmediate(resolve));
     assert.ok(reportingAttempts > beforeReplay, "a settled intent retries failed reporting independently of order recovery");
+    assert.ok(reportingStates.includes("reporting-confirmed"), "successful durable replay produces explicit confirmation");
     const verifiedClose = await readFixedManualCloseStatus(client, frozen.id);
     assert.equal(verifiedClose.pending, false); assert.equal(verifiedClose.canTag, true); assert.equal(verifiedClose.realized, -400);
     assert.ok(verifiedClose.settlementId);
