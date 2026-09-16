@@ -109,7 +109,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const currentExecuted = pairedCurrent
     ? researchEvidence?.currentExecutedBySlug[pairedCurrent.executedSlug]
     : researchEvidence?.currentExecutedBySlug[slug];
-  const retuneEvidence = researchEvidence?.boundedRetunes.experiments
+  const retuneEvidence = researchEvidence?.boundedRetuneError ? undefined : researchEvidence?.boundedRetunes.experiments
     .find((experiment) => experiment.definition.channel === slug)?.evidence;
 
   const stageCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : dispatch({ type: "SET_CONFIG", slug, patch });

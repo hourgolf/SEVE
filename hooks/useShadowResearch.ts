@@ -31,12 +31,10 @@ import {
   PRIORITY_A_BOUNDED_RETUNES,
   PRIORITY_A_RETUNE_COHORT_START,
 } from "@/lib/research/boundedRetuneRegistry";
+import { completeResearchRead, researchDateBounds } from "@/lib/research/completeResearchRead";
 import type { AtlasOpportunity } from "@/lib/research/decisionAtlas";
 
-const COHORT_START = "2026-07-20";
-const COHORT_START_ISO = "2026-07-20T04:00:00.000Z";
-const PAGE_SIZE = 1_000;
-const MAX_ROWS = 10_000;
+const COHORT_START = "2026-06-01";
 const MAX_EXECUTED_ROWS = 2_000;
 const ROUTE_BATCH_SIZE = 50;
 const ROUTE_PAGE_SIZE = 1_000;
@@ -55,13 +53,17 @@ export interface ShadowResearch {
   currentExecutedError: string;
   currentExecutedTruncated: boolean;
   boundedRetunes: BoundedRetuneBook;
+  boundedRetuneError: string;
+  sourceCounts: { virtual: number; retuneSignals: number | null };
+  dateRange: { from: string; through: string };
+  setDateRange: (from: string, through: string) => void;
   virtualEvidence: EvidenceEnvelope;
   currentExecutedEvidence: EvidenceEnvelope;
-  cohortStart: typeof COHORT_START;
+  cohortStart: string;
   truncated: boolean;
   error: string;
   asOf: string | null;
-  basis: "native virtual paths since Day 1";
+  basis: "native virtual paths in selected date range";
 }
 const EMPTY: ShadowResearch = {
   state: "idle",
@@ -75,6 +77,10 @@ const EMPTY: ShadowResearch = {
   currentExecutedState: "empty",
   currentExecutedError: "",
   currentExecutedTruncated: false,
+  boundedRetuneError: "",
+  sourceCounts: { virtual: 0, retuneSignals: null },
+  dateRange: { from: COHORT_START, through: "" },
+  setDateRange: () => {},
   boundedRetunes: buildBoundedRetuneBook({
     generatedAt: "",
     throughSession: "",
@@ -92,7 +98,7 @@ const EMPTY: ShadowResearch = {
   truncated: false,
   error: "",
   asOf: null,
-  basis: "native virtual paths since Day 1",
+  basis: "native virtual paths in selected date range",
 };
 
 const message = (error: unknown): string =>
@@ -101,37 +107,44 @@ const message = (error: unknown): string =>
     : String(error ?? "read rejected");
 
 /**
- * Page-owned and caller-gated. Reads start at the prospective Day 1 cohort, use
- * stable bounded pagination, and surface truncation instead of silently
- * presenting a partial cumulative result as complete. The workstation keeps
- * this bounded ledger warm so selected-channel diagnostics never depend on the
- * operator visiting Research first.
+ * Page-owned and caller-gated. Fixed date bounds, UUID keysets and source-count
+ * reconciliation prevent silently truncated datasets. Experiment read failures
+ * do not invalidate the independent virtual and executed datasets.
  */
 export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: readonly string[]): ShadowResearch {
   const [state, setState] = useState<ShadowResearch>(EMPTY);
+  const [dateRange, setRange] = useState(() => ({ from: COHORT_START, through: shadowSessionDate(new Date().toISOString()) }));
   const configuredKey = [...configuredPaperAccountIds].sort().join(",");
 
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
+    let reading = false;
     const poll = async () => {
+      if (reading) return;
+      reading = true;
       setState((previous) => ({ ...previous, state: previous.asOf ? previous.state : "loading", error: "" }));
       try {
-        const rawRows: Record<string, unknown>[] = [];
-        let total = 0;
-        for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
-          const result = await getSupabase().from("virtual_trades")
-            .select("signal_id,slug,blocked,exit_reason,pnl_per_contract,signal_at,exit_at,occ,entry_px,mfe_pct,giveback_pct,channel_spec_version_id,release_manifest_id,configuration_epoch_id,native_manager_policy_version,research_publisher_version", { count: "exact" })
-            .gte("signal_at", COHORT_START_ISO)
-            .order("signal_at", { ascending: true })
-            .order("signal_id", { ascending: true })
-            .range(offset, Math.min(offset + PAGE_SIZE - 1, MAX_ROWS - 1));
-          if (result.error) throw result.error;
-          const page = (result.data ?? []) as Record<string, unknown>[];
-          rawRows.push(...page);
-          total = result.count ?? rawRows.length;
-          if (page.length < PAGE_SIZE || rawRows.length >= total) break;
-        }
+        const bounds = researchDateBounds(dateRange.from, dateRange.through);
+        // Freeze the upper bound so new signals do not move this read's cohort.
+        const until = bounds.until < new Date().toISOString() ? bounds.until : new Date().toISOString();
+        const virtualScope = () => getSupabase().from("virtual_trades");
+        const rawRows = await completeResearchRead<Record<string, unknown>>({
+          key: "signal_id", alive: () => alive,
+          count: async () => {
+            const r = await virtualScope().select("signal_id", { count: "exact", head: true }).gte("signal_at", bounds.from).lt("signal_at", until);
+            if (r.error) throw r.error;
+            return r.count;
+          },
+          page: async (after, size) => {
+            let q = virtualScope().select("signal_id,slug,blocked,exit_reason,pnl_per_contract,signal_at,exit_at,occ,entry_px,mfe_pct,giveback_pct,channel_spec_version_id,release_manifest_id,configuration_epoch_id,native_manager_policy_version,research_publisher_version")
+              .gte("signal_at", bounds.from).lt("signal_at", until).order("signal_id").limit(size);
+            if (after) q = q.gt("signal_id", after);
+            const r = await q;
+            if (r.error) throw r.error;
+            return (r.data ?? []) as Record<string, unknown>[];
+          },
+        });
         const rows = rawRows.map((row) => ({
           signalId: String(row.signal_id ?? ""),
           slug: String(row.slug ?? ""),
@@ -156,75 +169,78 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
         const dryPowderBySlug = deriveChannelDryPowderCurves(rows);
         const dryPowderBySession = deriveSessionDryPowderCurves(rows);
         const virtualBySignal = new Map(rows.map((row) => [row.signalId ?? "", row]));
-        const retuneSignals: Array<{
-          id: string;
-          strategist_id: string;
-          created_at: string;
-          rationale: Record<string, unknown> | null;
-        }> = [];
-        const retuneStrategistIds = PRIORITY_A_BOUNDED_RETUNES.map((row) => row.strategistId);
-        for (let offset = 0; offset < MAX_ROWS; offset += PAGE_SIZE) {
-          const signalRead = await getSupabase().from("signals")
-            .select("id,strategist_id,created_at,rationale")
-            .in("strategist_id", retuneStrategistIds)
-            .gte("created_at", `${PRIORITY_A_RETUNE_COHORT_START}T04:00:00.000Z`)
-            .order("created_at", { ascending: true })
-            .order("id", { ascending: true })
-            .range(offset, offset + PAGE_SIZE - 1);
-          if (signalRead.error) throw signalRead.error;
-          const page = (signalRead.data ?? []) as typeof retuneSignals;
-          retuneSignals.push(...page);
-          if (page.length < PAGE_SIZE) break;
-          if (offset + PAGE_SIZE >= MAX_ROWS) throw new Error("bounded-retune signal read reached its safety cap");
-        }
-        const retuneDefinitionByStrategist = new Map(PRIORITY_A_BOUNDED_RETUNES
-          .map((definition) => [definition.strategistId, definition]));
-        const retuneOpportunities = retuneSignals.flatMap((signal): AtlasOpportunity[] => {
-          const definition = retuneDefinitionByStrategist.get(signal.strategist_id);
-          if (!definition) return [];
-          const virtual = virtualBySignal.get(signal.id);
-          const entryPrice = virtual?.entryPrice ?? null;
-          const result = virtual?.pnlPerContract ?? null;
-          const rationale = signal.rationale && typeof signal.rationale === "object" ? signal.rationale : {};
-          const configurationEpochId = typeof rationale.configuration_epoch_id === "string"
-            ? rationale.configuration_epoch_id : null;
-          return [{
-            logicalOpportunityId: `signal:${signal.id}`,
-            id: `prospective_virtual:${signal.id}`,
-            channel: definition.channel,
-            session: shadowSessionDate(signal.created_at),
-            signalAt: signal.created_at,
-            exitAt: virtual?.exitAt ?? null,
-            configurationEra: configurationEpochId,
-            portfolioConfigurationEra: configurationEpochId,
-            managerVersion: null,
-            evidenceLayer: "prospective_virtual",
-            accountId: null,
-            underlying: "UNKNOWN",
-            occSymbol: virtual?.occ ?? null,
-            direction: null,
-            contractSelected: virtual?.occ ? true : null,
-            quoteEligible: null,
-            admissionAllowed: null,
-            filled: false,
-            blockedReason: virtual?.blocked ?? null,
-            quantity: null,
-            entryPrice,
-            resultPerContractUsd: result,
-            returnPct: result != null && entryPrice != null && entryPrice > 0 ? result / entryPrice : null,
-            mfePct: virtual?.mfePct ?? null,
-            maePct: null,
-            captureRatio: null,
-            stopExposurePerContractUsd: null,
-            boundedRetuneStamp: parseBoundedRetuneSignalStamp(rationale.bounded_retune_experiment),
-            sourceRefs: [`signals:${signal.id}`, ...(virtual ? [`virtual_trades:${signal.id}`] : [])],
-          }];
-        });
-        const boundedRetunes = buildBoundedRetuneBook({
-          generatedAt: new Date().toISOString(),
-          throughSession: cumulative?.throughSession ?? PRIORITY_A_RETUNE_COHORT_START,
-          opportunities: retuneOpportunities,
-        });
+        let boundedRetuneError = "";
+        let retuneCount: number | null = null;
+        let boundedRetunes = buildBoundedRetuneBook({ generatedAt: new Date().toISOString(), throughSession: dateRange.through, opportunities: [] });
+        try {
+          const retuneStrategistIds = PRIORITY_A_BOUNDED_RETUNES.map((row) => row.strategistId);
+          const retuneFrom = bounds.from > `${PRIORITY_A_RETUNE_COHORT_START}T04:00:00.000Z` ? bounds.from : `${PRIORITY_A_RETUNE_COHORT_START}T04:00:00.000Z`;
+          const retuneSignals = await completeResearchRead<Record<string, unknown>>({
+            key: "id", alive: () => alive,
+            count: async () => {
+              const r = await getSupabase().from("signals").select("id", { count: "exact", head: true })
+                .in("strategist_id", retuneStrategistIds).gte("created_at", retuneFrom).lt("created_at", until);
+              if (r.error) throw r.error;
+              return r.count;
+            },
+            page: async (after, size) => {
+              let q = getSupabase().from("signals")
+                .select("id,strategist_id,created_at,rationale_epoch:rationale->>configuration_epoch_id,experiment:rationale->bounded_retune_experiment")
+                .in("strategist_id", retuneStrategistIds).gte("created_at", retuneFrom).lt("created_at", until).order("id").limit(size);
+              if (after) q = q.gt("id", after);
+              const r = await q;
+              if (r.error) throw r.error;
+              return (r.data ?? []) as Record<string, unknown>[];
+            },
+          });
+          retuneCount = retuneSignals.length;
+          const retuneDefinitionByStrategist = new Map(PRIORITY_A_BOUNDED_RETUNES
+            .map((definition) => [definition.strategistId, definition]));
+          const retuneOpportunities = retuneSignals.flatMap((signal): AtlasOpportunity[] => {
+            const definition = retuneDefinitionByStrategist.get(String(signal.strategist_id));
+            if (!definition) return [];
+            const virtual = virtualBySignal.get(String(signal.id));
+            const entryPrice = virtual?.entryPrice ?? null;
+            const result = virtual?.pnlPerContract ?? null;
+            const configurationEpochId = typeof signal.rationale_epoch === "string" ? signal.rationale_epoch : null;
+            return [{
+              logicalOpportunityId: `signal:${signal.id}`,
+              id: `prospective_virtual:${signal.id}`,
+              channel: definition.channel,
+              session: shadowSessionDate(String(signal.created_at)),
+              signalAt: String(signal.created_at),
+              exitAt: virtual?.exitAt ?? null,
+              configurationEra: configurationEpochId,
+              portfolioConfigurationEra: configurationEpochId,
+              managerVersion: null,
+              evidenceLayer: "prospective_virtual",
+              accountId: null,
+              underlying: "UNKNOWN",
+              occSymbol: virtual?.occ ?? null,
+              direction: null,
+              contractSelected: virtual?.occ ? true : null,
+              quoteEligible: null,
+              admissionAllowed: null,
+              filled: false,
+              blockedReason: virtual?.blocked ?? null,
+              quantity: null,
+              entryPrice,
+              resultPerContractUsd: result,
+              returnPct: result != null && entryPrice != null && entryPrice > 0 ? result / entryPrice : null,
+              mfePct: virtual?.mfePct ?? null,
+              maePct: null,
+              captureRatio: null,
+              stopExposurePerContractUsd: null,
+              boundedRetuneStamp: parseBoundedRetuneSignalStamp(signal.experiment),
+              sourceRefs: [`signals:${signal.id}`, ...(virtual ? [`virtual_trades:${signal.id}`] : [])],
+            }];
+          });
+          boundedRetunes = buildBoundedRetuneBook({
+            generatedAt: new Date().toISOString(),
+            throughSession: cumulative?.throughSession ?? PRIORITY_A_RETUNE_COHORT_START,
+            opportunities: retuneOpportunities,
+          });
+        } catch (error) { boundedRetuneError = message(error); retuneCount = null; }
         let currentExecutedBySlug: Record<string, CurrentExecutedSummary> = {};
         let pairedCurrent: PairedCurrentComparison[] = [];
         let currentExecutedState: ShadowResearch["currentExecutedState"] = "empty";
@@ -234,7 +250,8 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
           const executedRead = await getSupabase().from("positions")
             .select("id,qty,realized_pnl,opened_at,closed_at,runner_of,channel_spec_version_id,release_manifest_id,configuration_epoch_id,strategists(slug)", { count: "exact" })
             .eq("status", "closed")
-            .gte("opened_at", COHORT_START_ISO)
+            .gte("opened_at", bounds.from > "2026-07-20T04:00:00.000Z" ? bounds.from : "2026-07-20T04:00:00.000Z")
+            .lt("opened_at", until)
             .order("opened_at", { ascending: true })
             .limit(MAX_EXECUTED_ROWS);
           if (executedRead.error) throw executedRead.error;
@@ -318,15 +335,19 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
           currentExecutedError,
           currentExecutedTruncated,
           boundedRetunes,
+          boundedRetuneError,
+          sourceCounts: { virtual: rows.length, retuneSignals: retuneCount },
+          dateRange,
+          setDateRange: () => {},
           virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity",
             fromSession: cumulative?.fromSession ?? null, throughSession: cumulative?.throughSession ?? null,
             configurationEpochId: null, managerVersion: null,
             scope: { kind: "portfolio", accountIds: [], channelSlugs: [...new Set(rows.map((row) => row.slug))] },
-            completeness: total > MAX_ROWS ? "partial" : sessions.length ? "complete" : "unavailable",
+            completeness: sessions.length ? "complete" : "unavailable",
             reconciliation: "unverified", source: "virtual_trades · native hypothetical paths", receiptHash: null,
             limitations: [
               ...(rows.some((row) => !row.channelSpecVersionId) ? ["Some legacy virtual rows are unstamped and remain labeled as all-history context."] : []),
-              ...(total > MAX_ROWS ? ["Read reached its bounded row cap."] : []),
+              "Source row counts reconciled before and after complete pagination. Quote-path quality is a separate requirement.",
             ], asOf }),
           currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade",
             fromSession: currentSessions[0] ?? null, throughSession: currentSessions.at(-1) ?? null,
@@ -335,12 +356,12 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
             completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
             reconciliation: currentExecutedState === "ok" ? "reconciled" : "blocked",
             source: "positions lineage + immutable execution route · latest channel behavior spec", receiptHash: null,
-            limitations: ["Channel behavior specifications are selected independently; receipt-only portfolio epoch changes do not reset unchanged channel evidence.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : [])], asOf }),
-          cohortStart: COHORT_START,
-          truncated: total > MAX_ROWS,
+            limitations: ["Current execution cohort begins July 20; earlier virtual history remains separately available.", "Channel behavior specifications are selected independently; receipt-only portfolio epoch changes do not reset unchanged channel evidence.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : [])], asOf }),
+          cohortStart: dateRange.from,
+          truncated: false,
           error: "",
           asOf,
-          basis: "native virtual paths since Day 1",
+          basis: "native virtual paths in selected date range",
         });
       } catch (error) {
         if (alive) setState((previous) => ({
@@ -352,12 +373,13 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
           currentExecutedEvidence: evidenceEnvelope({ ...previous.currentExecutedEvidence,
             completeness: previous.asOf ? "stale" : "unavailable" }),
         }));
-      }
+      } finally { reading = false; }
     };
+    setState({ ...EMPTY, state: "loading", dateRange });
     void poll();
     const stop = startVisibilityPoll(() => void poll(), 10 * 60_000);
     return () => { alive = false; stop(); };
-  }, [configuredKey, enabled]);
+  }, [configuredKey, enabled, dateRange.from, dateRange.through]);
 
-  return state;
+  return { ...state, dateRange, setDateRange: (from, through) => { researchDateBounds(from, through); setRange({ from, through }); } };
 }
