@@ -111,6 +111,8 @@ jobs:
         run: npm run fixed-entry-execution-dispatch-selftest
       - name: fixed-entry-runtime-driver-selftest
         run: npm run fixed-entry-runtime-driver-selftest
+      - name: execution-timing-selftest
+        run: npm run execution-timing-selftest
       - name: fixed-entry-live-management-selftest
         run: npm run fixed-entry-live-management-selftest
       - name: fixed-entry-legacy-ownership-selftest

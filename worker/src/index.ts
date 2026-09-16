@@ -1,5 +1,5 @@
 import { captureFixedAdmissionObservation } from "./executionObservation.js";
-import { observedCandidate, finalDecisionEvidence } from "./decisionTrace.js";
+import { observedCandidate, finalDecisionEvidence, observedDecisionStage } from "./decisionTrace.js";
 // ============================================================================
 //  SEVE streaming worker — entrypoint (Phase A · SHADOW).
 //
@@ -296,6 +296,9 @@ const gammaLogged = new Set<string>(); // `${sym}|${etDate}` — once-per-day ga
 let cfg: { fund: store.FundState | null; channels: store.ChannelConfig[]; accounts: store.AccountRow[] } = { fund: null, channels: [], accounts: [] };
 let reloadPending = false;
 let cycling = false;
+// Observation only; exact bar identity prevents a new bar from lending its
+// arrival clock to an older decision. REST-seeded bars have unknown arrival.
+const barArrival = new Map<string, { sourceBarAtMs: number; receivedAtMs: number }>();
 
 async function acknowledgePendingChannelActivationPreviews(): Promise<void> {
   if (fixedRecoveryOnly || fixedStopping || !config.channelActivationPreviewWatcherEnabled
@@ -485,6 +488,8 @@ const fixedRuntime = fixedServiceClient ? makeFixedEntryRuntimeDriver(fixedServi
       beforeMinutes:policy.EVENT_FLATTEN_MIN_BEFORE,afterMinutes:policy.EVENT_RESUME_MIN_AFTER}}),
   executionSettings:()=>({spreadCapture:config.spreadCapture,ladder:{...config.spreadCaptureLadder}}),
   onAdmission:captureFixedAdmissionObservation,
+  // Console receipt avoids adding database I/O to the path being measured.
+  onTiming:receipt=>info(`fixed-entry timing ${JSON.stringify({schema:"fixed-entry-timing-v1",...receipt})}`),
   onCommand:async()=>{fixedClock?.kick("sweep");},
   onCoverage:async()=>{fixedClock?.kick("sweep");},
   onReporting:makeFixedEntryReportingReplay(fixedServiceClient,BOOT_ID,{
@@ -1021,6 +1026,7 @@ async function cycle(trigger: string): Promise<void> {
   if(fixedRecoveryOnly||fixedStopping)return;
   if (cycling) { return; } // never overlap cycles
   cycling = true;
+  const cycleStartedAtMs = Date.now();
   try {
     if (reloadPending) { reloadPending = false; await reloadConfig(); }
     if (!cfg.fund) { warn(`cycle(${trigger}): missing config — skip`); return; }
@@ -1215,7 +1221,12 @@ async function cycle(trigger: string): Promise<void> {
         };
         const evaluatedDecisions: ShadowDecision[] = [];
         for (const ch of symChannels) {
-          try { evaluatedDecisions.push(observedCandidate(await decideChannel(ch, ctx), Date.now(), { bootId: BOOT_ID, gitSha: GIT_SHA })); }
+          const evaluationStartedAtMs = Date.now();
+          const arrival = barArrival.get(sym);
+          try { evaluatedDecisions.push(observedCandidate(await decideChannel(ch, ctx), Date.now(), { bootId: BOOT_ID, gitSha: GIT_SHA }, {
+            cycleStartedAtMs, evaluationStartedAtMs,
+            barReceivedAtMs: arrival?.sourceBarAtMs === lastSession.ts ? arrival.receivedAtMs : null,
+          })); }
           catch (e) { warn(`decide ${ch.slug} failed — ${(e as Error).message}`); }
         }
         const familyObservedAtMs = Date.now();
@@ -1449,9 +1460,11 @@ async function cycle(trigger: string): Promise<void> {
             admissionPolicies:
               receiptBoundAdmissionPolicies ?? undefined,
           });
+      const arbitrationCompletedAtMs = Date.now();
       let cursor = 0;
       for (const batch of releaseBatches) {
-        batch.decisions = finalized.slice(cursor, cursor + batch.decisions.length).map((row) => row.decision);
+        batch.decisions = finalized.slice(cursor, cursor + batch.decisions.length)
+          .map((row) => observedDecisionStage(row.decision, "arbitrationCompletedAtMs", arbitrationCompletedAtMs));
         cursor += batch.decisions.length;
         decisions.push(...batch.decisions);
       }
@@ -1887,9 +1900,11 @@ async function fastExitSweep(): Promise<void> {
 }
 
 function onBar(symbol: string, bar: Bar): void {
+  const receivedAtMs = Date.now();
   const store = barsBySym.get(symbol);
   if (!store) return; // a symbol we don't own (shouldn't happen — sub is scoped)
   const isNew = store.upsert(bar);
+  if (isNew) barArrival.set(symbol, { sourceBarAtMs: bar.ts, receivedAtMs });
   // Only a NEW *RTH* closed bar triggers a decision (after-hours bars update
   // state but don't re-run the strategies). The cycle re-evaluates ALL symbols —
   // cheap (in-memory decide) and keeps minutesToClose fresh across the roster.

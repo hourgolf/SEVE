@@ -11,6 +11,7 @@ import { fixedPositionIdentityMatches, type FixedCoveragePorts,
 import { assertFixedEntryServiceClient, readFixedAdmissionSnapshot } from "./fixedEntryServiceClient.js";
 import type { FixedAdmissionHistory, FixedIntentSeed } from "./fixedEntryIntentAdmission.js";
 import { fixedEntryOwnershipPresent } from "../../lib/channels/fixedEntryOwnership.js";
+import type { FixedProtocolRecord } from "./fixedEntryLedgerPersistence.js";
 type Client = Pick<SupabaseClient, "from">;
 export const FIXED_POSITION_COLUMNS = ["id", "status", "strategist_id", "occ_symbol", "underlying", "expiration",
   "strike", "opt_type", "qty", "avg_entry_price", "current_mark", "realized_pnl", "unrealized_pnl", "closed_at",
@@ -180,7 +181,7 @@ export function makeFixedSupabaseCoveragePorts(client: Client, bootId: string, i
   /** Fresh original-account broker holdings after shared-OCC attribution. The
    * adapter must reject account/peer-row incongruence, not return aggregate
    * broker quantity as if it all belonged to this channel. */
-  attributedHoldings(intent: FixedEntryIntent): Promise<{ netQty: number; observedAtMs: number }>;
+  attributedHoldings(intent: FixedEntryIntent, records: readonly FixedProtocolRecord[]): Promise<{ netQty: number; observedAtMs: number }>;
 }): FixedCoveragePorts {
   assertFixedEntryServiceClient(client);
   const intent = structuredClone(input.intent);
@@ -188,7 +189,10 @@ export function makeFixedSupabaseCoveragePorts(client: Client, bootId: string, i
     async snapshot(requested) {
       if (requested.contentHash !== intent.contentHash) throw new Error("fixed_store:original_intent_changed");
       const [records, positions] = await Promise.all([readFixedIntentRecords(client, intent), readFixedIntentPositions(client, intent)]);
-      const broker = await input.attributedHoldings(structuredClone(intent));
+      // Use this snapshot's already-validated original ledger for broker order
+      // attribution. Never cache across snapshots/passes. A newly appearing
+      // unregistered broker order still fails closed in readContractInventory.
+      const broker = await input.attributedHoldings(structuredClone(intent), structuredClone(records));
       return { records, positions, brokerNetQty: broker.netQty, brokerObservedAtMs: broker.observedAtMs };
     },
     readPosition: id => readFixedPosition(client, intent, id),

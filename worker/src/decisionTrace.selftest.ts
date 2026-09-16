@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ChainStore } from "./state.js";
-import { startEntryTrace, observedCandidate, releaseTrace, finalDecisionEvidence, brokerTrace, safeTrace, traceHealth } from "./decisionTrace.js";
+import { startEntryTrace, observedCandidate, releaseTrace, finalDecisionEvidence, brokerTrace, safeTrace, traceHealth, observedDecisionStage } from "./decisionTrace.js";
 import { ObservationQueue } from "./observationQueue.js";
 import { readDecisionStageEvidence } from "../../lib/research/decisionStageEvidence";
 import type { ShadowDecision } from "./decide.js";
@@ -15,6 +15,24 @@ chain.update([{...quote,providerQuoteAt:new Date(now+1000).toISOString()}]);asse
 const common={chain,occ:quote.occ,sourceBarAtMs:900000,quoteQueried:true,quoteAtMs:1000000,quote:initial,sizingVisited:true,qty:2,sizingInputUsd:210,stopFraction:.5,nativeStopPct:50,blocked:null};
 const d: ShadowDecision={slug:"vb-macd-state",status:"armed",action:"enter",reason:"test",qty:2,detail:{ask:1.55,decisionTrace:startEntryTrace(common)}};
 const selectedBefore=JSON.stringify(d);
+const stageObserved = observedCandidate(d, 964000, { gitSha: "fixture", bootId: "fixture" }, {
+  barReceivedAtMs: 960200, cycleStartedAtMs: 960100, evaluationStartedAtMs: 963000,
+});
+const stageClocks = (stageObserved.detail!.decisionTrace as any).clocks;
+assert.equal(stageClocks.sourceBarClosedAtMs, 960000);
+assert.equal(stageClocks.barReceivedAtMs, 960200);
+assert.equal(stageClocks.evaluationStartedAtMs, 963000);
+assert.equal(JSON.stringify(d), selectedBefore, "timing decoration cannot mutate a decision or its prices");
+const executor = observedDecisionStage(observedDecisionStage(stageObserved, "arbitrationCompletedAtMs", 965000), "executorStartedAtMs", 968000);
+assert.equal((executor.detail!.decisionTrace as any).clocks.arbitrationCompletedAtMs, 965000);
+assert.equal((executor.detail!.decisionTrace as any).clocks.executorStartedAtMs, 968000);
+const fixedRead = readDecisionStageEvidence({payload:{execution_guard_version:"fixed-durable-command-v1",
+  fixedCommandEvidence:{filledAt:new Date(970000).toISOString(),terminalObservedAt:new Date(973000).toISOString()},
+  decisionDetail:{decisionTrace:executor.detail!.decisionTrace}}});
+assert.equal(fixedRead.state,"observed");if(fixedRead.state==='observed'){
+  assert.equal(fixedRead.timing.candidateToFillMs,6000);assert.equal(fixedRead.timing.candidateToResultObservedMs,9000);
+  assert.equal(fixedRead.timing.arbitrationToExecutorMs,3000);
+}
 let observed=observedCandidate(d,1001000);const prepared={...observed,qty:4,detail:{...observed.detail,decisionTrace:releaseTrace(observed,{qty:4,premiumCap:1.75,debitCapUsd:700,observedAtMs:1002000})}};
 let final=finalDecisionEvidence(prepared,null);let trace=final.detail!.decisionTrace as any;
 assert.equal(trace.quantities.provisionalQty,2);assert.equal(trace.quantities.releaseRequestedQty,4);assert.equal(trace.quantities.postArbitrationQty,4);assert.equal(trace.quantities.submittedQty,null);assert.equal(trace.sizing.requestedNominalStopUsd,310);assert.equal(JSON.stringify(d),selectedBefore);

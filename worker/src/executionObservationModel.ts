@@ -180,6 +180,8 @@ export function buildDecisionObservation(input: DecisionObservationInput): Execu
 }
 
 export interface BrokerObservationInput extends DecisionObservationInput {
+  brokerResultTimeBasis?: "local_completion_v2";
+  submissionQuoteObservedAtMs?: number;
   clientOrderId: string;
   brokerOrderId?: string | null;
   brokerStatus: string;
@@ -212,6 +214,11 @@ export function buildBrokerObservation(input: BrokerObservationInput): Execution
     fill_price: fillPrice,
     payload: {
       ...decision.payload,
+      ...(input.brokerResultTimeBasis ? { brokerResultTiming: {
+        basis: input.brokerResultTimeBasis, observedAtMs: input.observedAtMs,
+        submissionQuoteObservedAtMs: input.submissionQuoteObservedAtMs ?? null,
+        exchangeFillAtMs: null,
+      } } : {}),
       error: input.error ?? null,
       ...(input.executionGuardVersion
         ? { execution_guard_version: input.executionGuardVersion }
