@@ -27,8 +27,10 @@ export function fixedCoverageHarness(options: { spreadCapture?: boolean; intent?
   const original = fixedProtocolObservation(intent, fixedProtocolRecord({ id: intent.id, intentId: intent.id,
     kind: "intent", recordedAt: intent.createdAt, body: { intent } }));
   db.set(original.id, original);
+  const records = () => [...db.values()].map(r => parseFixedProtocolRecord(r.payload.fixed_entry_record)!);
+  const readRecords = async () => records();
   const coverage: FixedCoveragePorts = { storage, now: () => at,
-    snapshot: async () => ({ records: [...db.values()].map(r => parseFixedProtocolRecord(r.payload.fixed_entry_record)!),
+    snapshot: async () => ({ records: records(),
       positions: [...positions.values()].map(r => structuredClone(r)), brokerNetQty: held, brokerObservedAtMs: at }),
     readPosition: async id => structuredClone(positions.get(id) ?? null),
     insertPosition: async row => {
@@ -67,7 +69,7 @@ export function fixedCoverageHarness(options: { spreadCapture?: boolean; intent?
   const bookPorts: FixedSellBookingPorts = { storage, now: () => at, readRow: coverage.readPosition,
     cas: async change => await coverage.cas(change) as Awaited<ReturnType<FixedSellBookingPorts["cas"]>> };
   const buy = makeClaim("buy", 0, 4);
-  return { intent, db, positions, broker, coverage, commandPorts, bookPorts, buy, makeClaim,
+  return { intent, db, positions, broker, coverage, commandPorts, bookPorts, buy, makeClaim, readRecords,
     counts: () => ({ posts, inserts, changes }), setHeld: (n: number) => { held = n; }, setNow: (n: number) => { at = n; },
     lateBuy: async () => {
       const old = broker.get(buy.command.clientOrderId)!;

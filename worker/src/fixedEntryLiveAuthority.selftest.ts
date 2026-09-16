@@ -64,6 +64,7 @@ async function main() {
   let now = Date.parse("2026-09-08T14:30:03Z"), mode = "paper", halted = false, live = true, ready = true, fail = false,
     slow = false, accountsFresh = true, rawFlagUnknown = false, foreignOrder = false, missingBar = false;
   let held = 0, ask = 10, peerMode = false, hidePeer = false, failConfirmation = false;
+  let configReads = 0, routingReads = 0;
   const fund = () => ({ mode, is_halted: halted, total_capital_usd: 300_000, master_daily_stop_usd: 0, stack_cap_n: 0 });
   const rows: Record<string, unknown>[] = [];
   const token = ["eyJhbGciOiJIUzI1NiJ9", Buffer.from('{"role":"service_role"}').toString("base64url"), "fixture"].join(".");
@@ -111,7 +112,12 @@ async function main() {
     const binding = makeFixedEntryLiveAuthority(client, { now: () => now, liveMode: () => live, infrastructureReady: () => ready,
       workerCompatibilityVersion: LEGACY_RC54_WORKER_COMPATIBILITY, apiForAccount: a => ({ paperHost: "https://paper-api.alpaca.markets", headers: {fixtureAccount:a.id} }),
       bars: () => missingBar ? bars.slice(0,-1) : bars, chain: () => chain, fetch: brokerFetch,
-      readConfig: async () => ({ fund: fund(), channels: structuredClone(channels), accounts: structuredClone(accounts), accountsFresh }),
+      readConfig: async () => { configReads++; return { fund: fund(), channels: structuredClone(channels), accounts: structuredClone(accounts), accountsFresh }; },
+      readRouting: async () => {
+        routingReads++;
+        if (!accountsFresh) throw new Error("fixture routing unavailable");
+        return { channels: structuredClone(channels), accounts: structuredClone(accounts) };
+      },
       readControlPlane: async () => structuredClone(stored), realizedToday: async () => 0 });
     const check = (s: FixedIntentSeed = seed) => binding.entryAuthority(s, null);
     assert.equal((await check()).allowed, true, "actual receipt, native gates and full portfolio accept original four-contract signal above old caps");
@@ -147,7 +153,19 @@ async function main() {
     const position = (await materializeFixedEntryCoverage(h.coverage, intent)).position!; assert.ok(position);
     held = 2;
     assert.equal((await binding.entryAuthority(seed, h.buy)).allowed, true, "own partial row/holding is removed only from its own continuation occupancy");
+    const beforeExclusive = configReads;
     assert.equal((await binding.exclusiveContract(intent)).allowed, true);
+    assert.equal(configReads, beforeExclusive, "exclusive proof must not reload signal/fund configuration");
+    assert.equal(routingReads, 1);
+    const otherChannel = channels.find(c => c.account_id !== intent.accountId)!;
+    const priorAccount = otherChannel.account_id;
+    rows.push({ ...structuredClone(position), id: "other-account-peer", strategist_id: otherChannel.id, entry_features: {}, qty: 1 });
+    assert.equal((await binding.exclusiveContract(intent)).allowed, true, "known other-account peer remains independent");
+    otherChannel.account_id = "missing-account";
+    assert.equal((await binding.exclusiveContract(intent)).allowed, false, "unknown account cannot be proof of independence");
+    otherChannel.account_id = intent.accountId;
+    assert.equal((await binding.exclusiveContract(intent)).allowed, false, "new same-account routing is read fresh");
+    otherChannel.account_id = priorAccount; rows.pop();
     rows.push({ ...structuredClone(position), id: "unknown-peer", strategist_id: "missing-strategist", entry_features: {}, qty: 1 });
     assert.equal((await binding.entryAuthority(seed,h.buy)).allowed, false);
     assert.equal((await binding.exclusiveContract(intent)).allowed, false);

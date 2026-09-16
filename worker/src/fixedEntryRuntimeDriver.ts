@@ -148,6 +148,10 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
     coverage.snapshot = original => timer.measure("coverage_snapshot", () => snapshot(original));
     const management = () => timer.measure("management_authority", () => bindings.management(structuredClone(intent), source, brokerMark));
     return { coverage,
+      readRecords: original => timer.measure("lifecycle_ledger", () => {
+        if (original.contentHash !== intent.contentHash) throw new Error("fixed_store:original_intent_changed");
+        return readFixedIntentRecords(client, original);
+      }),
       booking: { storage, now: bindings.now, readRow: id => readFixedPosition(client, intent, id), cas: change => applyFixedRowCas(client, change) },
       commands: { storage, now: bindings.now, reserveSell: change => applyFixedRowCas(client, change),
         canSubmitNow:side=>bindings.submissionEnabled(side)===true,
