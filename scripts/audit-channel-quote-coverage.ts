@@ -5,7 +5,7 @@ import path from "node:path";
 import {createHash} from "node:crypto";
 import {gunzipSync} from "node:zlib";
 import {GetObjectCommand,S3Client} from "@aws-sdk/client-s3";
-import {quotePathCoverage,type QuoteRow} from "../lib/research/quotePathCoverage";
+import {quotePathCoverage,deduplicateArchivedQuotes,type QuoteRow} from "../lib/research/quotePathCoverage";
 import {shadowSessionDate} from "../lib/research/shadowResearch";
 import {researchDateBounds} from "../lib/research/completeResearchRead";
 
@@ -22,7 +22,7 @@ async function main() {
   const paths:any[]=previous?.paths ?? [...source.positions.filter((p:any)=>!p.runner_of).map((p:any)=>({id:p.id,slug:p.slug,layer:"executed_root",session:shadowSessionDate(p.opened_at),occ:p.occ_symbol,start:p.opened_at,end:p.closed_at,peakRecorded:p.peak_mark!=null,peakTimeRecorded:p.peak_at!=null})),
     ...source.virtual.map((v:any)=>({id:v.signal_id,slug:v.slug,layer:"virtual",session:shadowSessionDate(v.signal_at),occ:v.occ,start:v.signal_at,end:v.exit_at,blocked:v.blocked,exitReason:v.exit_reason,peakRecorded:v.mfe_pct!=null}))];
   const receipts=new Map<string,any>(inventory.archives.map((a:any)=>[a.session_date_et,a]));
-  const archiveResults:any[]=previous?.archives ?? [];
+  const archiveResults:any[]=previous?.archives.filter((a:any)=>a.state==="verified") ?? [];
   const early = previous ? JSON.parse(fs.readFileSync(path.join(dir,"early-restore-selection.json"),"utf8")).files : [];
   if (previous && JSON.parse(fs.readFileSync(path.join(dir,"early-quotes/RESTORE-RECEIPT.json"),"utf8")).status !== "PASS") throw Error("Early restore not verified");
   const localByDate = new Map<string,any>(early.map((r:any)=>[path.basename(r.path).slice(0,10),r]));
@@ -46,13 +46,16 @@ async function main() {
         if(quotes.length!==receipt.row_count || manifest.rowCount!==quotes.length || manifest.sessionDateEt!==session || manifest.contentSha256!==receipt.content_sha256 || manifest.compressedSha256!==receipt.compressed_sha256 || manifest.objectKey!==receipt.object_key || manifest.manifestKey!==receipt.manifest_key)throw Error("Manifest identity or count mismatch");
         compressedHash=receipt.compressed_sha256;
       }
+      const rawRows=quotes.length, normalized=deduplicateArchivedQuotes(quotes);
+      if (!local && normalized.duplicates) throw Error("Duplicate immutable R2 rows");
+      quotes=normalized.rows;
       const ids=new Set<string>(),byOcc=new Map<string,typeof quotes>();
       for(const q of quotes) {
         if(!q.id||ids.has(q.id)||q.captured_at.slice(0,10)!==session)throw Error("Duplicate/misdated archive row");
         ids.add(q.id); const a=byOcc.get(q.occ_symbol)??[];a.push(q);byOcc.set(q.occ_symbol,a);
       }
       const close=Date.parse(researchDateBounds(session,session).from)+16*3600_000;
-      const quality={rows:quotes.length,validPrices:0,withProviderClock:0,freshOpra:0};
+      const quality={rawRows,rows:quotes.length,exactDuplicatesCollapsed:normalized.duplicates,validPrices:0,withProviderClock:0,freshOpra:0};
       for(const q of quotes){
         const valid=typeof q.bid==="number"&&Number.isFinite(q.bid)&&q.bid>0&&typeof q.ask==="number"&&Number.isFinite(q.ask)&&q.ask>=q.bid;
         if(valid)quality.validPrices++;

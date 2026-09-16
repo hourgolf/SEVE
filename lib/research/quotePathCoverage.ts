@@ -1,4 +1,18 @@
 export type QuoteRow = { captured_at: string; bid: unknown; ask: unknown; provider_quote_at?: string | null; option_feed?: string | null };
+/** Preserve original files. Only identical repeated IDs may be collapsed in
+ * the derived audit; conflicting observations invalidate the input. */
+export function deduplicateArchivedQuotes<T extends {id:string}>(rows: readonly T[]): {rows:T[]; duplicates:number} {
+  const stable = (v:unknown):string => Array.isArray(v) ? `[${v.map(stable).join(",")}]`
+    : v && typeof v === "object" ? `{${Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,x])=>`${JSON.stringify(k)}:${stable(x)}`).join(",")}}` : JSON.stringify(v);
+  const seen = new Map<string,T>(); let duplicates=0;
+  for (const row of rows) {
+    if (!row.id) throw Error("Missing archive row identity");
+    const previous=seen.get(row.id);
+    if (previous) { if(stable(previous)!==stable(row))throw Error("Conflicting duplicate archive row"); duplicates++; }
+    else seen.set(row.id,row);
+  }
+  return {rows:[...seen.values()],duplicates};
+}
 export function quotePathCoverage(quotes: readonly QuoteRow[], start: number, end: number) {
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
   const prices = quotes.filter(q => typeof q.bid === "number" && Number.isFinite(q.bid) && q.bid > 0

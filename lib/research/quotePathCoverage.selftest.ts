@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {quotePathCoverage} from "./quotePathCoverage";
+import {quotePathCoverage,deduplicateArchivedQuotes} from "./quotePathCoverage";
 const row = (s:number,bid=1,ask=2) => ({captured_at:new Date(s*1000).toISOString(),provider_quote_at:new Date(s*1000).toISOString(),option_feed:"opra",bid,ask});
 assert.equal(quotePathCoverage([row(1)],0,10_000)?.causalEntry15s,false); // future quote cannot validate entry
 assert.equal(quotePathCoverage([row(0),row(60),row(120)],0,120_000)?.sampledCoverage120s,true);
@@ -10,4 +10,6 @@ assert.equal(quotePathCoverage([{...row(0),provider_quote_at:null}],0,10_000)?.f
 assert.equal(quotePathCoverage([{...row(0),option_feed:"indicative"}],0,10_000)?.freshOpraRows,0);
 assert.equal(quotePathCoverage([],0,10_000)?.maxSampleGapSeconds,null);
 assert.equal(quotePathCoverage([row(0)],10_000,0),null);
+assert.deepEqual(deduplicateArchivedQuotes([{id:"a",bid:1},{bid:1,id:"a"}]),{rows:[{id:"a",bid:1}],duplicates:1});
+assert.throws(()=>deduplicateArchivedQuotes([{id:"a",bid:1},{id:"a",bid:2}]),/Conflicting/);
 console.log("Quote coverage: causal timing, gap thresholds, invalid prices, missing provenance and empty paths passed");
