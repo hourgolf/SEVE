@@ -322,6 +322,7 @@
     "workspace-navigation-selftest": "tsx lib/shell/workspaceDestination.selftest.ts && tsx components/perform/workspaceNavigation.selftest.ts",
     "ui-clarity-selftest": "tsx lib/perform/sessionReview.selftest.ts && tsx lib/shell/workspaceDestination.selftest.ts && tsx components/perform/workspaceNavigation.selftest.ts && tsx components/perform/uiClarityLayout.selftest.ts && tsx components/perform/clarityDisclosure.selftest.ts && tsx components/research/DecisionAtlasHierarchy.selftest.ts && tsx components/perform/decisionFirstPlatform.selftest.ts",
     "execution-observation-persistence-selftest": "tsx worker/src/executionObservationPersistence.selftest.ts",
+    "execution-timing-selftest": "tsx worker/src/executionTiming.selftest.ts",
     "position-route-observation-selftest": "tsx worker/src/positionRouteObservation.selftest.ts",
     "position-route-receipt-audit-selftest": "tsx lib/ops/positionRouteReceiptAudit.selftest.ts",
     "position-route-receipt-audit": "tsx scripts/prospective-position-route-audit.ts",

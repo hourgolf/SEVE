@@ -1,5 +1,6 @@
 import { fixedEntryExecutionDriver, fixedEntryOwnershipPresent, fixedEntryRequested } from "./fixedEntryExecutionDispatch.js";
-import { brokerTrace, quoteObservation } from "./decisionTrace.js";
+import { brokerTrace, quoteObservation, observedDecisionStage } from "./decisionTrace.js";
+import { completedBrokerObservation } from "./executionTiming.js";
 // ============================================================================
 //  Phase B execution core — the streaming worker as a REAL order-placer for
 //  channels marked strategists.executor='stream'.
@@ -232,7 +233,7 @@ async function placeFill(
   // Deterministic ids make this a harmless no-op when that loop already wrote it.
   captureDecisionObservation(observationBase);
   if (!orderSubmissionGuard.claim(coidBase)) {
-    if (entryEvidence) captureBrokerObservation({ ...observationBase,
+    if (entryEvidence) captureBrokerObservation({ ...completedBrokerObservation(observationBase, Date.now()),
       decision: { ...observationBase.decision, detail: { ...observationBase.decision.detail,
         decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, Date.now(), "not_submitted", null, undefined, submissionQuote) } },
       clientOrderId: coidBase, brokerStatus: "submission_deduped", filledQty: 0, fillPrice: 0,
@@ -261,13 +262,14 @@ async function placeFill(
       const market = await alpaca.orderAndFill({ symbol: occ, qty: String(qty), side, type: "market", time_in_force: "day", client_order_id: coidBase }, ctx.api);
       result = { ...market, crossedQty: market.filledQty };
     }
+    const completedAtMs = Date.now();
     captureBrokerObservation({
-      ...observationBase,
+      ...completedBrokerObservation(observationBase, completedAtMs),
       clientOrderId: coidBase,
       brokerOrderId: result.id,
       brokerStatus: result.status,
       ...(entryEvidence ? { decision: { ...observationBase.decision, detail: { ...observationBase.decision.detail,
-        decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, Date.now(), "result", submittedAtMs, result, submissionQuote) } } } : {}),
+        decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, completedAtMs, "result", submittedAtMs, result, submissionQuote) } } } : {}),
       filledQty: result.filledQty,
       fillPrice: result.fill,
       positionId,
@@ -317,13 +319,14 @@ async function placeFill(
     }
     return result;
   } catch (e) {
+    const completedAtMs = Date.now();
     captureBrokerObservation({
-      ...observationBase,
+      ...completedBrokerObservation(observationBase, completedAtMs),
       clientOrderId: coidBase,
       brokerOrderId: null,
       brokerStatus: "request_error",
       ...(entryEvidence ? { decision: { ...observationBase.decision, detail: { ...observationBase.decision.detail,
-        decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, Date.now(), "error", submittedAtMs, undefined, submissionQuote) } } } : {}),
+        decisionTrace: brokerTrace(entryEvidence, ctx.chain, occ, qty, completedAtMs, "error", submittedAtMs, undefined, submissionQuote) } } } : {}),
       filledQty: 0,
       fillPrice: 0,
       positionId,
@@ -783,6 +786,7 @@ export async function executeReconcile(d: ShadowDecision, row: store.PositionRow
 export async function executeEntry(
   d: ShadowDecision, ch: store.ChannelConfig, spotClose: number, ctx: ExecCtx,
 ): Promise<void> {
+  d = observedDecisionStage(d, "executorStartedAtMs", Date.now());
   if (fixedEntryRequested(ch, ctx)) return fixedEntryExecutionDriver().enter(d, ch, spotClose, ctx);
   const occ = d.occ!;
   const dir = d.direction!;

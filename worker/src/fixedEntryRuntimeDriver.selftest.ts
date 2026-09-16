@@ -19,10 +19,13 @@ async function main(stopDuringFinalRead=false) {
   let now = h.coverage.now(), held = 2, bid = 1, posts = 0, dbUnavailable = false, statusFails = false;
   let stopped=false,stopOnRead=false;
   const reads: string[] = [], writes: string[] = [];
+  let originalLedgerReads = 0;
+  const timingReceipts: Parameters<NonNullable<FixedRuntimeBindings["onTiming"]>>[0][] = [];
   const fakeDb: typeof fetch = async (input, init) => {
     const u = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     assert.equal(u.origin, "https://fixture.supabase.co");
     const table = u.pathname.split("/").at(-1), method = init?.method ?? "GET";
+    if (method === "GET" && table === "execution_observations" && u.searchParams.get("trace_id") === `eq.${h.intent.id}`) originalLedgerReads++;
     if(method==="GET"&&stopOnRead){stopped=true;stopOnRead=false;}
     if (dbUnavailable) return new Response(JSON.stringify({ code: "unavailable" }), { status: 503 });
     assert.ok(table === "positions" || table === "execution_observations");
@@ -103,6 +106,7 @@ async function main(stopDuringFinalRead=false) {
         quote: { bid, ask: bid + .01, observedAtMs: now } } });},
     executionSettings: () => ({ spreadCapture: false, ladder: h.intent.executionPlan.ladder }),
     onCommand: async () => {}, onCoverage: async () => {},
+    onTiming: receipt => { timingReceipts.push(receipt); throw new Error("fixture failed telemetry sink"); },
     onReporting: async () => { reportingAttempts++; if (reportingFails) throw new Error("fixture reporting unavailable"); },
     status: async (_id, state) => { if (statusFails) throw new Error("fixture status failure"); reportingStates.push(state); },
   };
@@ -121,7 +125,14 @@ async function main(stopDuringFinalRead=false) {
     assert.equal(h.db.size, requestCount, "duplicate manual clicks reuse the original exit request");
     const runtime = makeFixedEntryRuntimeDriver(client, "00000000-0000-4000-8000-000000000004", bindings);
     statusFails = true;
+    const ledgerReadsBefore = originalLedgerReads;
     const first = await runtime.recover(h.intent, "sweep");
+    assert.equal(timingReceipts.length, 1);
+    const snapshots = timingReceipts[0].stages.coverage_snapshot.calls;
+    assert.equal(originalLedgerReads - ledgerReadsBefore, snapshots,
+      "each fresh coverage snapshot reads the original ledger once, not again for broker attribution");
+    assert.ok(snapshots > 0);
+    assert.equal(timingReceipts[0].postsAttempted, first.postsAttempted, "throwing telemetry cannot alter trading result");
     if(stopDuringFinalRead){
       assert.equal(stopped,true);assert.equal(posts,0);assert.equal(first.postsAttempted,0);
       assert.ok([...h.db.values()].some(r=>(r.payload as any)?.fixed_entry_record?.body?.resolution?.outcome==="not-submitted"),

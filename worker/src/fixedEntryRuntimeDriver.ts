@@ -26,6 +26,7 @@ import { buildFixedEntryExecutionPlan, type FixedEntryExecutionPlan } from "./fi
 import type { FixedCommandClaim } from "./fixedEntryCommandCoordinator.js";
 import { observedOpportunityId } from "./planShadowModel.js";
 import { buildFixedAdmissionObservation, type ExecutionObservationDraft } from "./executionObservationModel.js";
+import { makeExecutionTimer, type TimingStage } from "./executionTiming.js";
 /** Only bounded internal error codes may enter the journal; never raw server errors. */
 export function fixedReportingFailure(error: unknown): { state: string; reasons: string[] } {
   const code = error instanceof Error && /^fixed_(reporting|manager|store):[a-z_]+$/.test(error.message)
@@ -64,6 +65,9 @@ export interface FixedRuntimeBindings {
    * including already-settled intents; failures retry on subsequent passes. */
   onReporting(intent: FixedEntryIntent): Promise<void>;
   onAdmission?(row: ExecutionObservationDraft): void;
+  /** Bounded stage totals only. Sink must not do blocking I/O; never authority. */
+  onTiming?(receipt: { intentId: string; source: Source; startedAtMs: number; completedAtMs: number;
+    state: string; postsAttempted: number; stages: Record<string, TimingStage> }): void;
   status(intentId: string | null, state: string, reasons: readonly string[]): Promise<void>;
 }
 export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bindings: FixedRuntimeBindings): FixedEntryExecutionDriver & {
@@ -109,20 +113,21 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
     }
     return intent;
   }
-  async function portsFor(intent: FixedEntryIntent, source: Source): Promise<FixedLifecyclePorts> {
+  async function portsFor(intent: FixedEntryIntent, source: Source, timer: ReturnType<typeof makeExecutionTimer>): Promise<FixedLifecyclePorts> {
     if (!parseFixedEntryIntent(intent)) throw new Error("fixed_runtime:original_intent_invalid");
-    const account = await bindings.broker(structuredClone(intent));
+    const account = await timer.measure("broker_resolution", () => bindings.broker(structuredClone(intent)));
     if (!account) throw new Error("fixed_runtime:original_broker_unavailable");
     const broker = makeFixedEntryBrokerTransport(intent, {...account,submissionEnabled:side=>bindings.submissionEnabled(side)===true});
     let brokerMark: FixedManagementInput["brokerMark"] = null;
     const coverage = makeFixedSupabaseCoveragePorts(client, bootId, { intent, now: bindings.now,
-      async attributedHoldings() {
-        const all = await discoverFixedEntryIntents(client);
+      async attributedHoldings(_requested, snapshotRecords) {
+        const all = await timer.measure("ownership_discovery", () => discoverFixedEntryIntents(client));
         const original = all.find(i => i.id === intent.id);
         if (!original || original.contentHash !== intent.contentHash) throw new Error("fixed_runtime:original_intent_changed");
         const allowed: Parameters<typeof broker.readContractInventory>[0][number][] = [];
         for (const owner of all.filter(i => i.accountId === intent.accountId && i.occ === intent.occ)) {
-          const records = await readFixedIntentRecords(client, owner);
+          const records = owner.id === intent.id ? snapshotRecords
+            : await timer.measure("ancestor_records", () => readFixedIntentRecords(client, owner));
           if (owner.id !== intent.id) {
             const positions = await readFixedIntentPositions(client, owner);
             if (owner.attempt >= intent.attempt || !verifyFixedIntentSettlement(owner, { records, positions })) {
@@ -131,20 +136,23 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
           }
           for (const fact of inspectFixedEntryInventory(owner, records).facts) allowed.push({ intent: owner, command: fact.command });
         }
-        const inventory = await broker.readContractInventory(allowed);
-        const proof = await bindings.exclusiveContract(structuredClone(intent));
+        const inventory = await timer.measure("broker_inventory", () => broker.readContractInventory(allowed));
+        const proof = await timer.measure("exclusive_contract", () => bindings.exclusiveContract(structuredClone(intent)));
         if (!proof.allowed || !Number.isFinite(proof.observedAtMs)) throw new Error("fixed_runtime:peer_ownership_unproven");
         const age = bindings.now() - proof.observedAtMs;
         if (!Number.isFinite(age) || age < 0 || age > 2_000) throw new Error("fixed_runtime:peer_ownership_stale");
         brokerMark = inventory.brokerMark === null ? null : { price: inventory.brokerMark, observedAtMs: inventory.observedAtMs };
         return inventory;
       } });
-    const management = () => bindings.management(structuredClone(intent), source, brokerMark);
+    const snapshot = coverage.snapshot;
+    coverage.snapshot = original => timer.measure("coverage_snapshot", () => snapshot(original));
+    const management = () => timer.measure("management_authority", () => bindings.management(structuredClone(intent), source, brokerMark));
     return { coverage,
       booking: { storage, now: bindings.now, readRow: id => readFixedPosition(client, intent, id), cas: change => applyFixedRowCas(client, change) },
       commands: { storage, now: bindings.now, reserveSell: change => applyFixedRowCas(client, change),
         canSubmitNow:side=>bindings.submissionEnabled(side)===true,
-        submitOnce: broker.submitOnce, lookupExact: broker.lookupExact },
+        submitOnce: (...args) => timer.measure("broker_submit", () => broker.submitOnce(...args)),
+        lookupExact: (...args) => timer.measure("broker_lookup", () => broker.lookupExact(...args)) },
       async observeManagement(original, snapshot) {
         const state = await management();
         // Record known mandatory exits even if current management authority is
@@ -158,7 +166,7 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
           return { allowed: state.allowed && fresh(state.validUntilMs), validUntilMs: state.validUntilMs };
         }
         const authorityStarted = bindings.now();
-        const current = await bindings.entryAuthority(seedOf(original), structuredClone(claim));
+        const current = await timer.measure("entry_authority", () => bindings.entryAuthority(seedOf(original), structuredClone(claim)));
         const records = await readFixedIntentRecords(client, original);
         const bought = inspectFixedEntryInventory(original, records).facts.filter(f => f.command.side === "buy")
           .reduce((sum, f) => sum + (f.provenFill?.filledQty ?? 0), 0);
@@ -169,20 +177,25 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
         return { allowed: current.allowed && fresh(current.validUntilMs) && affordability.allowed,
           validUntilMs: Math.min(current.validUntilMs, (current.account?.observedAtMs ?? -Infinity) + 2_000) };
       },
-      cancelExact: broker.cancelExact, onCommand: bindings.onCommand, onCoverage: bindings.onCoverage,
+      cancelExact: (...args) => timer.measure("broker_cancel", () => broker.cancelExact(...args)),
+      onCommand: bindings.onCommand, onCoverage: bindings.onCoverage,
     };
   }
   async function recover(intent: FixedEntryIntent, source: Source): Promise<FixedLifecycleResult> {
     if (!parseFixedEntryIntent(intent)) throw new Error("fixed_runtime:original_intent_invalid");
     const existing = running.get(intent.id); if (existing) return existing;
     const operation = (async () => {
+      const timer = makeExecutionTimer(), startedAtMs = bindings.now();
       let result: FixedLifecycleResult;
       try {
-        result = await reconcileFixedLifecycle(await portsFor(intent, source), intent);
+        const ports = await portsFor(intent, source, timer);
+        result = await timer.measure("lifecycle", () => reconcileFixedLifecycle(ports, intent));
       } catch {
         result = { state: "unresolved", intentId: intent.id,
           reasons: ["runtime-evidence-unavailable"], postsAttempted: 0, coverage: null, settlement: null };
       }
+      try { bindings.onTiming?.({ intentId: intent.id, source, startedAtMs, completedAtMs: bindings.now(),
+        state: result.state, postsAttempted: result.postsAttempted, stages: timer.snapshot() }); } catch { /* observation only */ }
       // A failed journal is not evidence that prior broker work never happened.
       if (!await report(intent.id, result.state, result.reasons)) result.reasons.push("runtime-status-unconfirmed");
       queueReporting(intent);

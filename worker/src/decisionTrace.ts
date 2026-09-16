@@ -54,9 +54,15 @@ export function startEntryTrace(input: {
     selectedQuote: input.quote ?? { occ: input.occ, lookupStatus: "not_queried", providerQuoteAt: null, bid: null, ask: null },
   }));
 }
-export function observedCandidate(d: ShadowDecision, atMs: number, source: DecisionTrace["source"] = { gitSha: null, bootId: null }): ShadowDecision {
+export interface CandidateTiming {
+  barReceivedAtMs: number | null;
+  cycleStartedAtMs: number;
+  evaluationStartedAtMs: number;
+}
+export function observedCandidate(d: ShadowDecision, atMs: number, source: DecisionTrace["source"] = { gitSha: null, bootId: null }, timing?: CandidateTiming): ShadowDecision {
   const t = traceOf(d); if (!t) return d;
-  const next = safeTrace(() => ({ ...t, source, clocks: { ...t.clocks, candidateObservedAtMs: atMs } }));
+  const next = safeTrace(() => ({ ...t, source, clocks: { ...t.clocks, candidateObservedAtMs: atMs,
+    ...(timing ? { ...timing, sourceBarClosedAtMs: t.clocks.sourceBarAtMs == null ? null : t.clocks.sourceBarAtMs + 60_000 } : {}) } }));
   return next ? { ...d, detail: { ...d.detail, decisionTrace: next } } : d;
 }
 export function releaseTrace(d: ShadowDecision, x: { qty: number; premiumCap: number | null; debitCapUsd: number | null; observedAtMs: number }): DecisionTrace | undefined {
@@ -73,6 +79,11 @@ export function finalDecisionEvidence(d: ShadowDecision, blocked: string | null,
   const next = safeTrace(() => ({ ...t, identity,
     quantities: { ...t.quantities, postArbitrationQty: blocked ? 0 : d.qty ?? null },
     gates: [...t.gates, { name: "post_arbitration_pre_executor", status: blocked ? "fail" : "pass", reason: blocked }] }));
+  return next ? { ...d, detail: { ...d.detail, decisionTrace: next } } : d;
+}
+export function observedDecisionStage(d: ShadowDecision, stage: "arbitrationCompletedAtMs" | "executorStartedAtMs", atMs: number): ShadowDecision {
+  const t = traceOf(d); if (!t) return d;
+  const next = safeTrace(() => ({ ...t, clocks: { ...t.clocks, [stage]: atMs } }));
   return next ? { ...d, detail: { ...d.detail, decisionTrace: next } } : d;
 }
 export function brokerTrace(d: ShadowDecision, chain: ChainStore, occ: string, qty: number, atMs: number,
