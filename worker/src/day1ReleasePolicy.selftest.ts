@@ -483,9 +483,9 @@ check("runtime preserves executor-boundary failure as an explicit admission cens
   indexSource.includes("!releaseSourceExecutorBoundaryReady ? `${releasePrefix}_source_executor_boundary`"), true);
 check("runtime globally finalizes all prepared rows before the first release executor call", [
   indexSource.indexOf("const finalized = config.day1ReleaseEnabled"),
-  indexSource.indexOf("for (const batch of releaseBatches) await executeDecisionBatch"),
+  indexSource.indexOf("await executeAccountBatches(releaseBatches"),
 ].every((value) => value >= 0) && indexSource.indexOf("const finalized = config.day1ReleaseEnabled")
-  < indexSource.indexOf("for (const batch of releaseBatches) await executeDecisionBatch"), true);
+  < indexSource.indexOf("await executeAccountBatches(releaseBatches"), true);
 check("runtime builds broker and pending-order occupancy only after every account snapshot", (() => {
   const accounts = indexSource.indexOf("for (const g of groupByAccount(cfg.channels, cfg.accounts))");
   const finalize = indexSource.indexOf("const finalized = config.day1ReleaseEnabled");
