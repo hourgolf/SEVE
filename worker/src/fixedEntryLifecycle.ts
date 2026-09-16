@@ -21,6 +21,11 @@ export interface FixedManagementObservation {
 }
 export interface FixedLifecyclePorts {
   coverage: FixedCoveragePorts;
+  /** Complete, freshly validated original-intent ledger. Only for decisions
+   * that consume records; never substitutes for custody or submission proof.
+   * Older adapters may fall back to a fresh full snapshot. No cross-call cache.
+   */
+  readRecords?(intent: FixedEntryIntent): Promise<readonly FixedProtocolRecord[]>;
   booking: FixedSellBookingPorts;
   commands: Omit<FixedCommandPorts, "authorizeFresh">;
   observeManagement(intent: FixedEntryIntent, snapshot: FixedCoverageSnapshot): Promise<FixedManagementObservation>;
@@ -65,6 +70,8 @@ export async function reconcileFixedLifecycle(ports: FixedLifecyclePorts, origin
   const note = (s: string) => { if (!output.reasons.includes(s)) output.reasons.push(s); };
   let freshBuy = false, freshSell = false, exitObservedThisPass = false;
   const snapshot = () => ports.coverage.snapshot(intent);
+  const readRecords = () => ports.readRecords ? ports.readRecords(structuredClone(intent))
+    : snapshot().then(s => s.records);
   const run = async (claim: FixedCommandClaim) => {
     const result = await coordinateFixedCommand(commandPorts, intent, claim);
     output.postsAttempted += result.postAttempted ? 1 : 0;
@@ -105,11 +112,11 @@ export async function reconcileFixedLifecycle(ports: FixedLifecyclePorts, origin
     return observation;
   };
   const sellKnown = async (observation: FixedManagementObservation) => {
-    const s = await snapshot(), inventory = inspectFixedEntryInventory(intent, s.records);
+    const records = await readRecords(), inventory = inspectFixedEntryInventory(intent, records);
     const exit = inventory.records.get(fixedLedgerId("exit-required", [intent.id]));
     if (!exit) return exitObservedThisPass;
     if (!validFixedExitRequest(exit, intent)) throw new Error("invalid-exit-request");
-    await sealFixedEntryBuys(ports.coverage.storage, intent, s.records, "exit-required", new Date(ports.commands.now()).toISOString());
+    await sealFixedEntryBuys(ports.coverage.storage, intent, records, "exit-required", new Date(ports.commands.now()).toISOString());
     const row = output.coverage?.state === "covered" ? output.coverage.position : null;
     if (freshSell || !row || !await ports.mayManage(intent)) return true;
     const latest = await snapshot();
@@ -141,15 +148,14 @@ export async function reconcileFixedLifecycle(ports: FixedLifecyclePorts, origin
     await book(await snapshot());
     await cover();
     await sellKnown(await observeExit());
-    s = await snapshot();
-    for (const f of inspectFixedEntryInventory(intent, s.records).facts.filter(f => f.command.side === "buy" && !f.terminal)) {
+    const pendingBuyRecords = await readRecords();
+    for (const f of inspectFixedEntryInventory(intent, pendingBuyRecords).facts.filter(f => f.command.side === "buy" && !f.terminal)) {
       await run(f.record.body as unknown as FixedCommandClaim);
     }
     await book(await snapshot());
     await cover();
     const exiting = await sellKnown(await observeExit());
-    s = await snapshot();
-    const inventory = inspectFixedEntryInventory(intent, s.records);
+    const inventory = inspectFixedEntryInventory(intent, await readRecords());
     const buys = inventory.facts.filter(f => f.command.side === "buy");
     if (!exiting && output.coverage?.state !== "unresolved" && !inventory.buySeal && buys.every(f => f.terminal)) {
       const bought = buys.reduce((q, f) => q + (f.provenFill?.filledQty ?? 0), 0);
@@ -162,8 +168,7 @@ export async function reconcileFixedLifecycle(ports: FixedLifecyclePorts, origin
           ...(rung.limitPrice === null ? {} : { limit_price: rung.limitPrice }) },
           expiresAt: new Date(ports.commands.now() + 30_000).toISOString(), sellRow: null, exitReason: null });
       }
-      const afterBuy = await snapshot();
-      await sealFixedEntryBuys(ports.coverage.storage, intent, afterBuy.records, "buy-plan-finished", new Date(ports.commands.now()).toISOString());
+      await sealFixedEntryBuys(ports.coverage.storage, intent, await readRecords(), "buy-plan-finished", new Date(ports.commands.now()).toISOString());
       await cover();
       await sellKnown(await observeExit());
     }
@@ -188,9 +193,8 @@ export async function reconcileFixedLifecycle(ports: FixedLifecyclePorts, origin
     }
     await book(await snapshot());
     await cover();
-    s = await snapshot();
     // A just-confirmed terminal final buy may now permit a finished-plan seal.
-    await sealFixedEntryBuys(ports.coverage.storage, intent, s.records,
+    await sealFixedEntryBuys(ports.coverage.storage, intent, await readRecords(),
       exitLatched ? "exit-required" : "buy-plan-finished", new Date(ports.commands.now()).toISOString());
     output.settlement = await settleFixedEntryIntent(ports.coverage.storage, intent, await snapshot(), ports.commands.now());
     if (output.settlement) output.state = "settled";

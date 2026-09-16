@@ -7,10 +7,12 @@ import { inspectFixedEntryInventory } from "./fixedEntryLedgerInventory.js";
 import { inspectFixedSellPlans } from "./fixedEntrySellPlan.js";
 import { readFixedRowFence } from "./fixedEntryRowFence.js";
 import { requestFixedIntentExit } from "./fixedEntryExitRequest.js";
+let narrowLedgerReads = false;
 function harness(options: { spreadCapture?: boolean } = {}) {
   const h = fixedCoverageHarness(options);
   let bid = 1.9, canEnter = true, canManage = true, cancelConfirmed = false, cancelCalls = 0;
   const ports: FixedLifecyclePorts = { coverage: h.coverage, booking: h.bookPorts, commands: h.commandPorts,
+    ...(narrowLedgerReads ? { readRecords: h.readRecords } : {}),
     observeManagement: async (intent, s) => {
       const row = s.positions.find(r => r.status === "open");
       const reason = row && bid <= row.avg_entry_price * 0.5 ? "stop_premium"
@@ -171,4 +173,5 @@ async function main() {
   }
   console.log("fixedEntryLifecycle: PASS · combined entry/coverage/native exit/late fill/settlement, concurrent workers, terminal cancellation, original exit latch and authority expiry");
 }
-void main().catch(error => { console.error(error); process.exitCode = 1; });
+void main().then(() => { narrowLedgerReads = true; return main(); })
+  .catch(error => { console.error(error); process.exitCode = 1; });

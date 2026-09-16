@@ -32,6 +32,7 @@ import { buildSessionBars, computeLevels, type ShadowDecision } from "./decide.j
 import { rowAccountIdOf } from "./routing.js";
 import { assertFixedEntryServiceClient } from "./fixedEntryServiceClient.js";
 import type { OptionsAffordabilitySnapshot } from "./fixedContractAffordability.js";
+import { readFixedEntryRouting, fixedPeerAccountId } from "./fixedEntryRouting.js";
 type Client = Pick<SupabaseClient, "from">;
 const terminal = new Set(["filled", "canceled", "expired", "rejected"]);
 const number = (v: unknown) => (typeof v === "number" || typeof v === "string" && v.trim() !== "")
@@ -48,11 +49,13 @@ export function makeFixedEntryLiveAuthority(client: Client, input: {
   fetch?: typeof globalThis.fetch;
   /** Hermetic tests can replace the existing SELECT-only store adapters. */
   readConfig?: typeof loadConfig;
+  readRouting?: typeof readFixedEntryRouting;
   readControlPlane?: typeof loadReceiptBoundControlPlane;
   realizedToday?: typeof realizedTodayByChannel;
 }): Pick<FixedRuntimeBindings, "entryAuthority" | "exclusiveContract"> {
   assertFixedEntryServiceClient(client);
   const readConfig = input.readConfig ?? (()=>loadConfig(client));
+  const readRouting = input.readRouting ?? readFixedEntryRouting;
   const readControlPlane = input.readControlPlane ?? (()=>loadReceiptBoundControlPlane(client));
   const fetcher = input.fetch ?? globalThis.fetch;
   async function get(api: Api, path: string): Promise<unknown> {
@@ -70,9 +73,8 @@ export function makeFixedEntryLiveAuthority(client: Client, input: {
   return {
     async exclusiveContract(intent) {
       const observedAtMs = input.now();
-      const [rows, c] = await Promise.all([allOpenRows(), readConfig()]);
-      if (!c.accountsFresh) return { allowed: false, observedAtMs };
-      const byId = new Map(c.channels.map(ch => [ch.id, ch]));
+      const [rows, routing] = await Promise.all([allOpenRows(), readRouting(client)]);
+      if (!routing.accounts.some(a => a.id === intent.accountId)) return { allowed: false, observedAtMs };
       let allowed = true;
       for (const row of rows.filter(r => r.occ_symbol === intent.occ)) {
         if (fixedEntryOwnershipPresent(row)) {
@@ -80,7 +82,8 @@ export function makeFixedEntryLiveAuthority(client: Client, input: {
         } else {
           // An absent strategist cannot safely default a historical lot into a
           // different book. Unknown attribution quarantines this OCC.
-          if (!byId.has(row.strategist_id) || rowAccountIdOf(row, byId, c.accounts) === intent.accountId) allowed = false;
+          const accountId = fixedPeerAccountId(row.strategist_id, routing);
+          if (accountId === null || accountId === intent.accountId) allowed = false;
         }
       }
       return { allowed, observedAtMs };

@@ -129,8 +129,8 @@ async function main(stopDuringFinalRead=false) {
     const first = await runtime.recover(h.intent, "sweep");
     assert.equal(timingReceipts.length, 1);
     const snapshots = timingReceipts[0].stages.coverage_snapshot.calls;
-    assert.equal(originalLedgerReads - ledgerReadsBefore, snapshots,
-      "each fresh coverage snapshot reads the original ledger once, not again for broker attribution");
+    assert.equal(originalLedgerReads - ledgerReadsBefore, snapshots + (timingReceipts[0].stages.lifecycle_ledger?.calls ?? 0),
+      "each full snapshot and each narrow ledger read fetch the original ledger once, without a cache");
     assert.ok(snapshots > 0);
     assert.equal(timingReceipts[0].postsAttempted, first.postsAttempted, "throwing telemetry cannot alter trading result");
     if(stopDuringFinalRead){
