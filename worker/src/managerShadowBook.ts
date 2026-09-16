@@ -62,7 +62,8 @@ const admissionHealthWarned = new Set<string>();
  * In-memory registration uses only the database rows actually read back. */
 export async function replayFixedManagerCohorts(client:Pick<SupabaseClient,"from">,intent:FixedEntryIntent,
   cohorts:FixedReportingPlan["cohorts"]):Promise<boolean> {
-  if (!config.managerShadowBookEnabled || disabled || !config.hasServiceRole || config.optFeed !== "opra" || ticking) return false;
+  if (!config.managerShadowBookEnabled || disabled || !config.hasServiceRole || config.optFeed !== "opra") return false;
+  if (ticking) throw new Error("fixed_reporting:manager_cohort_busy");
   ticking = true;
   try {
     if (!await hydrate()) return false;
@@ -73,8 +74,7 @@ export async function replayFixedManagerCohorts(client:Pick<SupabaseClient,"from
       if (item.run.status === "terminal" && !isReadOnlyHistoricalManagerRun(item.run)) pendingTerminalReceipts.add(item.run.id);
     }
     return true;
-  } catch { return false; }
-  finally { ticking = false; }
+  } finally { ticking = false; }
 }
 
 const ET_CLOCK = new Intl.DateTimeFormat("en-US", {
