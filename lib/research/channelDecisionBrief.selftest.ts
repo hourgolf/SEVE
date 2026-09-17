@@ -51,6 +51,8 @@ const missingCapture = buildChannelDecisionBriefs({ atlas, weekly,
   opportunities: opportunities.map(row => ({...row, captureRatio: null})) });
 assert.equal(missingCapture.channels.test.decisionDistribution?.coherentCapture, null,
   "censored capture must not be recreated from return and peak medians");
+assert.equal(missingCapture.channels.test.nativeExit.typicalCapture, null,
+  "native summary must preserve missing capture too");
 const impossibleCapture = buildChannelDecisionBriefs({ atlas, weekly,
   opportunities: opportunities.map(row => ({...row, captureRatio: 1.2})) });
 assert.equal(impossibleCapture.channels.test.decisionDistribution?.coherentCapture, null,
