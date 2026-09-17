@@ -113,6 +113,7 @@ export function DailyAutopsyBody({
         {traded.map((c) => {
           const cn = n?.channels?.find((x) => x.slug === c.slug);
           const m = c.metrics;
+          const peak = m.peakDiagnostic?.schema === "seve-reporting-v3" ? m.peakDiagnostic : null;
           return (
             <div className={`au-ch${benched.has(c.slug) ? " au-ch--benched" : ""}`} key={c.slug}>
               <div className="au-ch-head">
@@ -123,9 +124,10 @@ export function DailyAutopsyBody({
               </div>
               <div className="au-metrics">
                 {m.nTrades} trades · {Math.round(m.winRate * m.nTrades)} profitable · median hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R (50% risk proxy) · most common exit {topExit(c.exitReasons)}
-                {m.peakDiagnostic?.schema === "seve-reporting-v3" && m.peakCapturePct != null && (
-                  <span title={`${m.nPeaked}/${m.nTrades} trades peaked above entry · avg peak +${m.avgPeakPct?.toFixed(1)}% · kept ${m.peakCapturePct}% of the peak gain`}>
-                    {" "}· best move +{m.avgPeakPct}% · <b className={m.peakCapturePct >= 50 ? "pos" : "neg"}>retained {m.peakCapturePct.toFixed(1)}%</b>
+                {peak && (
+                  <span title={`Coherent held marks: ${peak.valid}/${peak.total} logical trades valid; ${peak.excluded} excluded. Executable capture is unknown.`}>
+                    {" "}· sampled held peak {peak.averagePeakPct == null ? "unknown" : `+${peak.averagePeakPct.toFixed(1)}%`} · <b>held-mark ratio {peak.retainedPct == null ? "unknown" : `${peak.retainedPct.toFixed(1)}%`}</b>
+                    {" "}· {peak.valid}/{peak.total} valid, {peak.excluded} excluded
                   </span>
                 )}
               </div>
