@@ -9,7 +9,7 @@ export function ChannelCollectionCullPanel() {
     <details className="collection-cull">
       <summary>
         <b>COLLECTION</b>
-        <em>{control.cullable.length} ACTIVE · {control.resumable.length} PAUSED</em>
+        <em>{control.error ? "READ ERROR" : !control.loaded ? "CHECKING COLLECTION" : `${control.cullable.length} ACTIVE · ${control.resumable.length} PAUSED`}</em>
         <i aria-hidden="true">▾</i>
       </summary>
       <div>

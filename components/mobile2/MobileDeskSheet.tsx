@@ -60,7 +60,7 @@ export function MobileBookView({ props, onViewMarket, onNavigate }: { props: Sur
   const exposure = useMemo(() => computeNetExposure(feed.positions, liveMarks), [feed.positions, liveMarks]);
   const recentExits = useMemo(() => deriveRecentExits(feed.recentTrades), [feed.recentTrades]);
   const reconciliation = props.opsReadiness.evidence.find((item) => item.id === "reconciliation");
-  const attributionBlocked = feed.positionAttribution.state === "blocked";
+  const attributionBlocked = !["ok", "recovered"].includes(feed.positionAttribution.state);
   const hasOpenPositions = feed.positions.length > 0;
   const hasRecentExits = recentExits.rows.length > 0;
   const isQuietBook = !attributionBlocked && !hasOpenPositions && !hasRecentExits;
@@ -69,7 +69,7 @@ export function MobileBookView({ props, onViewMarket, onNavigate }: { props: Sur
     <div className="m2-book-nav"><span><b>BOOK</b><small>POSITIONS · EXPOSURE · EXITS</small></span>{onViewMarket && <div><button type="button" onClick={() => onViewMarket("chart")}>CHART</button><button type="button" onClick={() => onViewMarket("chain")}>CHAIN</button></div>}</div>
     <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="positions" channelSlugs={feed.positions.map((position) => position.strategist_slug)} onNavigate={onNavigate} />
     {reconciliation?.tone !== "green" && <BrokerReconciliationStrip model={props.opsReadiness} compact />}
-    {isQuietBook ? <div className="m2-book-empty" role="status"><b>DESK FLAT</b><p>There are no open positions or current-session exits for this account.</p><ul><li>No capital is deployed</li><li>The next position will appear here</li><li>{reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is checking"}</li></ul></div> : <>
+    {attributionBlocked ? <div className="m2-book-empty" role="status"><b>POSITION EVIDENCE UNAVAILABLE</b><p>Loading or unresolved account attribution does not establish a flat account.</p></div> : isQuietBook ? <div className="m2-book-empty" role="status"><b>DESK FLAT</b><p>There are no open positions or current-session exits for this account.</p><ul><li>No capital is deployed</li><li>The next position will appear here</li><li>{reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is checking"}</li></ul></div> : <>
     {(hasOpenPositions || attributionBlocked) && <MobilePositions props={props} strategists={props.view.desk.strategists} onOpenChannel={(slug) => onNavigate?.({ section: "studio", channel: slug })} onOpenContract={(occ) => onNavigate?.({ section: "market", occ })} compact />}
     {hasOpenPositions && <div className="m2-desk-hero">
       <span><small>OPEN</small><b>{feed.positions.length}</b></span>
@@ -257,14 +257,14 @@ export function MobileOpsView({ props, channels, destination, onNavigate, onOpen
 }
 
 function BuildView({ props, channels, onAddChannel }: { props: SurfaceProps; channels: StrategistState[]; onAddChannel: () => void }) {
-  const bench = channels.filter((channel) => channel.status !== "armed");
+  const bench = channels.filter((channel) => props.channelWorkspace.bySlug[channel.slug]?.lifecycle !== "paper-root");
   return <>
     <Section title="ADD CHANNEL" meta="thesis → spec → gate → arm">
       <p className="m2-build-copy">Import a strategy thesis, compile it into executable rules, run the modeled gate, then arm it or save it to the bench.</p>
       <button type="button" className="m2-build-add" disabled={!props.write.canDirectConfigure} title={props.write.canDirectConfigure ? "Add a channel" : props.write.configurationWriteFact} onClick={onAddChannel}>{props.write.canWrite ? "+ ADD VIA PROPOSAL" : "SIGN IN TO REVIEW"}</button>
     </Section>
-    <Section title="BENCH" meta="draft · disabled · wind-down">
-      {bench.length === 0 ? <div className="m2-desk-empty">bench empty</div> : <div className="m2-bench-list">{bench.map((channel) => <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><span><b>{channel.slug}</b><small>{channel.regime} · {channel.underlying}</small></span><em>{channel.status.toUpperCase()}</em></div>)}</div>}
+    <Section title="BENCH" meta="receipt-bound observe-only / unverified">
+      {bench.length === 0 ? <div className="m2-desk-empty">bench empty</div> : <div className="m2-bench-list">{bench.map((channel) => <div key={channel.slug} style={{ ["--pm" as string]: pmVar(channel.color) }}><i /><span><b>{channel.slug}</b><small>{channel.regime} · {channel.underlying}</small></span><em>{props.channelWorkspace.bySlug[channel.slug]?.lifecycleLabel ?? "UNVERIFIED"}</em></div>)}</div>}
     </Section>
     <Section title="MOBILE PARITY" meta="deliberate scope">
       <div className="m2-parity-note">Live book, broker reconciliation, retained event tape, linked trade evidence, nightly read, preflight, day books, settings, and channel creation are available here. Deep historical autopsy and shadow-book forensics remain desktop review tools until their data is lifted to the shared seam.</div>

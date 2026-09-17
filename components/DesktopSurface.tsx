@@ -84,6 +84,7 @@ function SortableChannel(props: {
   active: boolean;
   ducked: boolean;
   disabled: boolean;
+  passport?: SurfaceProps["channelWorkspace"]["bySlug"][string];
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: props.strategist.slug,
@@ -98,6 +99,7 @@ function SortableChannel(props: {
     <div ref={setNodeRef} style={style} className="ch-sortable">
       <ChannelStrip
         strategist={props.strategist}
+        passport={props.passport}
         pnl={props.pnl}
         active={props.active}
         ducked={props.ducked}
@@ -134,6 +136,7 @@ export function DesktopSurface({
   collapsedMarket,
   setCollapsedMarket,
   reviewEvidence,
+  channelWorkspace, allChannelWorkspace,
 }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const [addOpen, setAddOpen] = useState(false);
@@ -199,8 +202,8 @@ export function DesktopSurface({
 
   // The 86'd shelf: only ARMED channels get full strips; benched (draft) channels
   // collapse to small pads on a rail below — tap one to inspect / re-arm.
-  const armed = accountChannels.filter((s) => s.status === "armed");
-  const benched = accountChannels.filter((s) => s.status !== "armed");
+  const armed = accountChannels.filter((s) => channelWorkspace.bySlug[s.slug]?.lifecycle === "paper-root");
+  const benched = accountChannels.filter((s) => channelWorkspace.bySlug[s.slug]?.lifecycle !== "paper-root");
   const [benchOpen, setBenchOpen] = useState<string | null>(null);
 
   // ---- drag-to-reorder + group-by (operator only; persists sort_order) ----
@@ -233,7 +236,7 @@ export function DesktopSurface({
 
   // BOOKS Δ for the shell: NAV-truth day P&L − Σ per-channel attribution (shared-OCC).
   const attrib = Object.values(livePnl).reduce((a, c) => a + (c.dayPnl || 0), 0);
-  const booksDelta = Math.round(liveFund.dayPnl - attrib);
+  const booksDelta = liveFund.dayPnl == null ? null : Math.round(liveFund.dayPnl - attrib);
 
   // Collapsed-market ticker: the selected symbol's day summary + a sparkline path.
   const mkt = marketSummary(data.bars, data.spot);
@@ -354,7 +357,7 @@ export function DesktopSurface({
           <div className="console-grid">
             <div className="channels-col">
               {rosterView === "table" ? (
-                <RosterTable channels={armed} livePnl={livePnl} />
+                <RosterTable passports={channelWorkspace} channels={armed} livePnl={livePnl} />
               ) : (
               <DndContext id="mixer-strips" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                 <SortableContext items={channelOrder} strategy={rectSortingStrategy}>
@@ -362,11 +365,11 @@ export function DesktopSurface({
                     {armed.map((s) => (
                       <SortableChannel
                         key={s.slug}
-                        strategist={s}
+                        strategist={s} passport={channelWorkspace.bySlug[s.slug]}
                         pnl={livePnl[s.slug]}
                         active={isActive(s.slug)}
                         ducked={anySolo && !s.config.soloed && !s.config.muted}
-                        disabled={!canWrite}
+                        disabled={!canDirectConfigure}
                       />
                     ))}
                   </div>
@@ -376,8 +379,8 @@ export function DesktopSurface({
               {benched.length > 0 && (
                 <div className="bench">
                   <div className="bench-bar">
-                    <span className="bench-title">Bench · 86&apos;d</span>
-                    <span className="bench-hint">no entries; open positions wind down — tap to inspect / re-arm</span>
+                    <span className="bench-title">Observe / unverified</span>
+                    <span className="bench-hint">Current receipt-bound status — tap to inspect</span>
                   </div>
                   <div className="bench-pads">
                     {benched.map((s) => (
@@ -458,7 +461,7 @@ export function DesktopSurface({
                 scopeLabel={accountScope}
                 todayAttribution={feed.positionAttribution}
               />,
-              autopsy: <AutopsyPanel strategists={desk.strategists} daily={reviewEvidence.daily} weekly={reviewEvidence.weekly} />,
+              autopsy: <AutopsyPanel passports={allChannelWorkspace} strategists={desk.strategists} daily={reviewEvidence.daily} weekly={reviewEvidence.weekly} />,
               brief: <BriefPanel />,
               sentinel: <SentinelPanel />,
               forensics: <ForensicsPanel

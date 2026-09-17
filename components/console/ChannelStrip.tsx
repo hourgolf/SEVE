@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChannelPassport } from "@/lib/channels/channelPassport";
 import { memo, useRef, useState } from "react";
 import { Knob } from "@/components/console/hw/Knob";
 import { Fader } from "@/components/console/hw/Fader";
@@ -13,6 +14,7 @@ import { PM_COLORS, pmVar } from "@/lib/desk/colors";
 
 export interface ChannelStripProps {
   strategist: StrategistState;
+  passport?: ChannelPassport;
   pnl: ChannelPnl | undefined;
   active: boolean; // effectively trading right now
   ducked: boolean; // dimmed because another channel is soloed
@@ -708,4 +710,16 @@ function ChannelStripImpl({ strategist, pnl, active, ducked, mobile, dragHandle,
 }
 
 // Memo so dragging one strip's knob doesn't re-render the others.
-export const ChannelStrip = memo(ChannelStripImpl);
+export const ChannelStrip = memo(function ReportingChannelStrip(props: ChannelStripProps) {
+  const { canDirectConfigure } = useDeskWrite();
+  if (canDirectConfigure) return <ChannelStripImpl {...props} />;
+  const p = props.passport;
+  return <div className="ch-strip" style={{ padding: 16, border: "1px solid var(--line)", borderRadius: 8 }}>
+    <b>{props.strategist.name}</b><p>{p?.lifecycleLabel ?? "UNVERIFIED"}</p>
+    <strong>{signedUsd(props.pnl?.dayPnl)} gross session attribution</strong>
+    <p>{p?.effective.economics.fact ?? "Current sizing and manager authority unavailable."}</p>
+    <p>{p?.rootPolicy?.managerLabel ?? p?.effective.economics.managerProfileId ?? "Manager unverified"}</p>
+    <small>Read-only runtime summary. Configuration changes use the governed channel workflow.</small>
+    {props.onExpand && <button type="button" onClick={props.onExpand}>Inspect channel</button>}
+  </div>;
+});

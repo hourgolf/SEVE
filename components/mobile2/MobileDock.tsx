@@ -29,19 +29,20 @@ function pkWin(slug: string, lens: Lens | null, pnl?: ChannelPnl): { pk: number 
 }
 
 function Chicklet({
-  ch, pnl, lens, canWrite, onOpen, onMute,
+  ch, passport, pnl, lens, canWrite, onOpen, onMute,
 }: {
   ch: StrategistState;
+  passport?: SurfaceProps["channelWorkspace"]["bySlug"][string];
   pnl?: ChannelPnl;
   lens: Lens | null;
   canWrite: boolean;
   onOpen?: () => void;
   onMute: () => void;
 }) {
-  const muted = ch.config.muted;
-  const armed = ch.status === "armed" && !muted;
-  const dim = muted ? " off" : ch.status !== "armed" ? " dark" : "";
-  const tag = muted ? "MUTED" : ch.status !== "armed" ? (ch.status === "disabled" ? "OBSERVE" : "DRAFT") : null;
+  const muted = passport?.lifecycle === "dark-evidence";
+  const armed = passport?.lifecycle === "paper-root";
+  const dim = armed ? "" : " dark";
+  const tag = passport?.lifecycleLabel ?? "UNVERIFIED";
   const { pk, win } = pkWin(ch.slug, lens, pnl);
   const day = pnl?.dayPnl;
   const dayCls = day == null || day === 0 ? "flat" : day < 0 ? "neg" : "pos";
@@ -56,7 +57,7 @@ function Chicklet({
         </div>
         <div className={`m2-chick-pnl num ${dayCls}`}>{day != null ? signedUsd(day) : "—"}</div>
         {tag ? (
-          <span className={`m2-chick-tag ${tag === "MUTED" ? "muted" : "darkch"}`}>{tag}</span>
+          <span className={`m2-chick-tag ${tag === "OBSERVE ONLY" ? "muted" : "darkch"}`}>{tag}</span>
         ) : pk == null && win == null ? (
           <span className="m2-chick-pw">best— · win—</span>
         ) : (
@@ -78,9 +79,10 @@ function Chicklet({
 }
 
 export function MobileDock({
-  channels, livePnl, lens, write, onOpenChannel,
+  channels, livePnl, lens, write, onOpenChannel, passports,
 }: {
   channels: StrategistState[];
+  passports?: SurfaceProps["channelWorkspace"];
   livePnl: Record<string, ChannelPnl>;
   lens: Lens | null;
   write: SurfaceProps["write"];
@@ -90,7 +92,7 @@ export function MobileDock({
   const { canDirectConfigure: canWrite, persistConfig } = write;
   const [open, setOpen] = useState(false);
   const [writeError, setWriteError] = useState<string | null>(null);
-  const muted = channels.filter((channel) => channel.config.muted).length;
+  const muted = channels.filter((channel) => passports?.bySlug[channel.slug]?.lifecycle === "dark-evidence").length;
 
   const mute = (ch: StrategistState) => {
     if (!canWrite) return;
@@ -107,7 +109,7 @@ export function MobileDock({
     <nav className={`m2-dock${open ? " open" : " collapsed"}`} aria-label="channel dock">
       <button type="button" className="m2-dock-cap" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
         <span className="m2-silk">MIX · {channels.length}</span>
-        <small className={writeError ? "error" : ""} title={writeError ?? undefined}>{writeError ? "WRITE FAILED" : `${muted ? `${muted} MUTED · ` : ""}${open ? "TAP TO COLLAPSE" : "TAP TO EXPAND"}`}</small>
+        <small className={writeError ? "error" : ""} title={writeError ?? undefined}>{writeError ? "WRITE FAILED" : `${muted ? `${muted} OBSERVE ONLY · ` : ""}${open ? "TAP TO COLLAPSE" : "TAP TO EXPAND"}`}</small>
         <b>{open ? "▾" : "▴"}</b>
       </button>
       {open && <div className="m2-dock-grid">
@@ -115,6 +117,7 @@ export function MobileDock({
           <Chicklet
             key={ch.slug}
             ch={ch}
+            passport={passports?.bySlug[ch.slug]}
             pnl={livePnl[ch.slug]}
             lens={lens}
             canWrite={canWrite}

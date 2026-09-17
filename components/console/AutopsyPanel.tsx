@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 import { useState } from "react";
 import { useFold } from "@/hooks/useFold";
 import { DailyAutopsyBody } from "./DailyAutopsyPanel";
@@ -13,10 +14,12 @@ import type { StrategistState } from "@/lib/desk/types";
 // The bodies keep their own expand/section state; WEEK's hook lazy-loads on first toggle.
 export function AutopsyPanel({
   strategists,
+  passports,
   daily,
   weekly,
 }: {
   strategists: StrategistState[];
+  passports?: ChannelWorkspaceModel;
   daily: ReturnType<typeof useDailyReports>;
   weekly: ReturnType<typeof useWeeklyReports>;
 }) {
@@ -36,7 +39,7 @@ export function AutopsyPanel({
       </div>
       <div className="pbody">
         {view === "day"
-          ? <DailyAutopsyBody strategists={strategists} evidence={daily} />
+          ? <DailyAutopsyBody strategists={strategists} passports={passports} evidence={daily} />
           : <WeeklyAutopsyBody strategists={strategists} evidence={weekly} />}
       </div>
     </div>

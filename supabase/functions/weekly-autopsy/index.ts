@@ -1,3 +1,5 @@
+// Reporting v3: logical trades, immutable account routes, coherent sampled held marks.
+// Historical implementation notes below are not the current metric contract.
 // ⚑ WEEKLY-AUTOPSY VERSION: 2026-06-13d  (UNIFIED NAMING — the report now refers to every channel
 //   by the operator's chosen display NAME (e.g. "BREAK(ALT)") everywhere a human reads it, never
 //   the slug ("breakout-smart-entries"), which was the confusing two-name split. SYS prompt has an
@@ -72,6 +74,7 @@
 //  OFF). Needs ANTHROPIC_API_KEY in edge secrets; SUPABASE_* auto-injected.
 // ============================================================================
 
+import { REPORTING_SCHEMA, summarizePeakDiagnostics, validatedNarrative } from "../_shared/reportingEvidence.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
   deriveAccountCongruentEquity,
@@ -100,13 +103,16 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 type Any = any;
 
 async function buildWeekly(weekEnd: string): Promise<Any> {
-  const { data: reps } = await sb.from("daily_reports").select("report_date,mode,digest").lte("report_date", weekEnd).order("report_date", { ascending: false }).limit(5);
+  const monday = new Date(weekEnd + "T12:00:00Z");
+  monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+  const { data: reps, error: dailyError } = await sb.from("daily_reports").select("report_date,mode,digest").eq("mode", "paper").gte("report_date", monday.toISOString().slice(0,10)).lte("report_date", weekEnd).order("report_date", { ascending: false }).limit(7);
+  if (dailyError) throw new Error(dailyError.message);
   const rows = ((reps ?? []) as Any[]).reverse();
   if (!rows.length) throw new Error(`no daily_reports at/before ${weekEnd}`);
   const days: string[] = rows.map((r) => r.report_date);
   const mode = rows[rows.length - 1].mode ?? "paper";
   const digests: Any[] = rows.map((r) => r.digest);
-  const nonLogicalDays = rows.filter((row) => row.digest?.evidence?.unit !== "logical_trade"
+  const nonLogicalDays = rows.filter((row) => row.digest?.evidence?.producerVersion !== REPORTING_SCHEMA || row.digest?.evidence?.unit !== "logical_trade"
     || row.digest?.evidence?.reconciliation !== "immutable_execution_routes");
   if (nonLogicalDays.length) {
     throw new Error(`weekly logical-trade evidence blocked; daily reports require regeneration: ${nonLogicalDays.map((row) => row.report_date).join(",")}`);
@@ -117,8 +123,8 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
     d.marketQQQ ? { date: d.date, instrument: "QQQ", returnPct: d.marketQQQ.returnPct, efficiency: d.marketQQQ.efficiency, note: d.marketQQQ.note } : null,
   ].filter(Boolean));
 
-  const byDayFund = digests.map((d) => ({ date: d.date, pnl: Math.round(d.fund.dayRealized), trades: d.fund.trades }));
-  const realized = byDayFund.reduce((a, d) => a + d.pnl, 0);
+  const byDayFund = digests.map((d) => ({ date: d.date, pnl: d.fund.dayRealized, trades: d.fund.trades }));
+  const realized = digests.reduce((sum, d) => sum + d.fund.dayRealized, 0);
   const totalTrades = digests.reduce((a, d) => a + d.fund.trades, 0);
   const bestDay = byDayFund.length ? byDayFund.reduce((b, d) => (d.pnl > b.pnl ? d : b)) : null;
   const worstDay = byDayFund.length ? byDayFund.reduce((b, d) => (d.pnl < b.pnl ? d : b)) : null;
@@ -135,7 +141,7 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
       .select("account_id,net_liquidation,captured_at")
       .is("strategist_id", null)
       .in("account_id", paperAccountIds)
-      .gte("captured_at", startIso)
+      .gte("captured_at", startIso).lt("captured_at", new Date(Date.parse(`${weekEnd}T12:00:00Z`) + 24 * 3600_000).toISOString())
       .order("captured_at", { ascending: true })
       .range(from, from + 999);
     if (error) throw new Error(`account-equity read failed: ${error.message}`);
@@ -143,38 +149,17 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
     snapRows.push(...rows);
     if (rows.length < 1000) break;
   }
-  const accountEquity = deriveAccountCongruentEquity(snapRows, paperAccountIds, days);
-  const equityCurve = accountEquity.daily;
-  const navDelta = equityCurve.length >= 2 ? Math.round(equityCurve[equityCurve.length - 1].nav - equityCurve[0].nav) : null;
-  const maxDrawdown = accountEquity.maxDrawdown;
-
-  // slug→id + LIVE lifecycle status (so the report is roster-aware: don't recommend
-  // muting a channel that's already benched, and frame verdicts against today's roster
-  // not the status frozen into last week's daily digests).
-  const { data: stratRows } = await sb.from("strategists").select("id,slug,status");
-  const slugToId = new Map(((stratRows ?? []) as Any[]).map((r) => [r.slug, String(r.id)]));
-  const liveStatusBySlug = new Map(((stratRows ?? []) as Any[]).map((r) => [r.slug, String(r.status ?? "armed")]));
-  const { data: allPos } = await sb.from("positions").select("strategist_id,occ_symbol,opt_type,qty,avg_entry_price,realized_pnl,opened_at,closed_at,close_reason").eq("status", "closed").gte("closed_at", `${days[0]}T00:00:00Z`).limit(5000);
-  const weekPos = ((allPos ?? []) as Any[]).filter((p) => p.closed_at && days.includes(etDate(Date.parse(p.closed_at))));
-
-  // close_reason TEMPORAL GUARD (so the report never again misreads pre-instrumentation
-  // history as a live "logging bug" — the 06-12 false alarm). Anchor = the EARLIEST stamped
-  // exit anywhere in the table (self-calibrating, no magic date). A NULL exit BEFORE this is
-  // legacy/pre-feature (not a bug); a NULL AFTER it is a genuine logging GAP worth flagging.
-  const { data: firstStamp } = await sb.from("positions").select("closed_at").not("close_reason", "is", null).neq("close_reason", "").order("closed_at", { ascending: true }).limit(1).maybeSingle();
-  const closeReasonSince = (firstStamp as Any)?.closed_at ? Date.parse((firstStamp as Any).closed_at) : null;
-
-  // intrinsic-MFE source: the week's underlying_bars (SPY+QQQ), indexed by symbol→day→{lo,hi}
-  const { data: bars } = await sb.from("underlying_bars").select("symbol,ts,high,low").gte("ts", startIso).order("ts", { ascending: true }).limit(20000);
-  const dayHL = new Map<string, { lo: number; hi: number }>(); // `${sym}|${date}` (RTH-agnostic; intraday extreme)
-  for (const b of (bars ?? []) as Any[]) { const d = etDate(Date.parse(b.ts)); const k = `${b.symbol}|${d}`; const e = dayHL.get(k); const lo = Number(b.low), hi = Number(b.high); if (!e) dayHL.set(k, { lo, hi }); else { e.lo = Math.min(e.lo, lo); e.hi = Math.max(e.hi, hi); } }
-  function mfe(occ: string, entry: number, day: string): number {
-    const mm = /^([A-Z]+)(\d{6})([CP])(\d{8})$/.exec(occ); if (!mm) return entry;
-    const sym = mm[1], isPut = mm[3] === "P", strike = Number(mm[4]) / 1000;
-    const hl = dayHL.get(`${sym}|${day}`); if (!hl) return entry;
-    const intrinsic = Math.max(0, isPut ? strike - hl.lo : hl.hi - strike);
-    return Math.max(entry, intrinsic);
+  let navIssue: string | null = null;
+  let accountEquity: ReturnType<typeof deriveAccountCongruentEquity> = { points: [], daily: [], maxDrawdown: 0 };
+  try {
+    accountEquity = deriveAccountCongruentEquity(snapRows.filter(row => days.includes(etDate(Date.parse(row.captured_at)))), paperAccountIds, days);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.startsWith("account-complete equity snapshots missing")) throw error;
+    navIssue = error.message;
   }
+  const equityCurve = accountEquity.daily;
+  const navDelta = accountEquity.points.length >= 2 ? Number((accountEquity.points.at(-1)!.nav - accountEquity.points[0].nav).toFixed(2)) : null;
+  const maxDrawdown = navIssue || accountEquity.points.length < 2 ? null : accountEquity.maxDrawdown;
 
   const slugs = [...new Set(digests.flatMap((d: Any) => d.channels.map((c: Any) => c.slug)))];
   const channels: Any[] = [];
@@ -185,26 +170,16 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
     const allTrades = dayCh.flatMap((x) => x.ch.trades.map((t: Any) => ({ ...t, date: x.date })));
     const wins = allTrades.filter((t: Any) => t.pnl > 0), losses = allTrades.filter((t: Any) => t.pnl <= 0);
     const exitReasons: Record<string, number> = {}; for (const x of dayCh) for (const [k, v] of Object.entries(x.ch.exitReasons)) exitReasons[k] = (exitReasons[k] ?? 0) + (v as number);
-    const byDay = dayCh.map((x) => ({ date: x.date, pnl: Math.round(x.ch.metrics.realizedPnl), trades: x.ch.metrics.nTrades }));
+    const byDay = dayCh.map((x) => ({ date: x.date, pnl: x.ch.metrics.realizedPnl, trades: x.ch.metrics.nTrades }));
     const flawDays: Record<string, { days: number; severity: string }> = {};
     for (const x of dayCh) for (const f of x.ch.flaws) { const e = flawDays[f.type] ?? { days: 0, severity: f.severity }; e.days++; flawDays[f.type] = e; }
     const recurringFlaws = Object.entries(flawDays).filter(([, v]) => v.days >= 2).map(([type, v]) => ({ type, days: v.days, severity: v.severity }));
-    let mfeUpside = 0, captured = 0; let biggestRunner: Any = null;
-    const chPos = weekPos.filter((p) => p.strategist_id === slugToId.get(slug));
-    for (const p of chPos) {
-      const day = etDate(Date.parse(p.closed_at)); const entry = Number(p.avg_entry_price), qty = Math.abs(Number(p.qty));
-      const couldHave = Math.round((mfe(p.occ_symbol, entry, day) - entry) * qty * 100);
-      const actual = Math.round(Number(p.realized_pnl ?? 0));
-      if (couldHave > 0) { mfeUpside += couldHave; captured += Math.max(0, actual); }
-      if (couldHave > 0 && (!biggestRunner || couldHave - actual > biggestRunner.couldHave - biggestRunner.actual)) biggestRunner = { occ: p.occ_symbol, actual, couldHave, date: day };
-    }
-    const captureRatio = mfeUpside > 0 ? Number((captured / mfeUpside).toFixed(2)) : 1;
-    // Exit-logging health (temporal guard): split this channel's NULL-reason closes into
-    // legacy (closed before close_reason went live = expected) vs gap (closed AFTER = a real
-    // logging regression). status 'gap' is the only one the LLM should call a SYSTEM bug.
-    const nullCloses = chPos.filter((p) => !p.close_reason);
-    const gapNull = closeReasonSince == null ? 0 : nullCloses.filter((p) => Date.parse(p.closed_at) >= closeReasonSince).length;
-    const exitLogging = { status: gapNull > 0 ? "gap" : nullCloses.length ? "legacy" : "ok", gapNull, legacyNull: nullCloses.length - gapNull, total: chPos.length };
+    const peakDiagnostic = summarizePeakDiagnostics(allTrades.map((t: Any) => t.peakObservation));
+    const mfeUpside = peakDiagnostic.denominatorUsd, captured = peakDiagnostic.numeratorUsd;
+    const captureRatio = peakDiagnostic.retainedPct == null ? null : peakDiagnostic.retainedPct / 100;
+    const provenance = allTrades.flatMap((t: Any) => t.exitProvenance ?? []);
+    const missing = provenance.filter((p: Any) => p.source === "unavailable").length;
+    const exitLogging = { status: missing ? "unknown" : "recorded", gapNull: missing, legacyNull: 0, total: provenance.length };
     const medHold = Number(median(allTrades.map((t: Any) => t.holdMin)).toFixed(1));
     // SCALP flag: a fast fixed-target / curfew exit by DESIGN — capture-vs-intrinsic-peak
     // is a meaningless grade for these (the mandate never aims at the peak). Detected by
@@ -213,29 +188,21 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
     const scalp = medHold < 5 || /scalp|grind/i.test(String(meta.mandate ?? ""));
     channels.push({
       slug, name: meta.name, mandate: meta.mandate, status: meta.status,
-      liveStatus: liveStatusBySlug.get(slug) ?? meta.status, scalp, exitLogging,
-      metrics: { nTrades: allTrades.length, wins: wins.length, winRate: allTrades.length ? Number((wins.length / allTrades.length).toFixed(3)) : 0, realizedPnl: Math.round(allTrades.reduce((a: number, t: Any) => a + t.pnl, 0)), avgWin: Math.round(mean(wins.map((t: Any) => t.pnl))), avgLoss: Math.round(mean(losses.map((t: Any) => t.pnl))), avgR: Number(mean(allTrades.map((t: Any) => t.R)).toFixed(2)), medianHoldMin: medHold, bestTrade: Math.round(Math.max(0, ...allTrades.map((t: Any) => t.pnl))), worstTrade: Math.round(Math.min(0, ...allTrades.map((t: Any) => t.pnl))) },
+      liveStatus: "unverified", scalp, exitLogging,
+      metrics: { nTrades: allTrades.length, wins: wins.length, winRate: allTrades.length ? Number((wins.length / allTrades.length).toFixed(3)) : 0, realizedPnl: allTrades.reduce((a: number, t: Any) => a + t.pnl, 0), avgWin: Math.round(mean(wins.map((t: Any) => t.pnl))), avgLoss: Math.round(mean(losses.map((t: Any) => t.pnl))), avgR: Number(mean(allTrades.map((t: Any) => t.R)).toFixed(2)), medianHoldMin: medHold, bestTrade: Math.round(Math.max(...allTrades.map((t: Any) => t.pnl))), worstTrade: Math.round(Math.min(...allTrades.map((t: Any) => t.pnl))) },
       byDay, exitReasons, recurringFlaws,
-      exitEfficiency: { positionTranches: chPos.length, unit: "position_tranche", mfeUpside, captured, captureRatio, biggestRunner },
+      exitEfficiency: { unit: "logical_trade", mfeUpside, captured, captureRatio, biggestRunner: null, peakDiagnostic },
     });
   }
-  // Capture leak board EXCLUDES scalpers (their fast-target exit is the design, not a leak)
-  // — this stops grind-* dominating a "$X left on the table" headline that's a mirage for
-  // them. redThatRanGreen (the GENUINE giveback signal: a trade that went green then exited
-  // RED) stays across all channels — that's a real exit failure regardless of mandate.
-  const nonScalp = channels.filter((c) => !c.scalp);
-  const totalUpsideLeft = nonScalp.reduce((a, c) => a + Math.max(0, c.exitEfficiency.mfeUpside - c.exitEfficiency.captured), 0);
-  const worstCaptureChannels = nonScalp.filter((c) => c.exitEfficiency.mfeUpside > 200).sort((a, b) => a.exitEfficiency.captureRatio - b.exitEfficiency.captureRatio).slice(0, 5).map((c) => ({ slug: c.slug, captureRatio: c.exitEfficiency.captureRatio, left: Math.round(c.exitEfficiency.mfeUpside - c.exitEfficiency.captured) }));
-  const redThatRanGreen = channels.map((c) => c.exitEfficiency.biggestRunner ? { slug: c.slug, scalp: c.scalp, ...c.exitEfficiency.biggestRunner } : null).filter((x) => x && x.actual <= 0 && x.couldHave > 0).sort((a, b) => b.couldHave - a.couldHave).slice(0, 6);
-  const roster = { armed: [...liveStatusBySlug.entries()].filter(([, s]) => s === "armed").map(([sl]) => sl), benched: [...liveStatusBySlug.entries()].filter(([, s]) => s !== "armed").map(([sl]) => sl) };
-  // Desk-wide exit-logging health: close_reason live-since date + the channels (if any) with
-  // POST-feature NULL closes (the only real "logging bug" signal; legacy NULLs are expected).
-  const exitLoggingHealth = { since: closeReasonSince ? etDate(closeReasonSince) : null, channelsWithGap: channels.filter((c) => c.exitLogging.status === "gap").map((c) => ({ slug: c.slug, gapNull: c.exitLogging.gapNull })) };
+  // Different held windows cannot identify recoverable portfolio upside or manager superiority.
+  const totalUpsideLeft = null, worstCaptureChannels: Any[] = [], redThatRanGreen: Any[] = [];
+  const roster = { state: "unverified", armed: [], benched: [] };
+  const exitLoggingHealth = { since: null, channelsWithGap: channels.filter(c => c.exitLogging.gapNull > 0).map(c => ({ slug: c.slug, gapNull: c.exitLogging.gapNull })) };
 
-  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, roster, exitLoggingHealth, fund: { realized, navDelta, maxDrawdown: Math.round(maxDrawdown), trades: totalTrades, winRate: totalTrades ? Number((digests.reduce((a, d) => a + d.fund.winRate * d.fund.trades, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen }, evidence: {
-    schemaVersion: 2, layer: "historical_executed", unit: "logical_trade", scope: "all_configured_paper_accounts",
-    reconciliation: "immutable_execution_routes_plus_account_complete_nav", sourceDailyReports: days,
-    exitEfficiencyUnit: "position_tranche", limitations: ["Exit-efficiency path reconstruction remains tranche-specific and is not a trade count."]
+  return { weekStart: days[0], weekEnd: days[days.length - 1], mode, days, roster, exitLoggingHealth, fund: { realized, navDelta, maxDrawdown, trades: totalTrades, wins: channels.reduce((sum, c) => sum + c.metrics.wins, 0), winRate: totalTrades ? Number((channels.reduce((sum, c) => sum + c.metrics.wins, 0) / totalTrades).toFixed(3)) : 0, bestDay, worstDay, equityCurve }, regimeLedger, channels, exitEfficiency: { totalUpsideLeft, worstCaptureChannels, redThatRanGreen }, evidence: {
+    requestedThrough: weekEnd, sessionCoverage: "published_daily_reports_only", navIssue, snapshotBounds: { from: accountEquity.points[0]?.capturedAt ?? null, through: accountEquity.points.at(-1)?.capturedAt ?? null }, schemaVersion: 3, producerVersion: REPORTING_SCHEMA, moneyUnit: "whole_position_usd_gross", sessionTimezone: "America/New_York", layer: "historical_executed", unit: "logical_trade", scope: "all_configured_paper_accounts",
+    reconciliation: navIssue ? "immutable_execution_routes_nav_unavailable" : "immutable_execution_routes_plus_account_complete_nav", sourceDailyReports: days,
+    exitEfficiencyUnit: "logical_trade", limitations: ["Only published daily reports are included; omitted sessions are not zero-trade sessions and calendar completeness is unverified.", "Sampled held marks are diagnostic only; common-horizon executable capture is unavailable. Current posture requires the live receipt-bound passport."]
   } };
 }
 
@@ -245,10 +212,10 @@ function renderSkeleton(w: Any): string {
   // the slug stays an internal key. nm resolves slug→name for the exit lists below.
   const nm: Record<string, string> = Object.fromEntries(((w.channels ?? []) as Any[]).map((c) => [c.slug, c.name]));
   const L: string[] = [`# SEVE WEEKLY autopsy — ${w.weekStart} → ${w.weekEnd}  (${w.mode}, ${w.days.length} sessions)`];
-  L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · maxDD ${usd(-(w.fund.maxDrawdown ?? 0))} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
+  L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · maxDD ${w.fund.maxDrawdown == null ? "unknown" : usd(-w.fund.maxDrawdown)} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
   if (w.fund.bestDay && w.fund.worstDay) L.push(`- best ${w.fund.bestDay.date} ${usd(w.fund.bestDay.pnl)} · worst ${w.fund.worstDay.date} ${usd(w.fund.worstDay.pnl)}`);
   L.push(`\n**Regime ledger:**`); for (const r of w.regimeLedger) L.push(`- ${r.date}: ${r.note} (${r.returnPct >= 0 ? "+" : ""}${r.returnPct.toFixed(2)}%, eff ${r.efficiency.toFixed(2)})`);
-  L.push(`\n**Exit efficiency** — green→red givebacks (the real signal) + upper-bound capture, scalpers excluded; non-scalp upside left ${usd(w.exitEfficiency.totalUpsideLeft)}`);
+  L.push("\n**Capture:** sampled held marks only; executable capture and recoverable portfolio upside are unavailable.");
   for (const r of w.exitEfficiency.redThatRanGreen) L.push(`- ⤴ ${nm[r.slug] ?? r.slug} ${r.occ} (${r.date}): exited ${usd(r.actual)} but ran to ${usd(r.couldHave)} — red trade, green runner`);
   for (const c of w.exitEfficiency.worstCaptureChannels) L.push(`- 📉 ${nm[c.slug] ?? c.slug} captured ${(c.captureRatio * 100).toFixed(0)}% (${usd(c.left)} left)`);
   for (const c of w.channels) {
@@ -256,7 +223,7 @@ function renderSkeleton(w: Any): string {
     if (!m.nTrades) { L.push(`- no trades this week`); continue; }
     L.push(`- trades **${m.nTrades}** · win **${(m.winRate * 100).toFixed(0)}%** · realized **${usd(m.realizedPnl)}** · avgWin ${usd(m.avgWin)}/avgLoss ${usd(m.avgLoss)} · avgR ${m.avgR.toFixed(2)} · median hold ${m.medianHoldMin}m`);
     L.push(`- best ${usd(m.bestTrade)}/worst ${usd(m.worstTrade)} · exits ${JSON.stringify(c.exitReasons)} · by day ${c.byDay.map((d: Any) => `${d.date.slice(5)} ${usd(d.pnl)}`).join(" · ")}`);
-    L.push(`- exit capture **${(c.exitEfficiency.captureRatio * 100).toFixed(0)}%**${c.exitEfficiency.biggestRunner ? ` · biggest runner ${c.exitEfficiency.biggestRunner.occ}: ${usd(c.exitEfficiency.biggestRunner.actual)} of ${usd(c.exitEfficiency.biggestRunner.couldHave)}` : ""}`);
+    L.push(`- exit capture **${(c.exitEfficiency.captureRatio == null ? "unknown" : `${(c.exitEfficiency.captureRatio * 100).toFixed(1)}%`)}**${c.exitEfficiency.biggestRunner ? ` · biggest runner ${c.exitEfficiency.biggestRunner.occ}: ${usd(c.exitEfficiency.biggestRunner.actual)} of ${usd(c.exitEfficiency.biggestRunner.couldHave)}` : ""}`);
     if (c.recurringFlaws.length) for (const f of c.recurringFlaws) L.push(`- ⚑ **${f.type}** recurred ${f.days} days (${f.severity})`);
   }
   return L.join("\n");
@@ -300,8 +267,10 @@ Deno.serve(async (req) => {
       const { data: existing } = await sb.from("weekly_reports").select("week_end").eq("week_end", weekEnd).maybeSingle();
       if (existing) return Response.json({ ok: true, skipped: "already exists", weekEnd });
     }
+    const history = await sb.from("reporting_publication_versions").select("id").limit(1);
+    if (history.error) throw new Error("Version-preserving reporting migration is required before publication");
     const digest = await buildWeekly(weekEnd);
-    const narrative = await narrate(digest);
+    const narrative = validatedNarrative(await narrate(digest), "weekly");
     // Dedup the LLM's per-channel list by slug (it occasionally emits a channel twice —
     // the "DUPLICATE-GUARD" rows in the 06-12 run). Keep the first, drop repeats.
     if (narrative?.channels && Array.isArray(narrative.channels)) {

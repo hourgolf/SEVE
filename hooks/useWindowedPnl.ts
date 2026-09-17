@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
-import { shortDate, timeOfDay } from "@/lib/format";
+import { shortDate } from "@/lib/format";
 import {
   attributePositionsByImmutableExecutionAccount,
 } from "@/lib/ops/brokerReconciliation";
@@ -23,6 +23,7 @@ export interface WindowedPnl {
   fundPnlSource: "nav_delta" | "immutable_position_attribution" | "unavailable";
   curve: number[];
   curveLabels: string[];
+  windowLabel?: string;
   sinceNote: string | null;
   loading: boolean;
   evidenceState: CombinedPerformanceEvidenceState;
@@ -192,7 +193,7 @@ export function useWindowedPnl(
         const firstAt = output[0]?.at ?? null;
         const curveRaw = output.map((row) => row.nav);
         const labelsRaw = output.map((row) =>
-          window === "week" ? timeOfDay(row.at) : shortDate(row.at.slice(0, 10)));
+          new Date(row.at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET");
         const sinceNote = firstAt && (start
           ? Date.parse(firstAt.length === 10 ? `${firstAt}T00:00:00Z` : firstAt) - Date.parse(start) > 36 * 3_600_000
           : true)
@@ -200,7 +201,7 @@ export function useWindowedPnl(
           : null;
         const stride = curveRaw.length <= 160 ? 1 : Math.ceil(curveRaw.length / 160);
         const sample = <T,>(values: T[]): T[] =>
-          stride <= 1 ? values : values.filter((_, index) => index % stride === 0);
+          stride <= 1 ? values : values.filter((_, index) => index % stride === 0 || index === values.length - 1);
         return {
           curve: sample(curveRaw),
           curveLabels: sample(labelsRaw),
@@ -250,6 +251,7 @@ export function useWindowedPnl(
         curve: nav.curve,
         curveLabels: nav.curveLabels,
         sinceNote: nav.sinceNote,
+        windowLabel: `Requested ${start ?? "all available history"} → ${asOf}; NAV uses first and last observed snapshot within that range.`,
         loading: false,
         evidenceState: combinePerformanceEvidenceState(navEvidenceState, attributionEvidenceState),
         navEvidenceState,

@@ -1,5 +1,6 @@
 "use client";
 
+import { DashboardTruthFixture } from "./DashboardTruthFixture";
 import { useState } from "react";
 import { FIXTURE_SCENARIOS, type FixtureScenarioId } from "@/lib/ui/fixtureLane";
 import { EntryFinishMap } from "@/components/research/EntryFinishMap";
@@ -49,6 +50,7 @@ export function MarketHoursFixtureLab() {
 
   return (
     <div className="fixture-lab" data-skin={skin === "909" ? "blackout" : "folio"}>
+      <DashboardTruthFixture />
       <header className="fixture-toolbar">
         <a href="/">← LIVE DESK</a>
         <div><b>MARKET-HOURS UI LAB</b><span>FIXTURE ONLY · ZERO LIVE READS · ZERO WRITES</span></div>

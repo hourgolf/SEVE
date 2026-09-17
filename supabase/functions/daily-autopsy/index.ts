@@ -70,6 +70,7 @@
 //  (+ optional ANTHROPIC_MODEL); SUPABASE_* are auto-injected.
 // ============================================================================
 
+import { REPORTING_SCHEMA, summarizePeakDiagnostics, validatedNarrative, heldTradePeakObservation } from "../_shared/reportingEvidence.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { collapseDailyLogicalTrades, type DailyDigestPositionRow, type DailyDigestRouteRow } from "./logicalTradeDigest.ts";
 
@@ -107,22 +108,25 @@ async function fetchWindow(table: string, tsCol: string, cols: string, dayStartM
     if (error) throw new Error(`${table}: ${error.message}`);
     const rows = (data ?? []) as Row[];
     out.push(...rows);
-    if (rows.length < PAGE) break;
+    if (rows.length < PAGE) return out;
   }
-  return out;
+  throw new Error(`${table}: evidence exceeds bounded read; report not published`);
 }
 
 async function fetchPositionRoutes(positionIds: string[]): Promise<DailyDigestRouteRow[]> {
   const rows: DailyDigestRouteRow[] = [];
   const ids = [...new Set(positionIds)].sort();
   for (let from = 0; from < ids.length; from += 100) {
-    const { data, error } = await sb.from("execution_observations")
-      .select("id,position_id,account_id,event_at")
-      .in("position_id", ids.slice(from, from + 100))
-      .not("account_id", "is", null)
-      .order("event_at", { ascending: true }).order("id", { ascending: true });
-    if (error) throw new Error(`execution routes: ${error.message}`);
-    rows.push(...((data ?? []) as DailyDigestRouteRow[]));
+    for (let page = 0; ; page += 1000) {
+      const { data, error } = await sb.from("execution_observations")
+        .select("id,position_id,account_id,event_at")
+        .in("position_id", ids.slice(from, from + 100)).not("account_id", "is", null)
+        .order("event_at", { ascending: true }).order("id", { ascending: true }).range(page, page + 999);
+      if (error) throw new Error(`execution routes: ${error.message}`);
+      const batch = (data ?? []) as DailyDigestRouteRow[];
+      rows.push(...batch);
+      if (batch.length < 1000) break;
+    }
   }
   return rows;
 }
@@ -137,7 +141,7 @@ function detectFlaws(m: Row, exitReasons: Record<string, number>, activity: Row)
     const top = Object.entries(exitReasons).sort((a, b) => (b[1] as number) - (a[1] as number))[0];
     if (top && (top[1] as number) / total >= 0.8) flaws.push({ type: "exit_monoculture", severity: "med", evidence: `${(((top[1] as number) / total) * 100).toFixed(0)}% of exits are "${top[0]}" (${top[1]}/${total}) — little/no active management variety` });
   }
-  if (n >= 3 && m.sizePinnedPct >= 0.999) flaws.push({ type: "size_pinned", severity: "low", evidence: `every entry == max_contracts — capital/aggression knobs not modulating size` });
+  // Mutable max_contracts is not runtime sizing authority; no size-pinned diagnosis.
   const totalSig = activity.signals;
   if (totalSig >= 5 && activity.acted / totalSig < 0.3) {
     const topBlock = Object.entries(activity.blocked).sort((a, b) => (b[1] as number) - (a[1] as number))[0];
@@ -149,33 +153,28 @@ function detectFlaws(m: Row, exitReasons: Record<string, number>, activity: Row)
 
 async function buildDigest(date: string): Promise<Row> {
   const dayStartMs = Date.parse(`${date}T12:00:00Z`);
-  const { data: stratRows } = await sb.from("strategists").select("id,slug,name,mandate,status,strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed)");
+  const { data: stratRows, error: strategistError } = await sb.from("strategists").select("id,slug,name,mandate,status,strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed)");
+  if (strategistError) throw new Error(strategistError.message);
   const strategists = (stratRows ?? []).map((r: Row) => ({ id: String(r.id), slug: String(r.slug), name: String(r.name), mandate: String(r.mandate ?? ""), status: r.status ?? "armed", cfg: Array.isArray(r.strategist_config) ? r.strategist_config[0] : r.strategist_config }));
-  const { data: fund } = await sb.from("fund_state").select("mode").eq("id", 1).maybeSingle();
-  const mode = (fund as Row | null)?.mode ?? "paper";
+  // Account scope is paper; a mutable global mode cannot relabel historical fills.
+  const mode = "paper";
 
-  const posCols = "id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,current_mark,realized_pnl,status,opened_at,closed_at,expiration,peak_mark,runner_of,configuration_epoch_id,channel_spec_version_id,release_manifest_id";
+  const posCols = "id,strategist_id,occ_symbol,opt_type,strike,qty,avg_entry_price,current_mark,realized_pnl,status,opened_at,closed_at,expiration,peak_mark,close_reason,runner_of,configuration_epoch_id,channel_spec_version_id,release_manifest_id";
   const posMap = new Map<string, Row>();
   for (const p of [...await fetchWindow("positions", "opened_at", posCols, dayStartMs), ...await fetchWindow("positions", "closed_at", posCols, dayStartMs)]) posMap.set(p.id, p);
   // posCols selects the complete logical-trade position projection above.
   const positionRows = [...posMap.values()] as (Row & DailyDigestPositionRow)[];
   const routeRows = await fetchPositionRoutes(positionRows.map((row) => String(row.id)));
-  const logical = collapseDailyLogicalTrades({ rows: positionRows, routes: routeRows, session: date, sessionOf: (iso) => etDate(Date.parse(iso)) });
+  const { data: accounts, error: accountError } = await sb.from("accounts").select("id").eq("mode", "paper");
+  if (accountError || !accounts?.length) throw new Error("Configured paper accounts unavailable");
+  const paperAccounts = new Set(accounts.map((a: Row) => a.id));
+  const routesByPosition = new Map(routeRows.map(row => [row.position_id, row.account_id]));
+  if (positionRows.some(row => !routesByPosition.has(row.id))) throw new Error("Position account route is missing; daily report withheld");
+  const scopedPositions = positionRows.filter(row => paperAccounts.has(routesByPosition.get(row.id)));
+  const logical = collapseDailyLogicalTrades({ rows: scopedPositions, routes: routeRows, session: date, sessionOf: (iso) => etDate(Date.parse(iso)) });
   if (logical.issues.length) throw new Error(`daily logical-trade evidence blocked: ${logical.issues.join("; ")}`);
 
   const sigs = (await fetchWindow("signals", "created_at", "strategist_id,signal_type,direction,underlying_price,acted_on,blocked_reason,rationale,created_at", dayStartMs)).filter((s) => etDate(Date.parse(s.created_at)) === date);
-  const events = (await fetchWindow("events", "created_at", "message,created_at", dayStartMs)).filter((e) => etDate(Date.parse(e.created_at)) === date);
-
-  // exit-event index: `${slug}|${occ}` → [{ms, reason}]  (incl. the reconcile path)
-  const exitByKey = new Map<string, { ms: number; reason: string }[]>();
-  for (const e of events) {
-    const ex = /^(\S+):\s*exit\s+(SPY\S+).*\(([^)]+)\)\s*$/.exec(e.message);
-    const rc = !ex && /^(\S+):\s*reconciled\s+(SPY\S+)/.exec(e.message);
-    const m = ex ?? rc;
-    if (!m) continue;
-    const k = `${m[1]}|${m[2]}`;
-    (exitByKey.get(k) ?? exitByKey.set(k, []).get(k)!).push({ ms: Date.parse(e.created_at), reason: ex ? m[3] : "reconciled" });
-  }
   // acted-entry-signal index: `${strategist_id}|${occ}` → signals (asc)
   const sigByKey = new Map<string, Row[]>();
   for (const s of sigs) {
@@ -216,11 +215,8 @@ async function buildDigest(date: string): Promise<Row> {
       const cands = (sigByKey.get(`${p.strategist_id}|${p.occ_symbol}`) ?? []).filter((s) => Date.parse(s.created_at) <= openedMs + 90_000);
       const sig = cands.length ? cands[cands.length - 1] : null;
       const conviction = sig?.rationale ? Object.fromEntries(FEATURES.filter((f) => typeof sig.rationale[f] === "number").map((f) => [f, Number(sig.rationale[f])])) : null;
-      const exitReasons = group.rows.flatMap((row) => {
-        const rowClosedMs = Date.parse(String(row.closed_at));
-        const exits = exitByKey.get(`${st.slug}|${row.occ_symbol}`) ?? [];
-        return exits.length ? [exits.reduce((b, e) => (Math.abs(e.ms - rowClosedMs) < Math.abs(b.ms - rowClosedMs) ? e : b)).reason] : [];
-      });
+      const exitProvenance = group.rows.map((row) => ({ positionId: row.id, reason: typeof row.close_reason === "string" && row.close_reason.trim() ? row.close_reason : "unknown", source: row.close_reason ? "positions.close_reason" : "unavailable" }));
+      const exitReasons = exitProvenance.map(row => row.reason);
       const uniqueExitReasons = [...new Set(exitReasons)];
       const exitReason = uniqueExitReasons.length === 1 ? uniqueExitReasons[0] : uniqueExitReasons.length ? "mixed_tranches" : null;
       const qty = group.rows.reduce((sum, row) => sum + Math.abs(Number(row.qty) || 0), 0);
@@ -231,18 +227,15 @@ async function buildDigest(date: string): Promise<Row> {
       const r = riskUsd(entryPrice, qty);
       // peak forensics (44_trade_forensics): MFE% off entry + the kept share of the
       // peak gain — null when the trade never peaked above entry (or pre-column rows).
-      const peakGainUsd = group.rows.reduce((sum, row) => {
-        const rowEntry = Number(row.avg_entry_price), peak = Number(row.peak_mark ?? 0), rowQty = Math.abs(Number(row.qty) || 0);
-        return sum + (rowEntry > 0 && peak > rowEntry ? (peak - rowEntry) * rowQty * 100 : 0);
-      }, 0);
-      const peakPct = entryDebit > 0 && peakGainUsd > 0 ? (peakGainUsd / (entryDebit * 100)) * 100 : null;
-      const capturePct = peakGainUsd > 0 ? Math.max(0, Math.min(100, (pnl / peakGainUsd) * 100)) : null;
+      const peakObservation = heldTradePeakObservation(group.rootPositionId, group.rows as any);
+      const peakPct = peakObservation.peakPct;
+      const capturePct = summarizePeakDiagnostics([peakObservation]).retainedPct;
       return { id: group.rootPositionId, occ: p.occ_symbol, dir: p.opt_type, qty, entryPrice, exitPrice, pnl, holdMin,
-        R: r > 0 ? pnl / r : 0, exitReason, signalType: sig?.signal_type ?? null, conviction, peakPct, capturePct,
+        R: r > 0 ? pnl / r : 0, exitReason, signalType: sig?.signal_type ?? null, conviction, peakPct, capturePct, peakObservation, exitProvenance,
         accountId: group.accountId, configurationEpochId: group.configurationEpochId, channelSpecVersionId: group.channelSpecVersionId };
     });
     const configurationEpochs = [...new Set(trades.map((trade) => trade.configurationEpochId))];
-    if (configurationEpochs.length > 1) throw new Error(`daily channel ${st.slug} spans configuration epochs: ${configurationEpochs.join(",")}`);
+    // Multiple receipt epochs may be present. Preserve each trade identity rather than erase the session.
     const wins = trades.filter((t) => t.pnl > 0), losses = trades.filter((t) => t.pnl <= 0);
     const exitReasons: Record<string, number> = {}; for (const t of trades) { const k = t.exitReason ?? "unknown"; exitReasons[k] = (exitReasons[k] ?? 0) + 1; }
     const blocked: Record<string, number> = {}; let acted = 0;
@@ -254,10 +247,7 @@ async function buildDigest(date: string): Promise<Row> {
     // peak capture (aggregate give-back lens): over trades that peaked above entry,
     // kept share = Σ(exit−entry) ÷ Σ(peak−entry) — the [[giveback-takeprofit-split]] metric.
     const peakers = trades.filter((t) => t.peakPct != null);
-    const peakGainSum = peakers.reduce((a, t) => a + (t.peakPct! / 100) * t.entryPrice, 0);
-    // per-trade kept is capped at that trade's own peak gain — the 10s ratchet can
-    // miss the final tick, letting exit > peak_mark read as >100% kept otherwise
-    const keptSum = peakers.reduce((a, t) => a + Math.min((t.peakPct! / 100) * t.entryPrice, Math.max(0, t.exitPrice - t.entryPrice)), 0);
+    const peakDiagnostic = summarizePeakDiagnostics(trades.map(t => t.peakObservation));
     const metrics = {
       nTrades: trades.length, wins: wins.length, winRate: trades.length ? wins.length / trades.length : 0,
       realizedPnl: trades.reduce((a, t) => a + t.pnl, 0),
@@ -266,21 +256,22 @@ async function buildDigest(date: string): Promise<Row> {
       sizePinnedPct: sizePinned,
       nPeaked: peakers.length,
       avgPeakPct: peakers.length ? Number(mean(peakers.map((t) => t.peakPct!)).toFixed(1)) : null,
-      peakCapturePct: peakers.length && peakGainSum > 0 ? Number(((keptSum / peakGainSum) * 100).toFixed(0)) : null,
+      peakCapturePct: peakDiagnostic.retainedPct,
+      peakDiagnostic,
     };
     const activity = { signals: chSigs.length, acted, blocked };
     channels.push({ slug: st.slug, name: st.name, mandate: st.mandate, status: st.status, config: st.cfg,
-      configurationEpochId: configurationEpochs[0] ?? null, metrics, exitReasons, activity, convictionAvg,
+      configurationEpochId: configurationEpochs.length === 1 ? configurationEpochs[0] : null, configurationEpochs, metrics, exitReasons, activity, convictionAvg,
       flaws: detectFlaws(metrics, exitReasons, activity), trades });
   }
   const traded = channels.filter((c) => c.metrics.nTrades > 0);
   const allTrades = traded.flatMap((c) => c.trades);
-  const fundDigest = { dayRealized: allTrades.reduce((a, t) => a + t.pnl, 0), trades: allTrades.length, winRate: allTrades.length ? allTrades.filter((t) => t.pnl > 0).length / allTrades.length : 0, channelsTraded: traded.length };
-  return { date, mode, market, marketQQQ, fund: fundDigest, channels, evidence: {
-    schemaVersion: 2, layer: "current_executed", unit: "logical_trade", scope: "all_configured_paper_accounts",
+  const fundDigest = { dayRealized: allTrades.reduce((a, t) => a + t.pnl, 0), trades: allTrades.length, wins: allTrades.filter(t => t.pnl > 0).length, winRate: allTrades.length ? allTrades.filter((t) => t.pnl > 0).length / allTrades.length : 0, channelsTraded: traded.length };
+  return { date, mode, market, marketQQQ, fund: fundDigest, channels, peakDiagnostic: summarizePeakDiagnostics(allTrades.map(t => t.peakObservation)), evidence: {
+    schemaVersion: 3, producerVersion: REPORTING_SCHEMA, moneyUnit: "whole_position_usd_gross", sessionTimezone: "America/New_York", layer: "historical_executed", unit: "logical_trade", scope: "all_configured_paper_accounts",
     reconciliation: "immutable_execution_routes", positionRows: logical.positionRows, runnerRowsCollapsed: logical.runnerRows,
-    configuration: "exact_per_channel_epoch", managerVersion: null,
-    limitations: ["Daily manager-policy version is not yet persisted on executed positions."]
+    configuration: "versioned_per_logical_trade", managerVersion: null,
+    limitations: ["Daily manager-policy version is not yet persisted on executed positions.", "avgR is a historical 50%-premium risk proxy, not native risk-adjusted performance.", "Stored database config/status is metadata, not current runtime authority."]
   } };
 }
 
@@ -295,7 +286,7 @@ function renderSkeleton(d: Row): string {
     L.push(`\n## ${c.name} — ${c.status}`); L.push(`_${c.mandate}_`);
     if (!m.nTrades) { L.push(`- no closed logical trades · signals ${c.activity.signals} (acted ${c.activity.acted}, blocked ${JSON.stringify(c.activity.blocked)})`); continue; }
     L.push(`- logical trades **${m.nTrades}** · positive **${(m.winRate * 100).toFixed(0)}%** · realized attribution **${usd(m.realizedPnl)}** · typical hold **${m.medianHoldMin.toFixed(1)}m**`);
-    if (m.nPeaked) L.push(`- peaks: ${m.nPeaked}/${m.nTrades} trades peaked above entry · avg peak **+${m.avgPeakPct}%** · kept **${m.peakCapturePct}%** of the peak gain (the give-back lens — low kept% on a green peak day = a KEEPING problem, not a finding problem)`);
+    if (m.peakDiagnostic) L.push(`- Sampled held-mark diagnostic: ${m.peakDiagnostic.valid}/${m.peakDiagnostic.total} valid logical trades; ${m.peakDiagnostic.excluded} excluded. Retained ${m.peakCapturePct == null ? "unknown" : m.peakCapturePct.toFixed(1) + "%"}. These separate held windows are not a common executable exit horizon.`);
     L.push(`- exits: ${JSON.stringify(c.exitReasons)}`);
     L.push(`- signals ${c.activity.signals} (acted ${c.activity.acted}, blocked ${JSON.stringify(c.activity.blocked)}) · conviction(avg) ${JSON.stringify(c.convictionAvg)}`);
     for (const f of c.flaws) L.push(`- ⚑ **${f.type}** (${f.severity}): ${f.evidence}`);
@@ -415,6 +406,8 @@ Deno.serve(async (req) => {
       if (existing && !body.force) return Response.json({ ok: true, skipped: "already_done", date });
     }
 
+    const history = await sb.from("reporting_publication_versions").select("id").limit(1);
+    if (history.error) throw new Error("Version-preserving reporting migration is required before publication");
     const digest = await buildDigest(date);
 
     // recurrence: the last 7 days' DETERMINISTIC flaws (always present in the
@@ -424,11 +417,11 @@ Deno.serve(async (req) => {
     const priorFindings = (prior ?? []).map((r: Row) => ({
       date: r.report_date,
       flaws: (r.digest?.channels ?? []).flatMap((c: Row) => (c.flaws ?? []).map((f: Row) => ({ slug: c.slug, type: f.type }))),
-      findings: (r.narrative?.systemFindings ?? []).map((f: Row) => ({ type: f.type, category: f.category, channels: f.channels })),
+      findings: (validatedNarrative(r.narrative, "daily")?.systemFindings ?? []).map((f: Row) => ({ type: f.type, category: f.category, channels: f.channels })),
     }));
 
     const skeleton = renderSkeleton(digest);
-    const narrative = await narrate(digest, priorFindings);
+    const narrative = validatedNarrative(await narrate(digest, priorFindings), "daily");
     // Guarantee a complete findings ledger from the deterministic digest flaws even when
     // the LLM under-emits (06-03: 7 flaws, 0 LLM findings). The LLM enriches on top.
     const enriched = ensureFindings(digest, narrative, priorFindings);

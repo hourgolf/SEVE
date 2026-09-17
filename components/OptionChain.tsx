@@ -91,9 +91,11 @@ export function OptionChain({
       return { ...q, bid: px(q.bid), ask: px(q.ask), mid: px(q.mid), delta };
     };
 
+    const invalidQuote = (q: OptionQuote | undefined) => !!q && (q.bid == null || q.ask == null || !Number.isFinite(q.bid) || !Number.isFinite(q.ask) || q.bid <= 0 || q.ask <= 0 || q.bid > q.ask);
     rows = shown.map((k) => {
       const c = liveAdj(front.find((r) => Number(r.strike) === k && r.opt_type === "call"));
       const p = liveAdj(front.find((r) => Number(r.strike) === k && r.opt_type === "put"));
+      const cInvalid = invalidQuote(c), pInvalid = invalidQuote(p);
       const cSel = !!c && selected === c.occ_symbol;
       const pSel = !!p && selected === p.occ_symbol;
       const onC = c ? () => onSelect?.(c.occ_symbol) : undefined;
@@ -108,9 +110,9 @@ export function OptionChain({
         return (
           <tr key={k} className={k === atm ? "atm" : undefined}>
             <td className={cCls} style={{ textAlign: "left" }} onClick={onC}>{num2(c?.delta)}</td>
-            <td className={cCls} onClick={onC} onKeyDown={keySelect(onC)} role={c ? "button" : undefined} tabIndex={c ? 0 : undefined} aria-label={c ? `Inspect ${c.occ_symbol}` : undefined}>{num2(c?.mid)}</td>
+            <td className={cCls} onClick={onC} onKeyDown={keySelect(onC)} role={c ? "button" : undefined} tabIndex={c ? 0 : undefined} aria-label={c ? `Inspect ${c.occ_symbol}` : undefined}>{cInvalid ? <span title="Missing, non-positive or crossed quote; not usable as an executable price">INVALID</span> : num2(c?.mid)}</td>
             <td className="strike-col">{k.toFixed(0)}</td>
-            <td className={pCls} onClick={onP} onKeyDown={keySelect(onP)} role={p ? "button" : undefined} tabIndex={p ? 0 : undefined} aria-label={p ? `Inspect ${p.occ_symbol}` : undefined}>{num2(p?.mid)}</td>
+            <td className={pCls} onClick={onP} onKeyDown={keySelect(onP)} role={p ? "button" : undefined} tabIndex={p ? 0 : undefined} aria-label={p ? `Inspect ${p.occ_symbol}` : undefined}>{pInvalid ? <span title="Missing, non-positive or crossed quote; not usable as an executable price">INVALID</span> : num2(p?.mid)}</td>
             <td className={pCls} style={{ textAlign: "right" }} onClick={onP}>{num2(p?.delta)}</td>
           </tr>
         );

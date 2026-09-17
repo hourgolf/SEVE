@@ -97,10 +97,10 @@ export function OpsPreflight({ strategists, tape, ops }: { strategists: Strategi
           hint="armed channels by executor (strategists.executor)"
         />
         <Row
-          label="RISK"
+          label="LEGACY DB CONFIG"
           tone={active.length ? "ok" : "dim"}
           value={`${active.length} armed · $${Math.round(riskSum).toLocaleString()}/trade · stops $${Math.round(stopSum).toLocaleString()}`}
-          hint="Σ RISK-$ per trade + Σ daily stops over armed, unmuted channels"
+          hint="Saved database settings only. Current receipt-bound channel economics may differ; this is not effective runtime risk."
         />
         {tape && (
           <Row

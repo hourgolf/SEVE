@@ -148,7 +148,7 @@ export function ChannelManagerEvidencePanel({ evidence, currentManagerLabel, cur
   return <section className={`cme${compact ? " compact" : ""}`} aria-label={`Eight-arm manager evidence for ${scopedEvidence.slug}`}>
     <header className="cme-head">
       <span><b>EIGHT-ARM MANAGER LAB</b><small>MANAGER COUNTERFACTUAL · {scopedEvidence.slug} · {scopedEvidence.positions} positions · {scopedEvidence.sessions} sessions · {scopedEvidence.shadowBookVersion.replace("manager-shadow-book-", "")}</small></span>
-      <em className={scopedEvidence.state}>{scopedEvidence.state.toUpperCase()}</em>
+      <em className={scopedEvidence.state}>{scopedEvidence.state === "ready" ? scope === "current" ? "CURRENT COHORT AVAILABLE" : "HISTORICAL COHORTS AVAILABLE" : scopedEvidence.state.toUpperCase()}</em>
       <span className="cme-coverage"><b>{scopedEvidence.terminalArms}/{scopedEvidence.expectedArms}</b><small>terminal arms · {Math.round(scopedEvidence.coverage * 100)}%</small></span>
     </header>
     <div className="cme-scope" role="group" aria-label="Configuration era">
@@ -161,6 +161,6 @@ export function ChannelManagerEvidencePanel({ evidence, currentManagerLabel, cur
     <Ladder evidence={scopedEvidence} selected={selectedManager} onSelect={setSelectedManager} />
     <div className="cme-detail-head"><span><b>{selectedManager}</b><em>{selected?.terminalPaths ?? 0} paths · {selected?.sessions ?? 0} sessions · {pct(selected?.beatRate ?? null)} beat executed</em></span><div role="group" aria-label="Manager evidence detail"><button type="button" className={detail === "capture" ? "on" : ""} onClick={() => setDetail("capture")}>CAPTURE MAP</button><button type="button" className={detail === "tape" ? "on" : ""} onClick={() => setDetail("tape")}>TRADE STRIP</button></div></div>
     {detail === "capture" ? <CaptureScatter evidence={scopedEvidence} managerId={selectedManager} /> : <TradeTape evidence={scopedEvidence} managerId={selectedManager} />}
-    <footer className="cme-boundary">READ ONLY · {scope === "current" ? "CURRENT CONFIG ERA ONLY" : "ALL V2 ERAS; USE CURRENT FOR A LIKE-FOR-LIKE DECISION"} · V1 EXCLUDED · CENSORS STAY IN COVERAGE · TOTAL P&amp;L IS NOT THE RANKING METRIC</footer>
+    <footer className="cme-boundary">READ ONLY · {scope === "current" ? "CURRENT CONFIG ERA ONLY" : "ALL V2 ERAS; CHECK CHANNEL SPEC AND NATIVE CALIBRATION BEFORE COMPARING"} · V1 EXCLUDED · CENSORS STAY IN COVERAGE · TOTAL P&amp;L IS NOT THE RANKING METRIC</footer>
   </section>;
 }

@@ -33,14 +33,16 @@ const NAV = [
   { key: "ops", label: "System", icon: "⌘", group: "system", mode: "perform" as const, section: "ops" as const },
 ];
 
-const compactUsd = (value: number): string => {
+const compactUsd = (value: number | null): string => {
+  if (value == null) return "—";
   const abs = Math.abs(value);
   if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
   if (abs >= 100_000) return `$${Math.round(value / 1000)}k`;
   return usd0(value);
 };
 
-const ledCompact = (value: number): { value: string; digits: number; unit?: string } => {
+const ledCompact = (value: number | null): { value: string; digits: number; unit?: string } => {
+  if (value == null) return { value: "—", digits: 4 };
   const negative = value < 0;
   const absolute = Math.abs(value);
   const trim = (formatted: string) => formatted.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
@@ -100,10 +102,10 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const { view, feed, liveFund, livePnl, accounts, acctId, setAcctId, incident, workerRuns, write } = surface;
   const fund = view.desk.fund;
   const exposure = useMemo(() => Object.values(livePnl).reduce((sum, pnl) => sum + pnl.exposure, 0), [livePnl]);
-  const deskCapacity = Math.max(0, liveFund.nav - exposure);
-  const riskUsed = liveFund.nav > 0 ? (exposure / liveFund.nav) * 100 : 0;
-  const startOfDayNav = liveFund.nav - liveFund.dayPnl;
-  const dayPnlPct = startOfDayNav > 0 ? (liveFund.dayPnl / startOfDayNav) * 100 : null;
+  const deskCapacity = liveFund.nav == null || !["ok", "recovered"].includes(feed.positionAttribution.state) ? null : Math.max(0, liveFund.nav - exposure);
+  const riskUsed = liveFund.nav != null && liveFund.nav > 0 && ["ok", "recovered"].includes(feed.positionAttribution.state) ? (exposure / liveFund.nav) * 100 : 0;
+  const startOfDayNav = liveFund.nav == null || liveFund.dayPnl == null ? null : liveFund.nav - liveFund.dayPnl;
+  const dayPnlPct = startOfDayNav != null && startOfDayNav > 0 && liveFund.dayPnl != null ? (liveFund.dayPnl / startOfDayNav) * 100 : null;
   const processTelemetry = deriveProcessTelemetry(workerRuns, now?.getTime() ?? 0);
   const brokerTelemetry = deriveBrokerTelemetry(surface.opsReadiness.evidence.find((item) => item.id === "reconciliation"));
   const incidentOn = incident.severity !== "normal";
@@ -117,15 +119,15 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const railLabel = incidentOn ? incident.title : railTone === "normal" ? "SYSTEM NOMINAL" : "SYSTEM CHECK";
   const railDetail = `DATA ${processTelemetry.label} · BROKER ${brokerTelemetry.label} · ${incident.session.replaceAll("_", " ")}`;
   const navLed = ledCompact(liveFund.nav);
-  const dayLed = ledCompact(liveFund.dayPnl);
+  const dayLed = liveFund.dayPnl == null ? { value: "—", digits: 1, unit: "" } : ledCompact(liveFund.dayPnl);
   const dayPctLed = dayPnlPct == null
     ? null
     : `${dayPnlPct >= 0 ? "+" : "-"}${Math.abs(dayPnlPct).toFixed(2)}`;
   const capacityLed = ledCompact(deskCapacity);
   const positionsLed = ledCompact(feed.positions.length);
   const positionAttributionBlocked = feed.positionAttribution.state === "blocked";
-  const riskLedValue = riskUsed.toFixed(1);
-  const dayLedColor = liveFund.dayPnl < 0 ? "var(--led-red)" : "var(--pm-green)";
+  const riskLedValue = (riskUsed == null ? "—" : riskUsed.toFixed(1));
+  const dayLedColor = (liveFund.dayPnl ?? 0) < 0 ? "var(--led-red)" : "var(--pm-green)";
   const activeNav = NAV.find((item) => mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section))) ?? NAV[0];
   const navigate = (item: (typeof NAV)[number]) => {
     setMode(item.mode);
@@ -182,7 +184,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
           </div>
         </div>
         <div className="ws-metric ws-metric--led ws-metric--nav"><small>NAV</small><div className="ws-led-readout neutral" role="img" aria-label={`NAV ${compactUsd(liveFund.nav)}`}><span aria-hidden="true">$</span><LedDisplay value={navLed.value} digits={navLed.digits} color="var(--ws-led-neutral)" unit={navLed.unit} /></div></div>
-        <div className={`ws-metric ws-metric--led ws-metric--pnl ${liveFund.dayPnl < 0 ? "neg" : "pos"}`}>
+        <div className={`ws-metric ws-metric--led ws-metric--pnl ${(liveFund.dayPnl ?? 0) < 0 ? "neg" : "pos"}`}>
           <small>SESSION NAV Δ</small>
           <div className="ws-day-readouts">
             <div className="ws-led-readout" role="img" aria-label={`Session NAV change ${signedUsd(liveFund.dayPnl)}`} style={{ color: dayLedColor }}><span aria-hidden="true">$</span><LedDisplay value={dayLed.value} digits={dayLed.digits} color={dayLedColor} unit={dayLed.unit} /></div>

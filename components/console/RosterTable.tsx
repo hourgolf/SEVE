@@ -5,6 +5,7 @@
 // Reuses the strip's FiresPill (click-to-edit %) + the LOCK/RIDE mode pair so edits
 // behave identically. Read-only when signed out.
 
+import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 import { FiresPill } from "@/components/console/ChannelStrip";
 import { useDeskDispatch } from "@/hooks/useDeskState";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
@@ -15,8 +16,10 @@ import type { ChannelPnl, StrategistConfig, StrategistState } from "@/lib/desk/t
 export function RosterTable({
   channels,
   livePnl,
+  passports,
 }: {
   channels: StrategistState[];
+  passports?: ChannelWorkspaceModel;
   livePnl: Record<string, ChannelPnl>;
 }) {
   const dispatch = useDeskDispatch();
@@ -27,6 +30,10 @@ export function RosterTable({
     persistConfig(id, patch);
   };
 
+  if (!canWrite) return <table className="roster-table"><thead><tr><th>Channel</th><th>Current posture</th><th>Manager</th><th>Recorded economics</th><th>Gross session attribution</th></tr></thead><tbody>{channels.map(ch => {
+    const p = passports?.bySlug[ch.slug];
+    return <tr key={ch.slug}><td>{ch.name}</td><td>{p?.lifecycleLabel ?? "UNVERIFIED"}</td><td>{p?.rootPolicy?.managerLabel ?? p?.effective.economics.managerProfileId ?? "Unknown"}</td><td>{p?.effective.economics.fact ?? "Unknown"}</td><td>{signedUsd(livePnl[ch.slug]?.dayPnl)}</td></tr>;
+  })}</tbody></table>;
   return (
     <div className="roster">
       <table className="roster-table">

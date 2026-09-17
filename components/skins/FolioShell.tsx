@@ -57,7 +57,8 @@ const MOBILE_NAV: Array<{ id: FolioMobileRoom; label: string; mark: string }> = 
   { id: "ops", label: "Ops", mark: "⚙" },
 ];
 
-const compactUsd = (value: number): string => {
+const compactUsd = (value: number | null): string => {
+  if (value == null) return "—";
   const abs = Math.abs(value);
   if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}m`;
   if (abs >= 100_000) return `$${Math.round(value / 1000)}k`;
@@ -83,7 +84,7 @@ function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps,
 
   const { accounts, acctId, setAcctId, feed, incident, liveFund, livePnl, opsReadiness, view, workerRuns, write } = surface;
   const exposure = useMemo(() => Object.values(livePnl).reduce((sum, row) => sum + row.exposure, 0), [livePnl]);
-  const riskUsed = liveFund.nav > 0 ? (100 * exposure) / liveFund.nav : 0;
+  const riskUsed = liveFund.nav != null && liveFund.nav > 0 && ["ok", "recovered"].includes(feed.positionAttribution.state) ? (100 * exposure) / liveFund.nav : null;
   const process = deriveProcessTelemetry(workerRuns, now?.getTime() ?? 0);
   const broker = deriveBrokerTelemetry(opsReadiness.evidence.find((item) => item.id === "reconciliation"));
   const selectedAccount = accounts.find((account) => account.id === acctId);
@@ -113,12 +114,12 @@ function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps,
         <article className="folio-hero">
           <div className="folio-hero-top"><span>PORTFOLIO</span><em>{selectedAccount?.mode ?? view.desk.fund.mode}</em></div>
           <div className="folio-hero-value"><small>Net asset value</small><b>{compactUsd(liveFund.nav)}</b></div>
-          <div className="folio-hero-meta"><span><small>SESSION NAV Δ</small><b className={liveFund.dayPnl < 0 ? "neg" : "pos"}>{signedUsd(liveFund.dayPnl)}</b></span><span><small>MOVE</small><b>{dayChangePct == null ? "—" : `${dayChangePct >= 0 ? "+" : ""}${dayChangePct.toFixed(2)}%`}</b></span></div>
+          <div className="folio-hero-meta"><span><small>SESSION NAV Δ</small><b className={(liveFund.dayPnl ?? 0) < 0 ? "neg" : "pos"}>{signedUsd(liveFund.dayPnl)}</b></span><span><small>MOVE</small><b>{dayChangePct == null ? "—" : `${dayChangePct >= 0 ? "+" : ""}${dayChangePct.toFixed(2)}%`}</b></span></div>
           <FolioMark />
         </article>
         <article className="folio-account-card"><small>ACCOUNT</small><AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} /><span>Paper-only routing</span></article>
         <article className="folio-stat coral"><small>OPEN POSITIONS</small><b>{feed.positions.length}</b><span>{feed.positions.length === 0 ? "Desk is flat" : "Manager active"}</span></article>
-        <article className="folio-stat teal"><small>RISK USED</small><b>{riskUsed.toFixed(1)}%</b><span>{usd0(exposure)} desk exposure</span></article>
+        <article className="folio-stat teal"><small>RISK USED</small><b>{(riskUsed == null ? "—" : riskUsed.toFixed(1))}%</b><span>{usd0(exposure)} desk exposure</span></article>
         <article className="folio-state-card"><span><small>PROCESS</small><b className={process.tone}>{process.label}</b></span><span><small>BROKER</small><b className={broker.tone}>{broker.label}</b></span></article>
       </section>
 
@@ -191,7 +192,7 @@ function FolioMobile({ surface }: { surface: SurfaceProps }) {
         <button type="button" className={`folio-mobile-hero ${surface.incident.severity}`} onClick={() => setRoom("ops")} aria-label={`${status}; open Operations`}>
           <span className="folio-mobile-hero-top"><b>{status}</b><em>{surface.feed.positions.length} open · {surface.incident.session.replaceAll("_", " ")}</em></span>
           <span className="folio-mobile-hero-value"><small>Net asset value</small><strong>{compactUsd(surface.liveFund.nav)}</strong></span>
-          <span className="folio-mobile-hero-meta"><span><small>SESSION NAV Δ</small><b className={surface.liveFund.dayPnl < 0 ? "neg" : "pos"}>{signedUsd(surface.liveFund.dayPnl)}</b></span><span><small>{surface.symbol}</small><b>{surface.data.spot?.toFixed(2) ?? "—"}</b></span></span>
+          <span className="folio-mobile-hero-meta"><span><small>SESSION NAV Δ</small><b className={(surface.liveFund.dayPnl ?? 0) < 0 ? "neg" : "pos"}>{signedUsd(surface.liveFund.dayPnl)}</b></span><span><small>{surface.symbol}</small><b>{surface.data.spot?.toFixed(2) ?? "—"}</b></span></span>
           <FolioMark />
         </button>
         <div className="folio-mobile-account"><AccountSwitcher accounts={surface.accounts} selected={surface.acctId} onSelect={surface.setAcctId} /><span>PAPER ONLY</span></div>

@@ -32,7 +32,7 @@ assert.equal(RESEARCH_AGENTS.length, 7);
 assert.equal(packet.summary.channelsReviewed, 1);
 assert.ok(packet.dispatches.some((row) => row.agentId === "skeptic" && /PROMOTION CASE/.test(row.headline)));
 assert.ok(packet.dispatches.some((row) => row.agentId === "skeptic" && /TYPICAL TRADE AND TOTAL/.test(row.headline)));
-assert.ok(packet.dispatches.some((row) => row.agentId === "skeptic" && /CURRENT TRADES AND HISTORY/.test(row.headline)));
+assert.ok(packet.dispatches.some((row) => row.agentId === "skeptic" && /SEPARATE EXECUTED AND VIRTUAL COHORTS/.test(row.headline)));
 assert.ok(packet.dispatches.some((row) => row.agentId === "designer" && row.kind === "experiment"));
 assert.ok(packet.dispatches.every((row) => row.message.length <= 168));
 assert.ok(packet.dispatches.some((row) => /shadow ledger|blooper reel|Plot twist|subtweeting|moon|whale/.test(row.message)));

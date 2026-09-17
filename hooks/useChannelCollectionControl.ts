@@ -26,6 +26,7 @@ interface CullPreview {
 
 export function useChannelCollectionControl() {
   const { session, operator } = useAuth();
+  const [loaded, setLoaded] = useState(false);
   const [inventory, setInventory] = useState<ChannelCollectionInventoryView[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<"pause" | "resume">("pause");
@@ -37,6 +38,7 @@ export function useChannelCollectionControl() {
 
   const refresh = useCallback(async () => {
     if (!session || !operator) {
+      setLoaded(false);
       setInventory([]);
       return;
     }
@@ -53,7 +55,9 @@ export function useChannelCollectionControl() {
       if (!response.ok || !body.ok) {
         throw new Error(body.error ?? "collection inventory read failed");
       }
-      setInventory(body.inventory ?? []);
+      if (!Array.isArray(body.inventory)) throw new Error("Collection inventory is incomplete");
+      setInventory(body.inventory);
+      setLoaded(true);
       setError(null);
     } catch (readError) {
       setError(readError instanceof Error
@@ -184,6 +188,7 @@ export function useChannelCollectionControl() {
     busy,
     error,
     notice,
+    loaded: loaded && !error,
     signedIn: Boolean(session && operator),
     toggle,
     setMode: (next: "pause" | "resume") => {

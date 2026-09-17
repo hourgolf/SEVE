@@ -17,7 +17,7 @@ import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import { useWorkerRuns } from "@/hooks/useWorkerRuns";
 import { useKitSounds } from "@/hooks/useKitSounds";
-import { channelPnl, liveFundPnl } from "@/lib/desk/derive";
+import { channelPnl } from "@/lib/desk/derive";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { DeskProvider } from "@/components/console/DeskProvider";
 import { DesktopSurface } from "@/components/DesktopSurface";
@@ -127,13 +127,9 @@ function Surface({
   useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
   const liveMarks = usePositionMarks(feed.positions);
   const livePnl = channelPnl([...feed.positions, ...feed.recentTrades], liveMarks);
-  const liveFund = liveFundPnl(
-    feed.fundPnl,
-    [...feed.positions, ...feed.recentTrades],
-    liveMarks,
-    feed.fundPnl.snapshotUnrealizedPnl,
-    feed.fundPnl.snapshotCapturedAt,
-  );
+  // Fund headlines and reconciliation share the same broker snapshot. Live
+  // option marks remain a separately named position-attribution layer.
+  const liveFund = feed.fundPnl;
   // P5 slice 1 — shared remote reads LIFTED to the seam (called ONCE here, carried through
   // SurfaceProps). PERFORM + mobile leaves consumed these directly before; now they never
   // subscribe. sentinel (brief/scan/judge/lens), workerRuns (crash-attribution ledger, wired
@@ -261,7 +257,7 @@ function Surface({
   // operator returns to the same room/layout. Lifted to the seam (passed down).
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, allChannelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

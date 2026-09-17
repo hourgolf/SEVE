@@ -81,8 +81,8 @@ export function MobileShell(props: SurfaceProps) {
   const { desk } = view;
   const channels = accountChannels;
 
-  const down = liveFund.dayPnl < 0;
-  const dayLed = `${down ? "-" : "+"}$${Math.abs(Math.round(liveFund.dayPnl))}`;
+  const down = (liveFund.dayPnl ?? 0) < 0;
+  const dayLed = liveFund.dayPnl == null ? "—" : `${down ? "-" : "+"}$${Math.abs(Math.round(liveFund.dayPnl))}`;
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
   const statusOn = props.incident.severity !== "normal";
   const openMarket = (next: MobileMarketView) => {

@@ -14,7 +14,7 @@ import type { FundState, Position, StrategistState } from "@/lib/desk/types";
 
 export function StudioBand({ fund, fundPnl, positions, recentTrades, strategists }: {
   fund: FundState;
-  fundPnl: { nav: number; dayPnl: number };
+  fundPnl: { nav: number | null; dayPnl: number | null };
   positions: Position[];
   recentTrades: Position[];
   strategists: StrategistState[];

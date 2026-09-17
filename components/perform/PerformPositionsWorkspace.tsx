@@ -113,7 +113,7 @@ export function PerformPositionsWorkspace({ surface, onNavigate }: { surface: Su
   const manualExits = model.exits.rows.filter(({ position }) => position.close_reason?.startsWith("manual"));
   const lastManualReason = manualExits.at(0)?.position.close_reason?.slice("manual:".length).replaceAll("_", " ");
   const realizedTone: SeveMetricTone = model.exits.realized > 0 ? "success" : model.exits.realized < 0 ? "danger" : "neutral";
-  const attributionBlocked = surface.feed.positionAttribution.state === "blocked";
+  const attributionBlocked = !["ok", "recovered"].includes(surface.feed.positionAttribution.state);
   const hasOpenPositions = surface.feed.positions.length > 0;
   const hasRecentExits = model.exits.rows.length > 0;
   const isQuietBook = !attributionBlocked && !hasOpenPositions && !hasRecentExits;
@@ -129,7 +129,7 @@ export function PerformPositionsWorkspace({ surface, onNavigate }: { surface: Su
     <SeveEvidenceContext kind="actual" scope={account?.name ?? "selected account"} asOf={asOf} era="current routed positions" sample={`${surface.feed.positions.length} open · ${model.exits.logicalTrades} closed`} quality={attributionBlocked ? "partial" : "live"} />
     <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="positions" channelSlugs={surface.feed.positions.map((position) => position.strategist_slug)} onNavigate={onNavigate} />
     {showReconciliation && <BrokerReconciliationStrip model={surface.opsReadiness} />}
-    {isQuietBook ? <SeveEmptyState title="DESK FLAT" summary="There are no open positions or current-session exits for this account." facts={[reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is still checking", "No capital is currently deployed", "The next position will appear here with its live exit evidence"]} /> : <>
+    {attributionBlocked ? <SeveEmptyState title="POSITION EVIDENCE UNAVAILABLE" summary="Loading or unresolved account attribution does not establish a flat account." facts={surface.feed.positionAttribution.issues} /> : isQuietBook ? <SeveEmptyState title="DESK FLAT" summary="There are no open positions or current-session exits for this account." facts={[reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is still checking", "No capital is currently deployed", "The next position will appear here with its live exit evidence"]} /> : <>
     <SeveMetricStrip metrics={[
       { label: "REALIZED", value: attributionBlocked ? "—" : signedUsd(model.exits.realized), tone: attributionBlocked ? "attention" : realizedTone },
       { label: "WINNERS", value: attributionBlocked ? "—" : model.exits.wins },

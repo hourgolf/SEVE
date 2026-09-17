@@ -19,6 +19,7 @@ export interface SessionNavAccountInput {
   startingSnapshot: SessionNavSnapshot;
   endingSnapshot: SessionNavSnapshot;
   positionRows: readonly SessionNavPositionRow[];
+  sessionWindow?: { known: boolean; startMs: number; endMs: number; openMs: number };
 }
 
 export interface SessionNavAccountReconciliation {
@@ -65,6 +66,12 @@ function reconcileAccount(input: SessionNavAccountInput): SessionNavAccountRecon
   const startMs = validInstant(input.startingSnapshot.capturedAt);
   const endMs = validInstant(input.endingSnapshot.capturedAt);
   if (startMs == null || endMs == null || endMs < startMs) issues.push("snapshot clock is invalid or reversed");
+  if (input.sessionWindow) {
+    const session = input.sessionWindow;
+    if (!session.known) issues.push("session calendar coverage is unknown");
+    if (startMs == null || startMs < session.openMs - 15 * 60_000 || startMs > session.openMs + 2 * 60_000) issues.push("opening snapshot is not within the session opening window");
+    if (endMs == null || endMs < session.openMs || endMs >= session.endMs) issues.push("ending snapshot is outside the reporting session");
+  }
   if (!Number.isFinite(input.startingSnapshot.netLiquidation) || !Number.isFinite(input.endingSnapshot.netLiquidation)) {
     issues.push("snapshot NAV is not finite");
   }
@@ -80,6 +87,7 @@ function reconcileAccount(input: SessionNavAccountInput): SessionNavAccountRecon
     const closedMs = validInstant(row.closedAt);
     if (row.openedAt && openedMs == null) issues.push(`position ${row.id} has an invalid open clock`);
     if (row.closedAt && closedMs == null) issues.push(`position ${row.id} has an invalid close clock`);
+    if (input.sessionWindow && startMs != null && openedMs != null && openedMs < startMs) issues.push(`position ${row.id} predates the opening snapshot; opening exposure is unverified`);
     if (openedMs != null) latestEventMs = Math.max(latestEventMs ?? openedMs, openedMs);
     if (closedMs != null) latestEventMs = Math.max(latestEventMs ?? closedMs, closedMs);
     if (row.status === "closed") {

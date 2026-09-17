@@ -5,22 +5,25 @@ import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
 import type { useWeeklyReports } from "@/hooks/useWeeklyReports";
 import type { StrategistState } from "@/lib/desk/types";
+import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 import { pmVar } from "@/lib/desk/colors";
 
 const SEV_CLASS: Record<string, string> = { high: "au-sev-high", med: "au-sev-med", low: "au-sev-low" };
 const PRI_CLASS: Record<string, string> = { high: "au-sev-high", med: "au-sev-med", low: "au-sev-low" };
 const VERDICT_CLASS: Record<string, string> = { keep: "au-sev-low", watch: "au-sev-med", retune: "au-sev-med", mute: "au-sev-high" };
 const EXP_KEY = "seve-weekly-expanded";
-const pct = (x: number) => `${Math.round(x * 100)}%`;
+const pct = (x: number | null) => x == null ? "unknown" : `${Math.round(x * 100)}%`;
 const md = (d: string) => d.slice(5); // "06-01"
 
 // The WEEK view of the merged Autopsy panel (frame + DAY⇄WEEK seg live in AutopsyPanel).
 // Headline = exit efficiency (left on the table); glance = fund line + movers; expand = full.
 export function WeeklyAutopsyBody({
   strategists,
+  passports,
   evidence,
 }: {
   strategists: StrategistState[];
+  passports?: ChannelWorkspaceModel;
   evidence: ReturnType<typeof useWeeklyReports>;
 }) {
   const { reports, loading, error } = evidence;
@@ -34,7 +37,7 @@ export function WeeklyAutopsyBody({
   const colorOf = (slug: string) => pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
   // Benched (86'd) channels: grey + chip — a week-old KEEP/WATCH verdict must not
   // read as current roster policy after a cull (autopsies are history, not roster).
-  const benched = new Set(strategists.filter((s) => s.status !== "armed").map((s) => s.slug));
+  const benched = new Set(Object.values(passports?.bySlug ?? {}).filter(p => p.lifecycle === "dark-evidence").map(p => p.slug));
 
   if (loading) return <div className="chart-empty">loading weekly…</div>;
   if (error) return <div className="chart-empty">couldn&apos;t load weekly — {error}</div>;
@@ -69,6 +72,7 @@ export function WeeklyAutopsyBody({
         {d.fund.maxDrawdown != null && <span className="neg" title="intraday peak-to-trough drawdown">maxDD −${Math.abs(d.fund.maxDrawdown).toFixed(0)}</span>}
         <span>positive {pct(d.fund.winRate)}</span>
       </div>
+      <p className="mut">Scope: {d.days.length} published daily reports. Unreported sessions are not zero-trade sessions; full-calendar coverage is unverified. NAV uses the stored snapshot endpoints.</p>
       {d.fund.bestDay && d.fund.worstDay && (
         <div className="wk-extremes">
           <span>best <b>{md(d.fund.bestDay.date)}</b> <span className="pos">{signedUsd(d.fund.bestDay.pnl)}</span></span>
@@ -93,39 +97,28 @@ export function WeeklyAutopsyBody({
       )}
 
       {/* HEADLINE — exit efficiency / left on the table */}
-      <div className="wk-ee">
-        <div className="au-sub">Observed price-peak diagnostic</div>
-        <div className="wk-ee-top">sampled peak upside before executable exit tests: <b className="neg">{signedUsd(-ee.totalUpsideLeft)}</b></div>
-        {expanded && ee.redThatRanGreen.slice(0, 6).map((rr) => (
-          <div className="wk-runner" key={`${rr.slug}-${rr.occ}`}>
-            <span className="wk-arrow">⤴</span>
-            <span className="au-dot" style={{ background: colorOf(rr.slug), boxShadow: `0 0 5px ${colorOf(rr.slug)}` }} />
-            <span className="wk-runner-occ">{rr.occ.replace(/^([A-Z]+)\d{6}/, "$1 ")}</span>
-            <span className="wk-runner-txt">exited <span className="neg">{signedUsd(rr.actual)}</span> · ran to <span className="pos">{signedUsd(rr.couldHave)}</span></span>
-          </div>
-        ))}
-        {!ee.redThatRanGreen.length && <div className="wk-ee-note">no qualifying red-to-green peak observation; this does not establish exit quality</div>}
-      </div>
+      <div className="wk-ee"><div className="au-sub">Capture evidence</div><p>Executable capture and recoverable portfolio upside are unknown. Legacy whole-day intrinsic proxies are withheld. New reports show coherent sampled held marks with exclusions.</p></div>
 
       {/* per-channel roll-up (expanded); collapsed shows top movers only */}
       {expanded && (
       <div className="au-channels">
         {traded.map((c) => {
           const cn = n?.channels?.find((x) => x.slug === c.slug);
-          const m = c.metrics, cap = c.exitEfficiency.captureRatio;
+          const m = c.metrics, cap = c.exitEfficiency.peakDiagnostic?.schema === "seve-reporting-v3" ? c.exitEfficiency.captureRatio : null;
           return (
             <div className={`au-ch${benched.has(c.slug) ? " au-ch--benched" : ""}`} key={c.slug}>
               <div className="au-ch-head">
                 <span className="au-dot" style={{ background: colorOf(c.slug), boxShadow: `0 0 5px ${colorOf(c.slug)}` }} />
                 <span className="au-name">{c.name}</span>
-                {benched.has(c.slug) && <span className="au-chip au-benched" title="benched (draft) — no entries; this verdict predates the cull">86&apos;d</span>}
+                {benched.has(c.slug) && <span className="au-chip au-benched" title="Current receipt-bound posture; historical verdict is not current policy.">OBSERVE ONLY NOW</span>}
                 {cn?.verdict && <span className={`au-chip ${VERDICT_CLASS[cn.verdict] ?? "au-sev-low"}`}>{cn.verdict}</span>}
-                <span className="wk-cap" title="recorded P&L divided by stored peak gain; not an executable capture estimate">cap {pct(cap)}</span>
+                <span className="wk-cap" title="Coherent sampled-held-mark subset only; excludes missing or inconsistent peaks. This is not an executable capture estimate.">held-mark ratio {cap == null ? "unknown" : `${(cap * 100).toFixed(1)}%`}</span>
                 <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(m.realizedPnl)}</span>
               </div>
               <div className="au-metrics">
-                {m.nTrades}t · {pct(m.winRate)} · hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R · best {signedUsd(m.bestTrade)}/worst {signedUsd(m.worstTrade)}
+                {m.nTrades}t · {pct(m.winRate)} · hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R (50% risk proxy) · best {signedUsd(m.bestTrade)}/worst {signedUsd(m.worstTrade)}
               </div>
+              {c.exitEfficiency.peakDiagnostic && <p className="mut">Held marks: {c.exitEfficiency.peakDiagnostic.valid}/{c.exitEfficiency.peakDiagnostic.total} logical trades valid · {c.exitEfficiency.peakDiagnostic.excluded} excluded.</p>}
               <div className="wk-byday">
                 {c.byDay.map((b) => <span key={b.date} className={b.pnl < 0 ? "neg" : b.pnl > 0 ? "pos" : ""}>{md(b.date)} {signedUsd(b.pnl)}</span>)}
               </div>
@@ -147,15 +140,15 @@ export function WeeklyAutopsyBody({
           {wkBest && (
             <span className="au-mover">
               <span className="au-dot" style={{ background: colorOf(wkBest.slug), boxShadow: `0 0 5px ${colorOf(wkBest.slug)}` }} />
-              <span className="au-mv-ar pos">▲</span><span className="au-mv-name">{wkBest.name}</span>
-              <span className="au-pnl pos">{signedUsd(wkBest.metrics.realizedPnl)}</span>
+              <span className={`au-mv-ar ${wkBest.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>▲</span><span className="au-mv-name">{wkBest.name}</span>
+              <span className={`au-pnl ${wkBest.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(wkBest.metrics.realizedPnl)}</span>
             </span>
           )}
           {wkWorst && (
             <span className="au-mover">
               <span className="au-dot" style={{ background: colorOf(wkWorst.slug), boxShadow: `0 0 5px ${colorOf(wkWorst.slug)}` }} />
-              <span className="au-mv-ar neg">▼</span><span className="au-mv-name">{wkWorst.name}</span>
-              <span className="au-pnl neg">{signedUsd(wkWorst.metrics.realizedPnl)}</span>
+              <span className={`au-mv-ar ${wkWorst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>▼</span><span className="au-mv-name">{wkWorst.name}</span>
+              <span className={`au-pnl ${wkWorst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(wkWorst.metrics.realizedPnl)}</span>
             </span>
           )}
           <span className="au-mv-count">{traded.length} ch</span>

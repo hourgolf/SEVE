@@ -12,7 +12,7 @@ import type { FundState } from "@/lib/desk/types";
 
 export interface MasterStripProps {
   fund: FundState;
-  fundPnl: { nav: number; dayPnl: number };
+  fundPnl: { nav: number | null; dayPnl: number | null };
   /** Header mirror: drop the capital knob, keep NAV + transport + paper/kill. */
   compact?: boolean;
 }
@@ -25,10 +25,10 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
   // LED value: NAV (digits only) or signed day P&L. Strip the $ / commas for
   // the 7-seg window (it renders digits, '-' and blanks).
   const ledRaw = showNav
-    ? String(fund.is_halted ? 0 : fundPnl.nav)
-    : (fundPnl.dayPnl < 0 ? "-" : "") + Math.abs(fundPnl.dayPnl);
+    ? fundPnl.nav == null ? "—" : String(fundPnl.nav)
+    : fundPnl.dayPnl == null ? "—" : ((fundPnl.dayPnl ?? 0) < 0 ? "-" : "") + Math.abs(fundPnl.dayPnl);
   // Compact (header) NAV: abbreviated thousands, e.g. 100000 → "100.0" + "K".
-  const navK = ((fund.is_halted ? 0 : fundPnl.nav) / 1000).toFixed(1);
+  const navK = fundPnl.nav == null ? "—" : (fundPnl.nav / 1000).toFixed(1);
 
   return (
     <div className={`master${compact ? " master--compact" : ""}`}>
@@ -62,7 +62,7 @@ function MasterStripImpl({ fund, fundPnl, compact = false }: MasterStripProps) {
             label="Capital"
             format={usd0}
           />
-          <div className={`master-day ${fundPnl.dayPnl < 0 ? "neg" : "pos"}`}>
+          <div className={`master-day ${(fundPnl.dayPnl ?? 0) < 0 ? "neg" : "pos"}`}>
             {signedUsd(fundPnl.dayPnl)} session NAV Δ
           </div>
         </div>

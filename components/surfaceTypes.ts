@@ -95,6 +95,8 @@ export interface SurfaceProps {
   /** Skin-neutral channel runtime/evidence contract derived once at the page
    *  seam. Every shell renders the same lifecycle and release truth. */
   channelWorkspace: ChannelWorkspaceModel;
+  /** Global research posture, independent of the selected account. */
+  allChannelWorkspace: ChannelWorkspaceModel;
   /** Authenticated, receipt-bound active specification and admission-policy
    * projection. Read-only; mutation authority remains in the governed flow. */
   channelControlPlane: ReturnType<typeof useChannelControlPlaneView>;
