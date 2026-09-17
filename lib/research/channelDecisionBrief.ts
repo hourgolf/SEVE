@@ -248,9 +248,10 @@ function decisionDistribution(rows: readonly AtlasOpportunity[]): NonNullable<Ch
     strongSessionUsd: quantile(sessionValues, .75),
     typicalBestMovePct,
     typicalFinalReturnPct,
-    coherentCapture: typicalFinalReturnPct != null && typicalFinalReturnPct <= 0 ? 0
-      : typicalBestMovePct != null && typicalBestMovePct > 0 && typicalFinalReturnPct != null
-        ? round(Math.max(0, Math.min(1, typicalFinalReturnPct / typicalBestMovePct))) : null,
+    // Never reconstruct a censored ratio from unrelated medians or clamp an
+    // impossible peak into an apparently perfect 100% capture result.
+    coherentCapture: rows.length > 0 && rows.every(row => finite(row.captureRatio) && row.captureRatio <= 1)
+      ? median(rows.map(row => row.captureRatio as number)) : null,
     largestWinnerShare: positiveTotal > 0 ? round(Math.max(...positiveResults) / positiveTotal) : null,
   };
 }
@@ -454,7 +455,8 @@ export function buildChannelDecisionBriefs(input: {
     const entries = entryFrequency(rows, dossier);
     const native = nativeExit(rows, frontier);
     const managers = managerReview(frontier);
-    const trailChannel = input.trailFrontier?.channels[dossier.channel];
+    const trailChannel = input.trailFrontier?.nativeComparisonIntegrity === "native-path-v1"
+      ? input.trailFrontier.channels[dossier.channel] : undefined;
     const trailEra = trailChannel?.eras.find((row) => row.configurationEra === trailChannel.selectedConfigurationEra)
       ?? trailChannel?.virtualEras.find((row) => row.configurationEra === trailChannel.selectedVirtualConfigurationEra)
       ?? null;

@@ -243,6 +243,9 @@ export function buildOperatorExperimentPacket(input: {
     });
   const active = input.lifecycle.queues.keep_trading;
   const assessed = active.flatMap((channel): OperatorTrailTrial[] => {
+    // Historical frontier books use fixed reference stops and sampled paths.
+    // Keep their raw artifacts, but do not turn them into native exit trials.
+    if (input.trails.nativeComparisonIntegrity !== "native-path-v1") return [];
     const frontier = input.trails.channels[channel];
     const era = frontier?.eras.find((row) => row.configurationEra === frontier.selectedConfigurationEra);
     const recommended = era?.recommendedCandidateId

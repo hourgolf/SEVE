@@ -25,7 +25,7 @@ const lifecycle = { throughSession: "2026-08-10", queues: { retirement_review: [
   retire: { scoredSessions: 8, scoredOpportunities: 20, typicalOpportunityUsd: -4, typicalSessionUsd: -8,
     uniqueness: "redundant", reasons: ["Negative and redundant."], plainLanguage: "Pause." },
 } } as unknown as ChannelLifecycleDecisionPacket;
-const trails = { throughSession: "2026-08-10", channels: { active: { selectedConfigurationEra: "current", eras: [{
+const trails = { nativeComparisonIntegrity: "native-path-v1", throughSession: "2026-08-10", channels: { active: { selectedConfigurationEra: "current", eras: [{
   configurationEra: "current", candidates: [baseCandidate], recommendation: "test_full_ratchet",
   recommendedCandidateId: "FULL-R50-K75", plainLanguage: "Prepare a test.",
 }] } }, candidates: [{ id: "FULL-R50-K75", family: "full_ratchet", bankPct: null, armPct: 50,
@@ -37,6 +37,10 @@ const snapshot = { activeChannelSpecs: [{ slug: "active", executionPosture: "pap
   entryParameters: { maxEntriesPerSession: 2 } }], strategists: [] } as unknown as DecisionAtlasSourceSnapshot;
 const capacity = { channels: { active: { currentContracts: 2 } } } as unknown as PortfolioCapacityDecisionPacket;
 const packet = buildOperatorExperimentPacket({ briefs, experiments, lifecycle, trails, atlas, snapshot, capacity });
+const unverified = buildOperatorExperimentPacket({ briefs, experiments, lifecycle,
+  trails: {...trails, nativeComparisonIntegrity: undefined}, atlas, snapshot, capacity });
+assert.equal(unverified.trailTrials.length, 0, "reference frontier cannot authorize a native paper trial");
+assert.equal(unverified.summary.paperTrailTrials, 0);
 assert.equal(packet.retirementReviews.length, 1);
 assert.equal(packet.entryTrials.length, 1);
 assert.equal(packet.trailTrials[0]?.action, "prepare_paper_trial");
