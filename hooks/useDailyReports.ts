@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { validatedNarrative, type PeakDiagnostic } from "@/supabase/functions/_shared/reportingEvidence";
 import { useRefreshTick } from "./useRefreshTick";
 
 // Lazy read of the daily-autopsy reports (written by the daily-autopsy edge fn).
@@ -39,19 +40,21 @@ export interface ReportDigestChannel {
   metrics: {
     nTrades: number; winRate: number; realizedPnl: number; medianHoldMin: number; avgR: number;
     /** peak forensics (digest 2026-07-03a; absent on older reports) */
-    nPeaked?: number | null; avgPeakPct?: number | null; peakCapturePct?: number | null;
+    peakDiagnostic?: PeakDiagnostic; nPeaked?: number | null; avgPeakPct?: number | null; peakCapturePct?: number | null;
   };
   exitReasons: Record<string, number>;
   flaws: { type: string; severity: string; evidence: string }[];
 }
 export interface ReportDigest {
+  peakDiagnostic?: PeakDiagnostic;
   date: string;
   mode: string;
   market?: { open: number; close: number; returnPct: number; rangePct: number; efficiency: number; note: string } | null;
-  fund?: { dayRealized: number; trades: number; winRate: number; channelsTraded: number };
+  fund?: { dayRealized: number; trades: number; wins?: number; winRate: number; channelsTraded: number };
   channels?: ReportDigestChannel[];
   evidence?: {
     schemaVersion: number;
+    producerVersion?: string;
     layer: string;
     unit: "logical_trade" | "position_row";
     scope: string;
@@ -84,13 +87,14 @@ export function useDailyReports(limit = 10, enabled = true): { reports: DailyRep
       const { data, error } = await sb
         .from("daily_reports")
         .select("report_date,mode,digest,narrative")
+        .eq("mode", "paper")
         .order("report_date", { ascending: false })
         .limit(limit);
       if (!alive) return;
       // Surface a read failure (RLS / missing table / network) instead of silently
       // showing "no reports" — so an empty panel on a real error is diagnosable.
-      if (error) setError(error.message);
-      setReports((data ?? []) as DailyReport[]);
+      setError(error?.message ?? null);
+      setReports(((data ?? []) as DailyReport[]).map(row => ({ ...row, narrative: validatedNarrative(row.narrative, "daily") })));
       setLoading(false);
     })().catch((e) => {
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }

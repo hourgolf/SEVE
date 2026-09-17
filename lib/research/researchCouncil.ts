@@ -141,8 +141,8 @@ function primaryDispatch(brief: ChannelDecisionBrief): ResearchDispatch {
     headline: brief.recommendation.label,
     message: compact(voicedPrimary(brief)),
     evidence: [
-      { label: "TYPICAL", value: signedMoney(brief.historicalVirtual.typicalResultPerContractUsd ?? brief.executed.typicalResultUsd) },
-      { label: "EVIDENCE", value: `${brief.evidence.decisionSessions}s / ${brief.evidence.decisionOpportunities}` },
+      { label: "TYPICAL", value: `${signedMoney(brief.decisionDistribution?.typicalOpportunityUsd ?? null)}/ct` },
+      { label: "EVIDENCE", value: brief.decisionDistribution ? `${brief.decisionDistribution.sessions}s / ${brief.decisionDistribution.opportunities}` : "COHORT UNAVAILABLE" },
     ],
     confidence: confidence(brief),
     priority: axisPriority(brief.recommendation.axis),
@@ -176,13 +176,13 @@ function contradictionDispatches(brief: ChannelDecisionBrief, parent: ResearchDi
   if (executedTypical != null && virtualTypical != null && Math.sign(executedTypical) !== Math.sign(virtualTypical)) {
     rows.push({
       id: stableId("dispatch", brief.channel, "executed-virtual-conflict"), sequence: 0, agentId: "skeptic", kind: "challenge",
-      channel: brief.channel, axis: brief.recommendation.axis, headline: "CURRENT TRADES AND HISTORY DISAGREE",
+      channel: brief.channel, axis: brief.recommendation.axis, headline: "SEPARATE EXECUTED AND VIRTUAL COHORTS",
       message: pickVoice(brief.channel, [
         "Plot twist: current fills and old virtual paths disagree. Keep them separate and find what changed before touching a knob.",
         "The fills and the backtest are subtweeting each other. Separate the eras, then find out who changed the story.",
         "History said moon; current fills said basement. Nobody touches a knob until we find what changed.",
       ]),
-      evidence: [{ label: "EXECUTED", value: signedMoney(executedTypical) }, { label: "VIRTUAL", value: signedMoney(virtualTypical) }],
+      evidence: [{ label: "EXECUTED / TRADE", value: signedMoney(executedTypical) }, { label: "VIRTUAL / CT", value: signedMoney(virtualTypical) }],
       confidence: confidence(brief), priority: 98, replyTo: parent.id,
     });
   }

@@ -1,3 +1,4 @@
+import { reportingSession } from "@/lib/desk/reportingSession";
 import type { DailyReport } from "@/hooks/useDailyReports";
 
 export interface SessionReviewModel {
@@ -16,19 +17,9 @@ export interface SessionReviewModel {
 }
 
 const weightedExitRead = (report: DailyReport): { averageBestMovePct: number | null; retainedPct: number | null } => {
-  const total = (report.digest.channels ?? []).reduce((acc, channel) => {
-    const weight = channel.metrics.nPeaked ?? 0;
-    const peak = channel.metrics.avgPeakPct;
-    const retained = channel.metrics.peakCapturePct;
-    if (weight > 0 && peak != null && retained != null) {
-      acc.weight += weight;
-      acc.peak += peak * weight;
-      acc.retained += retained * weight;
-    }
-    return acc;
-  }, { weight: 0, peak: 0, retained: 0 });
-  return total.weight > 0
-    ? { averageBestMovePct: Math.round(total.peak / total.weight), retainedPct: Math.round(total.retained / total.weight) }
+  const diagnostic = report.digest.peakDiagnostic;
+  return diagnostic?.schema === "seve-reporting-v3"
+    ? { averageBestMovePct: diagnostic.averagePeakPct, retainedPct: diagnostic.retainedPct }
     : { averageBestMovePct: null, retainedPct: null };
 };
 
@@ -53,7 +44,7 @@ export function buildSessionReviewModel(report: DailyReport): SessionReviewModel
     resultLabel: logical ? "GROSS LOGICAL-TRADE ATTRIBUTION" : "GROSS POSITION-ROW ATTRIBUTION",
     resultUsd: fund?.dayRealized ?? null,
     observations,
-    profitable: fund ? Math.round(fund.winRate * observations) : 0,
+    profitable: fund ? fund.wins ?? Math.round(fund.winRate * observations) : 0,
     channelsTraded: fund?.channelsTraded ?? 0,
     averageBestMovePct: exit.averageBestMovePct,
     retainedPct: exit.retainedPct,
@@ -61,7 +52,7 @@ export function buildSessionReviewModel(report: DailyReport): SessionReviewModel
       ?? report.narrative?.systemFindings?.[0]?.suggestedExperiment
       ?? "Open Trade Review to inspect channel-level evidence."),
     limitation: logical
-      ? null
+      ? report.digest.peakDiagnostic ? `Held-mark diagnostic only; ${report.digest.peakDiagnostic.valid} valid / ${report.digest.peakDiagnostic.total} observed, ${report.digest.peakDiagnostic.excluded} excluded. Executable capture is unverified.` : "Peak coverage is unavailable in this stored report; executable capture is unverified."
       : "This stored report predates logical-trade evidence. Counts are legacy position rows and should not be compared directly with current reports.",
   };
 }
@@ -73,5 +64,8 @@ export function easternDate(now = new Date()): string {
 }
 
 export function shouldAnchorHistoricalResults(reportDate: string | null, now = new Date()): boolean {
-  return !!reportDate && reportDate < easternDate(now);
+  if (!reportDate) return false;
+  if (reportDate < easternDate(now)) return true;
+  const session = reportingSession(now.getTime());
+  return session.known && reportDate === session.date && now.getTime() >= session.closeMs;
 }

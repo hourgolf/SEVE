@@ -158,3 +158,5 @@ assert.deepEqual(
 );
 
 console.log("desk-derive-selftest: PASS");
+
+assert.deepEqual(liveFundPnl({ nav: null, dayPnl: null }, [position()], liveMarks, -36, snapshotAt), { nav: null, dayPnl: null }, "a live-mark adjustment cannot create missing broker NAV");

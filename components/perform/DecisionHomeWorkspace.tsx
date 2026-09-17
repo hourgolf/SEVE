@@ -25,8 +25,9 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
   const account = surface.accounts.find((row) => row.id === surface.acctId);
   const fleet = buildFleetDecisionSummary(surface.decisionAtlas.bySlug, surface.decisionAtlas.throughSession);
   const readiness = surface.opsReadiness.summary;
-  const deskFlat = surface.feed.positions.length === 0;
-  const healthy = surface.incident.severity === "normal" && readiness.tone !== "red";
+  const positionsKnown = ["ok", "recovered"].includes(surface.feed.positionAttribution.state);
+  const deskFlat = positionsKnown && surface.feed.positions.length === 0;
+  const healthy = surface.incident.severity === "normal" && readiness.tone === "green";
   const latestEvent = surface.data.events[0];
   const atlasLabel = decisionAtlasFreshnessShortLabel({
     freshness: surface.decisionAtlas.freshness,
@@ -36,10 +37,10 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
   const researchVerified = surface.decisionAtlas.state === "ready"
     && surface.decisionAtlas.publication?.state === "verified" && surface.decisionAtlas.freshness === "current";
   const researchLabel = surface.decisionAtlas.state === "ready"
-    ? atlasStale ? atlasLabel : researchVerified ? `VERIFIED · ${surface.decisionAtlas.throughSession?.slice(5).replace("-", "/")}` : "BUNDLE UNVERIFIED"
+    ? atlasStale ? atlasLabel : researchVerified ? `BUNDLE VERIFIED · ${surface.decisionAtlas.throughSession?.slice(5).replace("-", "/")}` : "BUNDLE UNVERIFIED"
     : surface.decisionAtlas.state.toUpperCase();
-  const evidenceQuality = readiness.tone === "red" || surface.decisionAtlas.state === "error" || atlasStale || !researchVerified ? "partial"
-    : "complete";
+  // Publication integrity does not establish calibration of every evidence layer.
+  const evidenceQuality = "partial" as const;
   const attention = [
     surface.incident.severity !== "normal" ? { label: surface.incident.title, destination: { section: "ops" as const, check: "reconciliation" } } : null,
     atlasStale ? { label: "Nightly channel decisions need a fresh close", destination: { section: "research" as const, researchMode: "decisions" as const } } : null,
@@ -60,8 +61,8 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
       detail="Actual selected-account positions are kept separate from all-paper nightly research."
     />
     <section className={`decision-home-status ${healthy && researchVerified ? "healthy" : "attention"}`}>
-      <span><small>DESK STATUS</small><b>{healthy ? researchVerified ? "PAPER DESK READY" : "PAPER DESK READY · RESEARCH NEEDS REVIEW" : "CHECK BEFORE THE NEXT SESSION"}</b><p>{deskFlat ? `${account?.name ?? "The selected paper account"} is flat.` : `${surface.feed.positions.length} selected-account paper positions remain open.`}</p></span>
-      <div><span data-review={readiness.tone === "red"}><small>TRADING</small><b>{readiness.tone === "red" ? "NEEDS REVIEW" : "READY"}</b></span><span data-review={surface.data.status === "err"}><small>DATA</small><b>{surface.data.status === "err" ? "NEEDS REVIEW" : "AVAILABLE"}</b></span><span data-review={!researchVerified}><small>RESEARCH</small><b>{researchLabel}</b></span></div>
+      <span><small>DESK STATUS</small><b>{healthy ? researchVerified ? "OBSERVED HEALTH CHECKS PASS" : "PAPER DESK READY · RESEARCH NEEDS REVIEW" : "CHECK BEFORE THE NEXT SESSION"}</b><p>{!positionsKnown ? "Account position evidence is being checked or is unavailable." : deskFlat ? `${account?.name ?? "The selected paper account"} is flat.` : `${surface.feed.positions.length} selected-account paper positions remain open.`}</p></span>
+      <div><span data-review={readiness.tone !== "green"}><small>TRADING</small><b>{readiness.tone === "green" ? "OBSERVED CHECKS PASS" : "CHECKS INCOMPLETE / NEED REVIEW"}</b></span><span data-review={surface.data.status !== "live" || !surface.data.lastIngestTs}><small>DATA</small><b>{!surface.data.lastIngestTs ? "CHECKING" : surface.data.status === "live" ? "RECENT INGEST OBSERVED" : "STALE / NEEDS REVIEW"}</b></span><span data-review={!researchVerified}><small>PUBLICATION · CALIBRATION IS SEPARATE</small><b>{researchLabel}</b></span></div>
       <button type="button" onClick={() => onNavigate({ section: "ops" })}>OPEN SYSTEM STATUS</button>
     </section>
     <div className="decision-home-grid">

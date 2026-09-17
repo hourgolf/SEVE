@@ -7,7 +7,7 @@ const mobile = readFileSync(new URL("../mobile2/MobileRackRow.tsx", import.meta.
 const workspace = readFileSync(new URL("../perform/ShadowResearchWorkspace.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../../app/research-books.css", import.meta.url), "utf8");
 
-assert.match(board, /WHAT ARE WE DOING WITH EACH CHANNEL\?/);
+assert.match(board, /STORED RESEARCH ASSIGNMENTS/);
 assert.match(board, /OPERATOR INBOX/);
 assert.match(board, /MAXIMUM 3/);
 assert.match(board, /\.slice\(0, 3\)/);

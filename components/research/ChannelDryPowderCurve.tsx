@@ -41,7 +41,7 @@ export function ChannelDryPowderCurve({ curve, defaultContracts = 2, compact = f
   const read = curve ? curveRead(curve) : null;
 
   if (!curve?.points.length || !selected) return <section className={`dpc${compact ? " compact" : ""} empty`} aria-label="Dry powder curve unavailable">
-    <header><span><b>DRY POWDER CURVE</b><small>CAPACITY REPLAY · capital-blind native paths</small></span><em>NO PATHS</em></header>
+    <header><span><b>DRY POWDER CURVE</b><small>CAPACITY REPLAY · capital-blind reference paths</small></span><em>NO PATHS</em></header>
     <p>No prospective virtual entry sequence is available for this channel.</p>
   </section>;
 
@@ -71,7 +71,7 @@ export function ChannelDryPowderCurve({ curve, defaultContracts = 2, compact = f
       <div className="dpc-scenario">
         <span className="dpc-budget"><small>ENTRY BUDGET</small><b>≤{selected.entryBudget}/SESSION</b><em>first {selected.entryBudget} observed signals</em></span>
         <span><small>AVG / SESSION</small><b className={selected.averagePnlPerSession >= 0 ? "pos" : "neg"}>{signedUsd(selected.averagePnlPerSession * contracts)}</b><em>{contracts} ct per path</em></span>
-        <span><small>PEAK STACK</small><b>{selected.peakConcurrentPositions == null ? "—" : `${selected.peakConcurrentPositions * contracts} CT`}</b><em>{selected.peakConcurrentPositions ?? "—"} native paths</em></span>
+        <span><small>PEAK STACK</small><b>{selected.peakConcurrentPositions == null ? "—" : `${selected.peakConcurrentPositions * contracts} CT`}</b><em>{selected.peakConcurrentPositions ?? "—"} reference paths</em></span>
         <span><small>PEAK DEBIT</small><b>{selected.peakDebitPerContract == null ? "—" : usd0(selected.peakDebitPerContract * contracts)}</b><em>observed entry asks</em></span>
         <span><small>SELECTED PATHS</small><b>{selected.selectedScored}</b><em>{curve.sessionCount} channel sessions</em></span>
       </div>
@@ -84,6 +84,6 @@ export function ChannelDryPowderCurve({ curve, defaultContracts = 2, compact = f
       <span><small>OBSERVING / PAUSED</small><b>{curve.gates.lifecycle}</b></span>
       <span><small>OTHER</small><b>{curve.gates.other}</b></span>
     </div>
-    <footer>ORDINAL, CORRELATED SIMULATION · NATIVE MID-BASIS EXITS · PEAK STACK USES OBSERVED PATH DURATION · NOT EXECUTABLE P&amp;L OR A MANAGER COMPARISON</footer>
+    <footer>ORDINAL, CORRELATED SIMULATION · REFERENCE MID-BASIS EXITS · POLICY COMPATIBILITY UNVERIFIED · PEAK STACK USES OBSERVED PATH DURATION · NOT EXECUTABLE P&amp;L OR A MANAGER COMPARISON</footer>
   </section>;
 }

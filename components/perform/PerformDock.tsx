@@ -6,7 +6,6 @@ import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
-import { prioritizeChannels } from "@/lib/perform/derivePerformView";
 import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 
 // PERFORM bottom dock (slice S2) — one chicklet per roster channel, the same
@@ -16,20 +15,21 @@ import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 // only write remains the existing auth-gated MUTE pad.
 
 function Chicklet({
-  ch, pnl, canWrite, onMute, a13,
+  ch, pnl, canWrite, onMute, a13, passport,
 }: {
   ch: StrategistState;
+  passport?: ChannelWorkspaceModel["bySlug"][string];
   pnl?: ChannelPnl;
   canWrite: boolean;
   onMute: () => void;
   a13: boolean;
 }) {
-  const muted = ch.config.muted;
-  const armed = ch.status === "armed" && !muted;
-  const dim = muted ? " off" : ch.status !== "armed" ? " dark" : "";
+  const muted = passport?.lifecycle === "dark-evidence";
+  const armed = passport?.lifecycle === "paper-root";
+  const dim = armed ? "" : " dark";
   const open = pnl?.openCount ?? 0;
-  const tag = open > 0 ? `OPEN ${open}` : muted ? "MUTED" : ch.config.boosted ? "BOOSTED" : ch.status !== "armed" ? (ch.status === "disabled" ? "OBSERVE" : "DRAFT") : "ARMED";
-  const tagClass = muted ? "muted" : tag === "OBSERVE" || tag === "DRAFT" ? "darkch" : open > 0 ? "open" : tag === "BOOSTED" ? "boosted" : "armed";
+  const tag = open > 0 ? `OPEN ${open}` : passport?.lifecycleLabel ?? "UNVERIFIED";
+  const tagClass = open > 0 ? "open" : armed ? "armed" : "darkch";
   const day = pnl?.dayPnl;
   const dayCls = day == null || day === 0 ? "flat" : day < 0 ? "neg" : "pos";
 
@@ -71,7 +71,10 @@ export function PerformDock({
   const dispatch = useDeskDispatch();
   const { canDirectConfigure: canWrite, persistConfig } = useDeskWrite();
   const [showInactive, setShowInactive] = useState(false);
-  const prioritized = useMemo(() => prioritizeChannels(channels, livePnl), [channels, livePnl]);
+  const prioritized = useMemo(() => ({
+    visible: channels.filter(ch => channelWorkspace.bySlug[ch.slug]?.lifecycle === "paper-root" || (livePnl[ch.slug]?.openCount ?? 0) > 0 || (livePnl[ch.slug]?.dayPnl ?? 0) !== 0),
+    inactive: channels.filter(ch => channelWorkspace.bySlug[ch.slug]?.lifecycle !== "paper-root" && !(livePnl[ch.slug]?.openCount) && !(livePnl[ch.slug]?.dayPnl)),
+  }), [channels, livePnl, channelWorkspace]);
   const shown = showInactive ? [...prioritized.visible, ...prioritized.inactive] : prioritized.visible;
 
   // Optimistic mute — the same write the STUDIO strip/pad fires.
@@ -97,6 +100,7 @@ export function PerformDock({
             <Chicklet
               key={ch.slug}
               ch={ch}
+              passport={channelWorkspace.bySlug[ch.slug]}
               pnl={livePnl[ch.slug]}
               canWrite={canWrite}
               onMute={() => mute(ch)}

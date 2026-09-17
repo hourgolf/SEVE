@@ -1,3 +1,4 @@
+import { policyEvidenceEligible } from "./reportingEligibility";
 import type {
   AtlasChannelDossier,
   AtlasEntryExitFrontier,
@@ -372,7 +373,7 @@ function chooseRecommendation(input: {
   entryAtlas?: ChannelEntryAtlas;
 }): ChannelDecisionBrief["recommendation"] {
   const { dossier, native, managers, entries, trail, platformEffect, entryAtlas } = input;
-  if (!dossier.decisionCohort.opportunities || /unstamped|legacy|unverified|virtual-reference-policy/i.test(dossier.decisionCohort.configurationEra)) {
+  if (!policyEvidenceEligible(dossier.decisionCohort)) {
     return { axis: "collection", label: "VERIFY EVIDENCE",
       summary: "The available cohort does not have verified policy authority for a roster or manager change.",
       nextExperiment: "Reconcile source policy, reference-path economics and cohort scope before preparing a channel experiment.",

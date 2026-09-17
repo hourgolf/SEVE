@@ -74,7 +74,7 @@ export function ResearchCouncilRoom({ reports, onNavigate }: {
   return <section className="research-council" aria-label="Nightly research agent room">
     <header className="rc-head">
       <span><small>NIGHTLY RESEARCH ROOM · THROUGH {packet.throughSession.slice(5).replace("-", "/")}</small><b>{packet.summary.headline}</b></span>
-      <div className="rc-roster" aria-label={`${packet.agents.length} research agents`}>{packet.agents.map((agent) => <span key={agent.id} title={`${agent.name} · ${agent.role}`}><AgentAvatar id={agent.id} /></span>)}</div>
+      <div className="rc-roster" aria-label={`${packet.agents.length} deterministic research views`}>{packet.agents.map((agent) => <span key={agent.id} title={`${agent.name} · ${agent.role}`}><AgentAvatar id={agent.id} /></span>)}</div>
       <em>{reports.freshness === "stale" ? "STALE · READ ONLY" : "READ ONLY"}</em>
     </header>
     <div className="rc-pulse">
@@ -92,6 +92,6 @@ export function ResearchCouncilRoom({ reports, onNavigate }: {
       {!displayed.length ? <p className="rc-quiet">No conflicts in the current nightly packet.</p> : null}
     </div>
     {filtered.length > collapsedLimit ? <button type="button" className="rc-more" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>{expanded ? `SHOW SHORT ${filter.toUpperCase()}` : `SHOW ${filtered.length - collapsedLimit} MORE`}</button> : null}
-    <details className="rc-method"><summary>MEET THE CREW · HOW THIS WORKS <i>▾</i></summary><p>Specialists read the same frozen briefs from different angles. The personality is presentation; every claim still carries linked evidence and no one here can change trading behavior.</p><div className="rc-crew">{packet.agents.map((agent) => <span key={agent.id}><AgentAvatar id={agent.id} /><b>{agent.callsign}</b><small>{agent.voice}</small></span>)}</div></details>
+    <details className="rc-method"><summary>MEET THE CREW · HOW THIS WORKS <i>▾</i></summary><p>These seven deterministic templates read the same frozen briefs; they are not independently running AI agents. The personality is presentation; every claim still carries linked evidence and no one here can change trading behavior.</p><div className="rc-crew">{packet.agents.map((agent) => <span key={agent.id}><AgentAvatar id={agent.id} /><b>{agent.callsign}</b><small>{agent.voice}</small></span>)}</div></details>
   </section>;
 }

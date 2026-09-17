@@ -92,7 +92,7 @@ function ManagerComparison({ model, trail }: { model: ChannelDecisionSummary; tr
       <i>VS</i>
       <span><small>LEADING CHALLENGER</small><b>{challenger?.id ?? "NONE YET"}</b><strong>{signed(challenger?.typicalBenefitPct ?? null, " pts")}</strong><em>{challenger ? `${pct(challenger.improvementFrequency)} improved · ${challenger.sessions}s` : "no paired cohort"}</em></span>
     </div>
-    {challenger && <div className={`atlas-manager-verdict ${challenger.robust ? "ready" : "hold"}`}>{challenger.robust ? "READY FOR A CONTROLLED PAPER TEST" : "NATIVE HOLDS · CHALLENGER IS NOT ROBUST YET"}</div>}
+    {challenger && <div className={`atlas-manager-verdict ${challenger.robust ? "ready" : "hold"}`}>{challenger.robust ? "READY FOR A CONTROLLED PAPER TEST" : "NO SUPPORTED MANAGER CHANGE · CHECK PAIR COVERAGE"}</div>}
     {trail && <div className={`atlas-trail-callout ${trail.state}`}>
       <span><small>{trail.evidenceLayer === "virtual" ? "VIRTUAL TRAIL READ" : "EXECUTED TRAIL READ"}</small><b>{leadingTrail?.label ?? "NO COMPLETE TRAIL PATH"}</b></span>
       <span><small>TYPICAL LIFT</small><b>{signed(leadingTrail?.typicalBenefitPct ?? null, " pts")}</b></span>
@@ -149,7 +149,8 @@ function EvidenceScopeSummary({ brief, summary }: { brief: ChannelDecisionBrief;
   const agreement = executedSign == null || virtualSign == null ? "PARTIAL SOURCES"
     : executedSign === virtualSign ? "MEDIAN SIGNS MATCH" : "MEDIAN SIGNS DIFFER";
   return <section className="atlas-evidence-scopes" aria-label="Channel evidence scopes">
-    <nav aria-label="Evidence lens">
+    <p>Coverage selector only. Headline and charts retain their explicitly named decision cohort.</p>
+    <nav aria-label="Coverage only; headline and charts retain their named decision cohort">
       <button type="button" className={lens === "current" ? "on" : ""} onClick={() => setLens("current")}>CURRENT SETTINGS</button>
       <button type="button" className={lens === "comparable" ? "on" : ""} onClick={() => setLens("comparable")}>COMPARABLE HISTORY</button>
       <button type="button" className={lens === "all" ? "on" : ""} onClick={() => setLens("all")}>ALL RESEARCH</button>

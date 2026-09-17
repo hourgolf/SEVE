@@ -4,7 +4,7 @@ import { readForensicsExecutionSummary } from "@/lib/research/forensicsExecution
 import { useState } from "react";
 import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
-import { type useForensicsReport, type GivebackTrendPoint, type ShadowCurvePoint } from "@/hooks/useForensicsReport";
+import { type useForensicsReport, type ShadowCurvePoint } from "@/hooks/useForensicsReport";
 import { type usePyramidShadow, pyramidName } from "@/hooks/usePyramidShadow";
 import type { useVirtualBench } from "@/hooks/useVirtualBench";
 
@@ -16,24 +16,6 @@ const shortDate = (d: string) => d.slice(5); // "06-15"
 const cls = (v: number) => (v < 0 ? "neg" : "pos");
 const etTime = (iso: string) => { try { return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 const etDay = (iso: string) => { try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", month: "2-digit", day: "2-digit" }).format(new Date(iso)); } catch { return ""; } };
-
-// inline capture-rate sparkline (kept ÷ peak, %): higher = keeping more of the peak.
-function CaptureSparkline({ pts }: { pts: GivebackTrendPoint[] }) {
-  const vals = pts.map((p) => p.capturePct as number);
-  if (vals.length < 2) return null;
-  const W = 120, H = 22, pad = 3;
-  const lo = Math.min(...vals, 0), hi = Math.max(...vals, 100), span = hi - lo || 1;
-  const x = (i: number) => pad + (i * (W - 2 * pad)) / (vals.length - 1);
-  const y = (v: number) => pad + (H - 2 * pad) * (1 - (v - lo) / span);
-  const d = vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const up = vals[vals.length - 1] >= vals[vals.length - 2];
-  return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ flex: "0 0 auto" }}>
-      <path d={d} fill="none" stroke="var(--text)" strokeWidth={1.4} opacity={0.65} />
-      <circle cx={x(vals.length - 1)} cy={y(vals[vals.length - 1])} r={2.4} style={{ fill: up ? "var(--green)" : "var(--red)" }} />
-    </svg>
-  );
-}
 
 // NAV sparkline for the one-account shadow — dashed baseline = starting equity.
 function NavSparkline({ pts, base }: { pts: ShadowCurvePoint[]; base: number }) {
@@ -97,7 +79,7 @@ export function ForensicsPanel({
   virtualBench: ReturnType<typeof useVirtualBench>;
   alwaysOpen?: boolean;
 }) {
-  const { report, trend, benchedCum, loading, error } = forensics;
+  const { report, benchedCum, loading, error } = forensics;
   const ps = pyramid;
   const vb = virtualBench;
   const [storedFolded, toggleFold] = useFold("forensics", true); // deep-dive — folded by default (§04 tidy)
@@ -118,10 +100,8 @@ export function ForensicsPanel({
   const showToday = scWin === "today" && !!scToday;
   const sc = showToday ? scToday! : report.payload.overrideScorecard;
   const bvl = report.payload.benchedVsLive;
-  const gb = report.payload.giveback ?? null;
   const oas = report.payload.oneAccountShadow ?? null;
   const rs = report.payload.ratchetShadow ?? null;
-  const trendUp = trend.length >= 2 && (trend[trend.length - 1].capturePct ?? 0) >= (trend[0].capturePct ?? 0);
   const ranAny = bvl?.benched.some((b) => b.ran) ?? false;
   const showBvToday = bvWin === "today" || !benchedCum;
   const asOf = (() => { try { return new Date(report.payload.generatedAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return report.report_date; } })();
@@ -141,13 +121,14 @@ export function ForensicsPanel({
 
   return (
     <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}>
+      <p className="wk-ee-note"><b>HISTORICAL MODEL STUDIES · {report.report_date}</b><br />These are overlapping modeled paths and historical policy comparisons, not booked gains or additions to the current roster. Currency is whole modeled position dollars unless explicitly marked $/ct. The bench simulator uses its legacy cost gate and 50% stop; old Momo ratchet arms do not represent current BANK20/RUN50. Account capacity uses the captured historical roster and sizing assumptions. Current-policy compatibility and portfolio displacement are unverified.</p>
       <div className="au-fund">
         <span>All-account closed ledger: <b>{execution ? signedUsd(execution.grossPnlUsd) : "unavailable in this report"}</b></span>
         {execution && <span>{execution.nClosedTranches} closed tranches · {execution.nUnattributedTranches} without account attribution · before fees · broker reconciliation is separate</span>}
       </div>
       {/* ── ONE-ACCOUNT — the dream team in a single live-sized cash pool ── */}
       <Inst
-        k="oneacct" label="Account capacity" question="Would one paper account block otherwise useful trades?"
+        k="oneacct" label="Account capacity" question="How did cash bind under this historical sizing and roster model?"
         mid={oas && oas.curve.length > 0 ? (
           <>
             <NavSparkline pts={oas.curve} base={oas.params.equity} />
@@ -214,40 +195,11 @@ export function ForensicsPanel({
         )}
       </Inst>
 
-      {/* ── GIVE-BACK — is the desk keeping its peaks? ── */}
-      <Inst
-        k="giveback" label="Sampled peak comparison" question="How do realized results compare with recorded mid-quote peaks?"
-        mid={gb && gb.capturePct != null ? (
-          <>
-            {trend.length >= 2 && <CaptureSparkline pts={trend} />}
-            {trend.length >= 2 && <span className="mut">{trend[0].capturePct}%→<b className={trendUp ? "pos" : "neg"}>{trend[trend.length - 1].capturePct}%</b></span>}
-          </>
-        ) : <span className="mut">accruing — first point at the next post-close publish</span>}
-        stat={gb && gb.capturePct != null
-          ? <span className="mut">realized / sampled peak {gb.capturePct}%</span>
-          : <span className="mut">—</span>}
-      >
-        {gb && gb.capturePct != null && (
-          <>
-            <div className="au-fund">
-              <span>Realized / sampled peak <b>{gb.capturePct}%</b></span>
-              <span>Sampled peak minus realized <b>{signedUsd(gb.givenBackUsd)}</b></span>
-              <span title={gb.unit === "position_tranche" ? "Exit-path analysis is tranche-specific; this is not a logical-trade count." : "Legacy report: count unit was not persisted."}>{gb.nPeakers}/{gb.nClosed} {gb.unit === "position_tranche" ? "tranches peaked" : "legacy rows peaked"}</span>
-            </div>
-            <p className="mut">Only eligible tranches with a positive sampled mid-quote peak are included. The subset kept {signedUsd(gb.keptUsd)}; it is not the session total. Sparse mid quotes can produce ratios above 100%; this is not an executable exit-capture estimate.</p>
-            {gb.byChannel.length > 0 && (
-              <div className="fx-rows">
-                {gb.byChannel.map((c) => (
-                  <div className="fx-row" key={c.key}>
-                    <span className="fx-name">{c.key}</span>
-                    <span className="fx-mid">realized / sampled peak {c.capturePct}% · {c.n}t</span>
-                    <span className="au-pnl">peak minus realized {signedUsd(c.givenBackUsd)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+      {/* Historical giveback aggregates do not carry coherent per-trade peak evidence. */}
+      <Inst k="giveback" label="Historical peak comparison" question="Is this capture estimate comparable with the current reports?"
+        mid={<span className="mut">Legacy peak evidence · comparison withheld</span>}
+        stat={<span className="mut">capture unknown</span>}>
+        <p className="mut">This stored forensic report does not establish consistent trade units, held windows and valid peaks for its capture aggregate. Its former percentage and trend are withheld. Daily and Weekly reports identify coherent sampled-held-mark subsets and their exclusions; executable capture remains unknown.</p>
       </Inst>
 
       {/* ── OVERRIDE — manual close vs ride-to-close ── */}
@@ -296,19 +248,19 @@ export function ForensicsPanel({
 
       {/* ── BENCHED — did the cut channels earn their bench? ── */}
       <Inst
-        k="benched" label="Benched channels" question="Would removed channels have added value if they were still collecting?"
+        k="benched" label="Benched channels" question="What did the historical bench model calculate under its original rules?"
         mid={(() => {
           if (showBvToday) {
             if (!bvl?.sameWeek) return <span className="mut">same-week only (7d quotes)</span>;
             if (!bvl.benched.length) return <span className="mut">no benched channel signaled</span>;
-            return <span>Σ bench <b className={cls(bvl.benchedTotal)}>{signedUsd(bvl.benchedTotal)}</b> vs armed subset <b className={cls(bvl.liveTotal)}>{signedUsd(bvl.liveTotal)}</b></span>;
+            return <span>Σ bench <b className={cls(bvl.benchedTotal)}>{signedUsd(bvl.benchedTotal)}</b> and historically selected subset <b className={cls(bvl.liveTotal)}>{signedUsd(bvl.liveTotal)}</b></span>;
           }
-          return <span>Σ bench <b className={cls(benchedCum!.benchedTotal)}>{signedUsd(benchedCum!.benchedTotal)}</b> vs armed subset <b className={cls(benchedCum!.liveTotal)}>{signedUsd(benchedCum!.liveTotal)}</b> <span className="mut">{benchedCum!.sessions}s</span></span>;
+          return <span>Σ bench <b className={cls(benchedCum!.benchedTotal)}>{signedUsd(benchedCum!.benchedTotal)}</b> and historically selected subset <b className={cls(benchedCum!.liveTotal)}>{signedUsd(benchedCum!.liveTotal)}</b> <span className="mut">{benchedCum!.sessions}s</span></span>;
         })()}
         stat={(() => {
           const tot = showBvToday ? (ranAny ? bvl!.benchedTotal : null) : benchedCum!.benchedTotal;
           if (tot == null) return <span className="mut">—</span>;
-          return tot < 0 ? <span className="pos">Removing them avoided additional losses</span> : <span className="neg">Their missed opportunity deserves review</span>;
+          return tot < 0 ? <span className="pos">Negative modeled path sum; removal benefit unidentified</span> : <span className="neg">Positive modeled path sum; admission benefit unidentified</span>;
         })()}
       >
         <p className="mut">The armed subset uses channel status when each report was generated and excludes research-ineligible trades. It is not all-account PnL or proof that the bench could trade concurrently.</p>
@@ -365,7 +317,7 @@ export function ForensicsPanel({
         ) : <span className="mut">accruing — replays each twin/momo trade nightly</span>}
         stat={rs && rs.scored > 0 ? (
           rsSlots.length > 0
-            ? <span>{rsSlots.map((b) => { const r = b.arms.find((a) => a.name === "ratchet")?.usd ?? 0; const c = Math.max(...b.arms.filter((a) => a.name !== "ratchet").map((a) => a.usd)); const delta = r - c; return <span key={b.slug} className={cls(delta)}>{b.slug} {delta >= 0 ? "improved" : "worsened"} by ${Math.abs(Math.round(delta)).toLocaleString("en-US")} </span>; })}</span>
+            ? <span>{rsSlots.map((b) => { const r = b.arms.find((a) => a.name === "ratchet")?.usd ?? 0; const c = Math.max(...b.arms.filter((a) => a.name !== "ratchet").map((a) => a.usd)); const delta = r - c; return <span key={b.slug} className={cls(delta)}>{b.slug} {delta >= 0 ? "modeled difference +" : "modeled difference −"} by ${Math.abs(Math.round(delta)).toLocaleString("en-US")} </span>; })}</span>
             : <span className={cls(rs.deltaUsd)}>Replay {rs.deltaUsd >= 0 ? "improved" : "worsened"} results by ${Math.abs(Math.round(rs.deltaUsd)).toLocaleString("en-US")}</span>
         ) : <span className="mut">—</span>}
       >
@@ -381,7 +333,7 @@ export function ForensicsPanel({
               <div className="au-fund" key={b.slug}>
                 <span style={{ fontWeight: 700 }}>{b.slug} slot-aware:</span>
                 {b.arms.map((a) => (<span key={a.name}>{a.name} <b className={cls(a.usd)}>{signedUsd(a.usd)}</b></span>))}
-                <span className={b.ratchetWins ? "pos" : "neg"}>ratchet {b.ratchetWins ? "wins" : "LOSES"}</span>
+                <span className={b.ratchetWins ? "pos" : "neg"}>historical ratchet {b.ratchetWins ? "higher" : "lower"}</span>
               </div>
             )) : (
               <p className="au-market" style={{ margin: "2px 0" }}>slot-aware read pending tonight&apos;s close pass — the ground-truth number (per-trade below is an upper bound).</p>

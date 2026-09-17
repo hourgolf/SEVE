@@ -163,14 +163,14 @@ export function NativeTable({
       {query ? <em>{visibleRows.length}/{rows.length} MATCH</em> : null}
       {!query && visibleRows.length > DEFAULT_CHANNEL_LIMIT ? <button type="button" className="srw-row-limit" aria-expanded={showAll} onClick={() => setShowAll((current) => !current)}>{showAll ? `SHOW TOP ${DEFAULT_CHANNEL_LIMIT}` : `SHOW ALL ${visibleRows.length}`}</button> : null}
     </div>
-    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL READ")}</span><span>{sortLabel("sessions", "EVIDENCE")}</span><span>{sortLabel("average", "TYPICAL DAY")}</span><span>{sortLabel("mfe", "BEST MOVE")}</span><span>MOVE KEPT</span><span>{sortLabel("weak", "WEAK DAY")}</span><span>{sortLabel("freshness", "THROUGH")}</span></div>
+    <div className="srw-table-head"><span className="srw-channel-cell">{selectable ? <button type="button" className="srw-check" aria-pressed={allSelected} aria-label={allSelected ? "Exclude all strategies from summary" : "Include all strategies in summary"} onClick={onToggleAll}><i /></button> : null}{sortLabel("channel", "CHANNEL READ")}</span><span>{sortLabel("sessions", "EVIDENCE")}</span><span>{sortLabel("average", "TYPICAL DAY $/CT")}</span><span>{sortLabel("mfe", "BEST MOVE")}</span><span>MOVE KEPT</span><span>{sortLabel("weak", "WEAK DAY $/CT")}</span><span>{sortLabel("freshness", "THROUGH")}</span></div>
     {rows.length === 0 ? <div className="srw-empty">no same-session paths in this lane</div> : visibleRows.length === 0 ? <div className="srw-empty">no channels match “{query.trim()}”</div> : displayedRows.map((row) => <Fragment key={row.slug}>
-      {(() => { const story = deriveChannelLineupStory({ summary: row, brief: briefs?.[row.slug], referenceSession }); const maturity = evidenceMaturity(row.sessions, row.scored); return <div className={`srw-row evidence-${maturity === "SAMPLE AVAILABLE" ? "established" : maturity === "BUILDING" ? "building" : "low"}${selectedSlug === row.slug ? " selected" : ""}`}>
-        <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span className="srw-channel-identity">{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}<small>VIRTUAL NATIVE · {story.group}</small></span></b>
+      {(() => { const story = deriveChannelLineupStory({ summary: row, referenceSession }); const maturity = evidenceMaturity(row.sessions, row.scored); return <div className={`srw-row evidence-${maturity === "SAMPLE AVAILABLE" ? "established" : maturity === "BUILDING" ? "building" : "low"}${selectedSlug === row.slug ? " selected" : ""}`}>
+        <b className={`srw-channel-cell${selectable && excluded.includes(row.slug) ? " excluded" : ""}`}>{selectable ? <button type="button" className="srw-check" aria-pressed={!excluded.includes(row.slug)} aria-label={`${excluded.includes(row.slug) ? "Include" : "Exclude"} ${row.slug} in cumulative summary`} onClick={() => onToggle?.(row.slug)}><i /></button> : null}<span className="srw-channel-identity">{onInspect ? <button type="button" className="srw-channel-open" aria-pressed={selectedSlug === row.slug} onClick={() => onInspect(row.slug)}>{row.slug}</button> : <span>{row.slug}</span>}<small>REFERENCE POLICY · {story.group}</small></span></b>
         <span className="srw-cell-paths"><b>{row.sessions}s / {row.scored}</b><small>{maturity}</small></span>
         <strong className={`srw-cell-avg ${(row.typicalSessionPerContract ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.typicalSessionPerContract)}</strong>
         <span className="srw-cell-mfe">{row.typicalMfePct == null ? "—" : `${row.typicalMfePct}%`}</span>
-        <span className="srw-cell-capture">{row.typicalCapture == null ? "—" : `${Math.round(row.typicalCapture * 100)}%`}</span>
+        <span className="srw-cell-capture" title={row.captureCoverage ? `${row.captureCoverage.eligible}/${row.captureCoverage.observed} eligible retained-gain ratios; ${row.captureCoverage.excluded} missing, incoherent, non-positive peak or losing outcomes. No executable capture claim.` : "Capture coverage unavailable"}>{row.typicalCapture == null ? "—" : `${Math.round(row.typicalCapture * 100)}%`}</span>
         <span className={`srw-cell-weak ${(row.weakSessionPerContract ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.weakSessionPerContract)}</span>
         <span className="srw-cell-through"><b>{shortSession(row.throughSession)}</b><small>{story.freshness}</small></span>
       </div>; })()}
@@ -219,7 +219,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   }));
   const lineupBySlug = Object.fromEntries(lineupStories.map((story) => [story.channel, story]));
   const postureBySlug = Object.fromEntries(rows.map((row): [string, ChannelPosture] => {
-    const lifecycle = surface.channelWorkspace.bySlug[row.slug]?.lifecycle;
+    const lifecycle = surface.allChannelWorkspace.bySlug[row.slug]?.lifecycle;
     const researchBook = surface.decisionAtlas.bySlug[row.slug]?.researchProgram?.book;
     return [row.slug, projectChannelLifecycle({ runtimeLifecycle: lifecycle, researchBook }).execution];
   }));
@@ -264,7 +264,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   const focusedCurve = windowMode === "cumulative"
     ? shadowResearch.dryPowderBySlug[focusSlug]
     : selected ? shadowResearch.dryPowderBySession[selected.session]?.[focusSlug] : undefined;
-  const focusedPassport = surface.channelWorkspace.bySlug[focusSlug];
+  const focusedPassport = surface.allChannelWorkspace.bySlug[focusSlug];
   const focusedSummary = rows.find((row) => row.slug === focusSlug);
   const focusedManagerEvidence = surface.managerEvidence.book?.channels[focusSlug];
   const focusedRetuneEvidence = shadowResearch.boundedRetuneError ? undefined : shadowResearch.boundedRetunes.experiments
@@ -334,7 +334,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       kind="virtual"
       scope={`all paper · ${lane === "vb" ? "VB channels" : "all observed channels"}`}
       asOf={selected?.session ?? shadowResearch.cumulative?.throughSession ?? "checking"}
-      era="current native exits"
+      era="recorded reference-policy paths"
       sample={`${totals.scored} virtual paths`}
       quality={shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "established" : totals.scored >= 5 ? "building" : "checking"}
       detail="Virtual opportunities are hypothetical and are never combined with account profit and loss."
@@ -444,7 +444,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
             <span><small>INDEPENDENT SESSIONS</small><b>{windowMode === "cumulative" ? shadowResearch.cumulative?.sessionCount ?? 0 : selected ? 1 : 0}</b></span>
             <span><small>LOGICAL OPPORTUNITIES</small><b>{totals.scored}</b></span>
             <span><small>POSITIVE VIRTUAL PATHS</small><b>{percent(totals.winners, totals.scored)}</b></span>
-            <span title="Hypothetical native target, stop, and bell/flatten outcomes"><small>VIRTUAL TARGET / STOP / BELL</small><b>{totals.targets} / {totals.stops} / {totals.flattens}</b></span>
+            <span title="Hypothetical reference-policy target, stop, and bell/flatten outcomes"><small>VIRTUAL TARGET / STOP / BELL</small><b>{totals.targets} / {totals.stops} / {totals.flattens}</b></span>
           </div>
           <NativeTable
             rows={rows}

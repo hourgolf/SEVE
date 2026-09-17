@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { validatedNarrative, type PeakDiagnostic } from "@/supabase/functions/_shared/reportingEvidence";
 import { useRefreshTick } from "./useRefreshTick";
 
 // Lazy read of the weekly-autopsy reports (written by the weekly-autopsy edge fn
@@ -30,22 +31,23 @@ export interface WeeklyChannelDigest {
   byDay: { date: string; pnl: number; trades: number }[];
   exitReasons: Record<string, number>;
   recurringFlaws: { type: string; days: number; severity: string }[];
-  exitEfficiency: { positionTranches?: number; trades?: number; unit?: "position_tranche"; mfeUpside: number; captured: number; captureRatio: number; biggestRunner: WeeklyRunner | null };
+  exitEfficiency: { positionTranches?: number; trades?: number; unit?: "position_tranche"; mfeUpside: number; captured: number; captureRatio: number | null; peakDiagnostic?: PeakDiagnostic; biggestRunner: WeeklyRunner | null };
 }
 export interface WeeklyDigest {
   weekStart: string; weekEnd: string; mode: string; days: string[];
   fund: { realized: number; navDelta: number | null; maxDrawdown?: number; trades: number; winRate: number; bestDay: { date: string; pnl: number } | null; worstDay: { date: string; pnl: number } | null; equityCurve: { date: string; nav: number }[] };
   regimeLedger: { date: string; instrument: string; returnPct: number; efficiency: number; note: string }[];
   channels: WeeklyChannelDigest[];
-  exitEfficiency: { totalUpsideLeft: number; worstCaptureChannels: { slug: string; captureRatio: number; left: number }[]; redThatRanGreen: WeeklyRunner[] };
+  exitEfficiency: { totalUpsideLeft: number | null; worstCaptureChannels: { slug: string; captureRatio: number; left: number }[]; redThatRanGreen: WeeklyRunner[] };
   evidence?: {
     schemaVersion: number;
+    producerVersion?: string;
     layer: string;
     unit: "logical_trade" | "position_row";
     scope: string;
     reconciliation: string;
     sourceDailyReports: string[];
-    exitEfficiencyUnit: "position_tranche";
+    exitEfficiencyUnit: "position_tranche" | "logical_trade";
     limitations: string[];
   };
 }
@@ -69,14 +71,14 @@ export function useWeeklyReports(limit = 6, enabled = true): { reports: WeeklyRe
       const { data, error } = await sb
         .from("weekly_reports")
         .select("week_start,week_end,mode,digest,narrative")
+        .eq("mode", "paper")
         .order("week_end", { ascending: false })
         .limit(limit);
       if (!alive) return;
       // Pre-deploy (table not created yet) degrades to the neutral empty state, not a
       // red error banner on prod. A real RLS/network error still surfaces.
-      const missingTable = error && (error.code === "42P01" || error.code === "PGRST205" || /weekly_reports/.test(error.message ?? ""));
-      if (error && !missingTable) setError(error.message);
-      setReports((data ?? []) as WeeklyReport[]);
+      setError(error?.message ?? null);
+      setReports(((data ?? []) as WeeklyReport[]).map(row => ({ ...row, narrative: validatedNarrative(row.narrative, "weekly") })));
       setLoading(false);
     })().catch((e) => {
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }

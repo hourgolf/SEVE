@@ -5,6 +5,7 @@ import { signedUsd } from "@/lib/format";
 import { useFold } from "@/hooks/useFold";
 import type { useDailyReports } from "@/hooks/useDailyReports";
 import type { StrategistState } from "@/lib/desk/types";
+import type { ChannelWorkspaceModel } from "@/lib/channels/channelPassport";
 import { pmVar } from "@/lib/desk/colors";
 
 const SEV_CLASS: Record<string, string> = { high: "au-sev-high", med: "au-sev-med", low: "au-sev-low" };
@@ -27,9 +28,11 @@ const plainFinding = (value: string): string => {
 // Glance = fund line + harvest meter + findings CHIPS + movers; expand = the full report.
 export function DailyAutopsyBody({
   strategists,
+  passports,
   evidence,
 }: {
   strategists: StrategistState[];
+  passports?: ChannelWorkspaceModel;
   evidence: ReturnType<typeof useDailyReports>;
 }) {
   const { reports, loading, error } = evidence;
@@ -43,7 +46,7 @@ export function DailyAutopsyBody({
   const colorOf = (slug: string) => pmVar(strategists.find((s) => s.slug === slug)?.color ?? "green");
   // Benched (86'd) channels: grey the row + chip it, so a report written when the
   // channel was live can't read as current policy (autopsies are history, not roster).
-  const benched = new Set(strategists.filter((s) => s.status !== "armed").map((s) => s.slug));
+  const benched = new Set(Object.values(passports?.bySlug ?? {}).filter(p => p.lifecycle === "dark-evidence").map(p => p.slug));
 
   if (loading) return <div className="chart-empty">loading reports…</div>;
   if (error) return <div className="chart-empty">couldn&apos;t load reports — {error}</div>;
@@ -63,17 +66,8 @@ export function DailyAutopsyBody({
   const best = sorted[0], worst = sorted.length > 1 ? sorted[sorted.length - 1] : undefined;
   // HARVEST meter — peaked-trade-weighted avg peak vs kept, across the traded channels
   // (the avg-peak lens on the day itself: how much of what the desk found did it keep).
-  const hv = traded.reduce(
-    (a, c) => {
-      const m = c.metrics as { avgPeakPct?: number | null; peakCapturePct?: number | null; nPeaked?: number };
-      if (m.avgPeakPct != null && m.peakCapturePct != null && (m.nPeaked ?? 0) > 0) {
-        a.w += m.nPeaked!; a.peak += m.avgPeakPct * m.nPeaked!; a.kept += m.peakCapturePct * m.nPeaked!;
-      }
-      return a;
-    },
-    { w: 0, peak: 0, kept: 0 },
-  );
-  const harvest = hv.w > 0 ? { peak: Math.round(hv.peak / hv.w), kept: Math.round(hv.kept / hv.w) } : null;
+  const diagnostic = d.peakDiagnostic;
+  const harvest = diagnostic?.schema === "seve-reporting-v3" && diagnostic.retainedPct != null ? { peak: diagnostic.averagePeakPct, kept: diagnostic.retainedPct } : null;
 
   return (
     <>
@@ -93,12 +87,13 @@ export function DailyAutopsyBody({
         </div>
       )}
 
+      <p className="wk-ee-note">Sampled held marks only; executable capture is unknown. {diagnostic ? `${diagnostic.valid}/${diagnostic.total} valid, ${diagnostic.excluded} excluded.` : "Legacy peak figures are withheld pending coherent regeneration."}</p>
       {/* HARVEST — found vs kept, the day's one-line verdict (meter, not prose) */}
       {harvest && (
         <div className="mrow" style={{ margin: "5px 0 2px" }}>
-          <span className="mut" style={{ whiteSpace: "nowrap" }}>average best move +{harvest.peak}%</span>
+          <span className="mut" style={{ whiteSpace: "nowrap" }}>average best move +{harvest.peak?.toFixed(1)}%</span>
           <span className="meter"><i style={{ width: `${Math.min(100, Math.max(0, harvest.kept))}%`, background: harvest.kept >= 50 ? "var(--green)" : "var(--red)" }} /></span>
-          <b className={harvest.kept >= 50 ? "pos" : "neg"} style={{ whiteSpace: "nowrap" }}>retained {harvest.kept}% of that move</b>
+          <b className={harvest.kept >= 50 ? "pos" : "neg"} style={{ whiteSpace: "nowrap" }}>held-peak ratio {harvest.kept.toFixed(1)}%</b>
         </div>
       )}
 
@@ -123,14 +118,14 @@ export function DailyAutopsyBody({
               <div className="au-ch-head">
                 <span className="au-dot" style={{ background: colorOf(c.slug), boxShadow: `0 0 5px ${colorOf(c.slug)}` }} />
                 <span className="au-name">{c.name}</span>
-                {benched.has(c.slug) && <span className="au-chip au-benched" title="benched (draft) — no entries; this report predates the cull">86&apos;d</span>}
+                {benched.has(c.slug) && <span className="au-chip au-benched" title="Current receipt-bound posture; this report remains historical.">OBSERVE ONLY NOW</span>}
                 <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(m.realizedPnl)}</span>
               </div>
               <div className="au-metrics">
-                {m.nTrades} trades · {Math.round(m.winRate * m.nTrades)} profitable · median hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R · most common exit {topExit(c.exitReasons)}
-                {m.peakCapturePct != null && (
-                  <span title={`${m.nPeaked}/${m.nTrades} trades peaked above entry · avg peak +${m.avgPeakPct}% · kept ${m.peakCapturePct}% of the peak gain`}>
-                    {" "}· best move +{m.avgPeakPct}% · <b className={m.peakCapturePct >= 50 ? "pos" : "neg"}>retained {m.peakCapturePct}%</b>
+                {m.nTrades} trades · {Math.round(m.winRate * m.nTrades)} profitable · median hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R (50% risk proxy) · most common exit {topExit(c.exitReasons)}
+                {m.peakDiagnostic?.schema === "seve-reporting-v3" && m.peakCapturePct != null && (
+                  <span title={`${m.nPeaked}/${m.nTrades} trades peaked above entry · avg peak +${m.avgPeakPct?.toFixed(1)}% · kept ${m.peakCapturePct}% of the peak gain`}>
+                    {" "}· best move +{m.avgPeakPct}% · <b className={m.peakCapturePct >= 50 ? "pos" : "neg"}>retained {m.peakCapturePct.toFixed(1)}%</b>
                   </span>
                 )}
               </div>
@@ -154,15 +149,15 @@ export function DailyAutopsyBody({
           {best && (
             <span className="au-mover">
               <span className="au-dot" style={{ background: colorOf(best.slug), boxShadow: `0 0 5px ${colorOf(best.slug)}` }} />
-              <span className="au-mv-ar pos">▲</span><span className="au-mv-name">{best.name}</span>
-              <span className="au-pnl pos">{signedUsd(best.metrics.realizedPnl)}</span>
+              <span className={`au-mv-ar ${best.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>▲</span><span className="au-mv-name">{best.name}</span>
+              <span className={`au-pnl ${best.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(best.metrics.realizedPnl)}</span>
             </span>
           )}
           {worst && (
             <span className="au-mover">
               <span className="au-dot" style={{ background: colorOf(worst.slug), boxShadow: `0 0 5px ${colorOf(worst.slug)}` }} />
-              <span className="au-mv-ar neg">▼</span><span className="au-mv-name">{worst.name}</span>
-              <span className="au-pnl neg">{signedUsd(worst.metrics.realizedPnl)}</span>
+              <span className={`au-mv-ar ${worst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>▼</span><span className="au-mv-name">{worst.name}</span>
+              <span className={`au-pnl ${worst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(worst.metrics.realizedPnl)}</span>
             </span>
           )}
           <span className="au-mv-count">{traded.length} channels traded{dormant.length ? ` · ${dormant.length} had no recorded trade` : ""}</span>

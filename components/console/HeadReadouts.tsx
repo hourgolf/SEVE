@@ -15,7 +15,7 @@ export function HeadReadouts({
   symbol = "SPY",
 }: {
   fund: FundState;
-  fundPnl: { nav: number; dayPnl: number };
+  fundPnl: { nav: number | null; dayPnl: number | null };
   spot: number | null;
   spotUp: boolean | null;
   /** Instrument the §01 spot LED is showing (follows the chart toggle). */
@@ -25,8 +25,8 @@ export function HeadReadouts({
   const runLabel = fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
   const runCls = fund.is_halted ? "halt" : running ? "on" : "off";
 
-  const down = fundPnl.dayPnl < 0;
-  const dayLed = (down ? "-" : "") + Math.abs(Math.round(fundPnl.dayPnl));
+  const down = (fundPnl.dayPnl ?? 0) < 0;
+  const dayLed = fundPnl.dayPnl == null ? "—" : (down ? "-" : "") + Math.abs(Math.round(fundPnl.dayPnl));
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
   // SPY LED: green when up on the day, red when down (or unknown).
   const spyColor = spotUp ? "var(--pm-green)" : "var(--led-red)";

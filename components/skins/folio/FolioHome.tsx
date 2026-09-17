@@ -122,7 +122,7 @@ export function FolioHomeMobile({ surface }: { surface: SurfaceProps }) {
         <FolioSentinelCard surface={surface} compact />
         <FolioActivityCard surface={surface} compact />
       </div>
-      <div className="folio-mobile-drawer"><MobileDock channels={channels} livePnl={surface.livePnl} lens={surface.sentinel.lens} write={surface.write} /></div>
+      <div className="folio-mobile-drawer"><MobileDock passports={surface.channelWorkspace} channels={channels} livePnl={surface.livePnl} lens={surface.sentinel.lens} write={surface.write} /></div>
     </div>
   );
 }

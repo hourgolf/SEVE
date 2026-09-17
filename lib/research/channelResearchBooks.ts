@@ -1,3 +1,4 @@
+import { plannedStudyFor, RESEARCH_AGENDA } from "./channelResearchAgenda";
 import { createHash } from "node:crypto";
 import type { ChannelSpecVersion } from "@/lib/channels/channelControlPlane";
 import type { ChannelDecisionBrief, ChannelDecisionBriefBundle } from "./channelDecisionBrief";
@@ -50,6 +51,7 @@ export interface ChannelResearchAssignment {
     classificationComplete: boolean;
     auditMessage: string;
   };
+  agendaVersion?: string;
   proposalOnly: true;
   runtimeAuthority: false;
 }
@@ -170,7 +172,7 @@ function compactMetrics(brief: ChannelDecisionBrief | undefined): ChannelResearc
     { label: "best move", value: pctPoints(distribution?.typicalBestMovePct ?? brief.nativeExit.typicalBestMovePct),
       fact: "Median favorable option move after entry; not realized profit." },
     { label: "move kept", value: pct(brief.nativeExit.typicalCapture ?? distribution?.coherentCapture),
-      fact: "Typical final return divided by the favorable move, floored at zero when the finish is negative." },
+      fact: "Coherent sampled-peak diagnostic in the named cohort; unknown evidence is not zero capture." },
   ];
 }
 
@@ -186,7 +188,7 @@ const namedQuestion: Readonly<Record<string, string>> = Object.freeze({
 
 function researchQuestion(slug: string, brief: ChannelDecisionBrief | undefined,
   plan: ChannelExperimentPlan | undefined): string {
-  return namedQuestion[slug]
+  return plannedStudyFor(slug)?.question ?? namedQuestion[slug]
     ?? (plan?.variable ? plan.hypothesis : null)
     ?? brief?.recommendation.nextExperiment
     ?? "Is this channel producing unique, repeatable evidence that warrants another bounded test?";
@@ -239,11 +241,12 @@ function assignment(input: {
     runtimePosture,
     headline,
     question: researchQuestion(slug, brief, plan),
+    agendaVersion: RESEARCH_AGENDA.version,
     control,
     challenger,
     keepFixed: plan?.fixed?.slice(0, 5) ?? ["entry", "exit", "manager", "size", "account route"],
     progress,
-    nextDecision,
+    nextDecision: plannedStudyFor(slug) ? `${RESEARCH_AGENDA.firstReview} ${RESEARCH_AGENDA.exclusions}` : nextDecision,
     metrics: book === "archive"
       ? [{ label: "posture", value: "paused", fact: "No new paper entries or research paths are requested by this program." }]
       : compactMetrics(brief).slice(0, 4),

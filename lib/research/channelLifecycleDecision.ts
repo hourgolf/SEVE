@@ -1,3 +1,4 @@
+import { policyEvidenceEligible, decisionEvidenceFresh } from "./reportingEligibility";
 import { createHash } from "node:crypto";
 import type { ChannelDecisionBriefBundle } from "./channelDecisionBrief";
 import type { ChannelExperimentPacket } from "./channelExperimentLifecycle";
@@ -63,7 +64,11 @@ export function buildChannelLifecycleDecisionPacket(input: {
     const managerReady = !!brief?.managers.recommended;
     let action: LifecycleOperatorAction;
     const reasons: string[] = [];
-    if (mature && negative && life.uniqueness === "redundant") {
+    const eligible = policyEvidenceEligible(dossier.decisionCohort) && decisionEvidenceFresh(brief?.decisionDistribution?.throughSession, input.atlas.throughSession) && brief?.recommendation.axis !== "collection";
+    if (!eligible) {
+      action = paper ? "keep_trading" : "continue_unique_collection";
+      reasons.push("Policy authority, calibration or evidence readiness does not clear the shared recommendation gate. No pause, roster, size or manager recommendation is authorized by these totals.");
+    } else if (mature && negative && life.uniqueness === "redundant") {
       action = "retirement_review";
       reasons.push("Both the typical opportunity and typical session are negative, and a peer supplies substantially similar evidence.");
     } else if (paper && managerReady) {
@@ -100,7 +105,7 @@ export function buildChannelLifecycleDecisionPacket(input: {
     const nextReviewAfterIndependentSessions = action === "keep_trading" ? 3
       : action === "continue_unique_collection" ? Math.max(1, Math.min(5, remainingFloor || 3))
         : action === "one_variable_experiment" ? Math.max(1, Math.min(5, experimentRemaining || 3)) : 0;
-    const confidence: ChannelLifecycleDecision["confidence"] = mature
+    const confidence: ChannelLifecycleDecision["confidence"] = eligible && mature
       && life.configurationCertainty !== "historical_unstamped" ? "established"
       : mature ? "directional" : "limited";
     const priority: ChannelLifecycleDecision["priority"] = ["retirement_review", "promotion_review", "size_review", "manager_review"].includes(action)

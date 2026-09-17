@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabaseClient";
 import { useDeskState } from "@/hooks/useDeskState";
-import { buildSteps, channelPnl, fundPnl } from "@/lib/desk/derive";
+import { buildSteps, channelPnl } from "@/lib/desk/derive";
 import type { ChannelPnl, PmColor, Position, Signal, Step } from "@/lib/desk/types";
 import type { EventLevel, OptionType } from "@/lib/types";
 import { startVisibilityPoll, isHidden } from "@/lib/pollControl";
@@ -16,6 +16,7 @@ import {
   type PositionOutcomeOpportunityRoute,
 } from "@/lib/ops/brokerReconciliation";
 import { summarizeLogicalTradeCohort } from "@/lib/positions/logicalTradeCohort";
+import { reportingSession, sessionSnapshots } from "@/lib/desk/reportingSession";
 import {
   reconcileSessionNav,
   type SessionNavReconciliation,
@@ -27,7 +28,6 @@ import {
 // egress driver.
 const POLL_MS = 45000;
 const MAX_CURVE = 600; // ~1.25 RTH sessions of 1-min fund snapshots — enough to find the current session's open
-const SESSION_GAP_MS = 2 * 3600_000; // a gap this large between snapshots = a new trading session
 const POSITION_FIELDS = "id,occ_symbol,expiration,strike,opt_type,qty,avg_entry_price,current_mark,unrealized_pnl,realized_pnl,opened_at,closed_at,close_reason,peak_mark,peak_at,runner_of";
 const SIGNAL_FIELDS = "id,signal_type,direction,acted_on,blocked_reason,created_at";
 
@@ -46,8 +46,8 @@ export interface DeskFeed {
   };
   pnlByStrategist: Record<string, ChannelPnl>;
   fundPnl: {
-    nav: number;
-    dayPnl: number;
+    nav: number | null;
+    dayPnl: number | null;
     navExact: number | null;
     dayPnlExact: number | null;
     reconciliation: SessionNavReconciliation | null;
@@ -125,30 +125,27 @@ export function useDeskFeed(
     }
     const mounted = { current: true };
     let pollInFlight = false;
+    let loadedSession = "";
+    curveRef.current = [];
+    setCurve([]); setPositions([]); setClosedToday([]);
+    setLatestNav(null); setSessionOpenNav(null);
+    setLatestSnapshotCapturedAt(null); setLatestSnapshotUnrealizedPnl(null);
+    setSessionTrades({ opened: 0, closed: 0, open: 0, positionRows: 0 });
     setPositionAttribution({ state: "checking", issues: [] });
 
-    const equityQuery = () => {
+    const equityQuery = (ascending = false) => {
       const sb = getSupabase();
       return (acctId
         ? sb.from("equity_snapshots").select("net_liquidation,unrealized_pnl,captured_at").is("strategist_id", null).eq("account_id", acctId)
         : sb.from("equity_snapshots").select("net_liquidation,unrealized_pnl,captured_at").is("strategist_id", null).is("account_id", null)
-      ).order("captured_at", { ascending: false });
-    };
-
-    const sessionSlice = (rows: { ts: string; equity: number }[]) => {
-      let start = 0;
-      for (let i = rows.length - 1; i > 0; i--) {
-        if (Date.parse(rows[i].ts) - Date.parse(rows[i - 1].ts) > SESSION_GAP_MS) { start = i; break; }
-      }
-      return rows.slice(start);
+      ).order("captured_at", { ascending });
     };
 
     const commitCurve = (rows: { ts: string; equity: number }[]) => {
-      const current = sessionSlice(rows).slice(-MAX_CURVE);
+      const { curve: current, baseline } = sessionSnapshots(rows, reportingSession(Date.now()), MAX_CURVE);
       curveRef.current = current;
       setCurve(current);
-      setLatestNav(current.length ? current[current.length - 1].equity : null);
-      setSessionOpenNav(current.length ? current[0].equity : null);
+      setSessionOpenNav(baseline?.equity ?? null);
     };
 
     // The session curve is a chart/history payload. Load it once per account,
@@ -156,12 +153,18 @@ export function useDeskFeed(
     // path transferred all 600 rows on every poll and every signal insert.
     async function loadCurve() {
       try {
-        const res = await equityQuery().limit(MAX_CURVE);
+        const session = reportingSession(Date.now());
+        const opening = await equityQuery().gte("captured_at", new Date(session.openMs - 15 * 60_000).toISOString()).lte("captured_at", new Date(session.openMs).toISOString()).limit(1);
+        const firstAfter = await equityQuery(true).gte("captured_at", new Date(session.openMs).toISOString()).lte("captured_at", new Date(session.openMs + 2 * 60_000).toISOString()).limit(1);
+        if (opening.error || firstAfter.error) return;
+        const res = await equityQuery().gte("captured_at", new Date(session.openMs - 15 * 60_000).toISOString()).lt("captured_at", new Date(session.endMs).toISOString()).limit(MAX_CURVE);
         if (res.error || !mounted.current) return;
         const snapshots = (res.data ?? []) as { net_liquidation: number; unrealized_pnl: number | null; captured_at: string }[];
         const rows = snapshots
           .slice().reverse().map((r) => ({ ts: r.captured_at, equity: Number(r.net_liquidation) }));
-        commitCurve(rows);
+        const anchor = opening.data?.[0] ?? firstAfter.data?.[0];
+        commitCurve(anchor ? [{ ts: anchor.captured_at, equity: Number(anchor.net_liquidation) }, ...rows] : rows);
+        loadedSession = session.date;
         const snapshotUnrealized = snapshots[0]?.unrealized_pnl;
         setLatestSnapshotUnrealizedPnl(snapshotUnrealized == null || !Number.isFinite(Number(snapshotUnrealized))
           ? null
@@ -182,10 +185,9 @@ export function useDeskFeed(
         if (acctId && !configuredAccounts.has(acctId)) {
           throw new Error("selected account is not a configured paper account");
         }
-        // Coarse lower bound for closed trades — wide enough to always include the
-        // current session even after the ET session crosses midnight UTC; the exact
-        // session start is applied in JS below (sessionStartMs).
-        const closedSince = new Date(Date.now() - 20 * 3600_000).toISOString();
+        const session = reportingSession(Date.now());
+        if (loadedSession !== session.date || (Date.now() < session.openMs + 3 * 60_000)) await loadCurve();
+        const closedSince = new Date(session.startMs).toISOString();
         // Position account scope is immutable execution evidence. Signals do not
         // yet have a position route, so their current channel assignment remains
         // the appropriate pre-execution display scope.
@@ -195,13 +197,13 @@ export function useDeskFeed(
           : `${SIGNAL_FIELDS},strategists(slug)`;
         const scopeSignal = (query: any) => (acctId ? query.eq("strategists.account_id", acctId) : query);
         const [posRes, sigRes, eqRes, closedRes] = await Promise.all([
-          sb.from("positions").select(posSel).eq("status", "open").limit(200),
+          sb.from("positions").select(posSel, { count: "exact" }).eq("status", "open").limit(1000),
           scopeSignal(sb.from("signals").select(sigSel)).order("created_at", { ascending: false }).limit(16),
           equityQuery().limit(2),
           // recent CLOSED trades (narrowed to the current session in JS) — for the
           // realized day P&L + the recent-trades view, so fast scalps don't vanish.
-          sb.from("positions").select(posSel).eq("status", "closed").gte("closed_at", closedSince)
-            .order("closed_at", { ascending: false }).limit(100),
+          sb.from("positions").select(posSel, { count: "exact" }).eq("status", "closed").gte("closed_at", closedSince).lt("closed_at", new Date(session.endMs).toISOString())
+            .order("closed_at", { ascending: false }).limit(1000),
         ]);
         if (posRes.error || closedRes.error || sigRes.error || eqRes.error) throw new Error(
           posRes.error?.message
@@ -211,6 +213,8 @@ export function useDeskFeed(
           ?? "read denied",
         );
         if (!mounted.current) return;
+        if (posRes.count != null && posRes.count > (posRes.data?.length ?? 0)) throw new Error("open position read is incomplete");
+        if (closedRes.count != null && closedRes.count > (closedRes.data?.length ?? 0)) throw new Error("session position read is incomplete");
 
         type UnvalidatedFeedPositionRow = Record<string, any> & { feedStatus: "open" | "closed" };
         type FeedPositionRow = UnvalidatedFeedPositionRow & { id: string };
@@ -321,16 +325,13 @@ export function useDeskFeed(
           blocked_reason: r.blocked_reason ?? null,
         }));
 
-        // "Today" equity curve = the CURRENT trading session only. Take the fetched
-        // snapshots ascending, then drop everything before the last multi-hour gap,
-        // so the curve (and the crosshair's P&L baseline) anchors at the session OPEN.
-        // Gap-based (not a calendar filter) so it's robust to the ET session spanning
-        // midnight UTC: "today" P&L = now − open (e.g. +$492), not NAV − inception.
+        // Exchange-session identity is independent of reporting gaps and restarts.
         const latestEq = ((eqRes.data ?? []) as any[])
           .slice()
           .reverse()
           .map((r) => ({ ts: r.captured_at as string, equity: Number(r.net_liquidation) }));
         const latestSnapshot = ((eqRes.data ?? []) as any[])[0];
+        setLatestNav(latestSnapshot && Number.isFinite(Number(latestSnapshot.net_liquidation)) ? Number(latestSnapshot.net_liquidation) : null);
         setLatestSnapshotUnrealizedPnl(
           latestSnapshot?.unrealized_pnl == null || !Number.isFinite(Number(latestSnapshot.unrealized_pnl))
             ? null
@@ -339,17 +340,10 @@ export function useDeskFeed(
         setLatestSnapshotCapturedAt(latestSnapshot?.captured_at ?? null);
         const merged = new Map(curveRef.current.map((row) => [row.ts, row]));
         for (const row of latestEq) merged.set(row.ts, row);
-        const eq = sessionSlice(
-          [...merged.values()].sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts)),
-        ).slice(-MAX_CURVE);
+        const eq = sessionSnapshots([...merged.values()], session, MAX_CURVE).curve;
         commitCurve(eq);
-
-        // Narrow closed trades to the CURRENT session (same gap anchor as the curve)
-        // so the per-channel rows + Day P&L reflect today's session, not a UTC day
-        // (which would read $0 after the ET session crosses midnight UTC).
-        const sessionStartMs = eq.length ? Date.parse(eq[0].ts) : Date.now() - 16 * 3600_000;
         const sessionClosed = closed.filter(
-          (p) => p.closed_at != null && Date.parse(p.closed_at) >= sessionStartMs
+          (p) => p.closed_at != null && Date.parse(p.closed_at) >= session.startMs && Date.parse(p.closed_at) < session.endMs
         );
         const logical = summarizeLogicalTradeCohort([...pos, ...sessionClosed], {
           allowExternalParents: true,
@@ -427,7 +421,6 @@ export function useDeskFeed(
   const dayPositions = useMemo(() => [...positions, ...closedToday], [positions, closedToday]);
   const pnlByStrategist = useMemo(() => channelPnl(dayPositions), [dayPositions]);
   const fp = useMemo(() => {
-    const base = fundPnl(dayPositions, totalCapital, latestNav); // nav + position-derived dayPnl
     // Fund day P&L = broker account truth (current NAV − session-open NAV). Gross
     // logical-trade attribution remains a separate exact layer; the reconciliation
     // preserves any fees, broker adjustments, or precision residue without guessing
@@ -438,6 +431,7 @@ export function useDeskFeed(
       ? reconcileSessionNav({
         accounts: [{
           accountId: acctId,
+          sessionWindow: reportingSession(Date.now()),
           startingSnapshot: {
             netLiquidation: sessionOpenNav,
             unrealizedPnl: null,
@@ -462,8 +456,8 @@ export function useDeskFeed(
       : null;
     const navDayExact = reconciliation?.brokerNavDeltaExact ?? null;
     return {
-      nav: base.nav,
-      dayPnl: navDayExact == null ? base.dayPnl : Math.round(navDayExact),
+      nav: latestNav == null ? null : Math.round(latestNav),
+      dayPnl: navDayExact == null ? null : Math.round(navDayExact),
       navExact: latestNav,
       dayPnlExact: navDayExact,
       reconciliation,

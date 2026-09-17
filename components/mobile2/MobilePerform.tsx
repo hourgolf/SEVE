@@ -173,7 +173,7 @@ export function MobilePerform({
           <section className="m2-screen">
           <div className="m2-phead">
             <span className="idx">01</span>
-            <span className="t">{symbol} · LIVE</span>
+            <span className="t">{symbol} · OBSERVED MARKET DATA</span>
             <span className="grow" />
             <button
               type="button"
@@ -220,7 +220,7 @@ export function MobilePerform({
         </>}
       </div>
 
-      <MobileDock channels={channels} livePnl={livePnl} lens={sent.lens} write={props.write} onOpenChannel={onOpenChannel} />
+      <MobileDock passports={props.channelWorkspace} channels={channels} livePnl={livePnl} lens={sent.lens} write={props.write} onOpenChannel={onOpenChannel} />
     </>
   );
 }

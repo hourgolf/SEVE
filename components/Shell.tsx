@@ -34,8 +34,8 @@ function inRth(): boolean {
 
 export interface ShellProps {
   fund: FundState;
-  liveFund: { nav: number; dayPnl: number };
-  booksDelta: number;
+  liveFund: { nav: number | null; dayPnl: number | null };
+  booksDelta: number | null;
   ops: OpsStatus;
   accounts: ReturnType<typeof useAccounts>["accounts"];
   acctId: string | null;
@@ -63,13 +63,13 @@ export function Shell({ fund, liveFund, booksDelta, ops, accounts, acctId, setAc
     return () => window.clearInterval(iv);
   }, []);
 
-  const down = liveFund.dayPnl < 0;
+  const down = (liveFund.dayPnl ?? 0) < 0;
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
   // DAY LED change-flash — fund-level sum moves in bigger steps than a single
   // leg (one chain refresh re-marks many legs), so the material bar is higher.
-  const dayFlashRef = useChangeFlash<HTMLSpanElement>(liveFund.dayPnl, 25);
-  const navK = ((fund.is_halted ? 0 : liveFund.nav) / 1000).toFixed(1);
-  const dTone = Math.abs(booksDelta) < 100 ? "ok" : Math.abs(booksDelta) < 500 ? "warn" : "bad";
+  const dayFlashRef = useChangeFlash<HTMLSpanElement>(liveFund.dayPnl ?? 0, 25);
+  const navK = liveFund.nav == null ? "—" : (liveFund.nav / 1000).toFixed(1);
+  const dTone = Math.abs(booksDelta ?? Infinity) < 100 ? "ok" : Math.abs(booksDelta ?? Infinity) < 500 ? "warn" : "bad";
 
   // Composite HEALTH dot — stream heartbeat (RTH-gated), the one glanceable
   // "is the machine alive?" so the operator never leaves the cockpit to check OPS.

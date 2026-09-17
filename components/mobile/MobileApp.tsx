@@ -75,7 +75,7 @@ function inRth(): boolean {
   return d >= 1 && d <= 5 && m >= 570 && m < 960;
 }
 
-export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, reviewEvidence }: SurfaceProps) {
+export function MobileApp({ data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, reviewEvidence, channelWorkspace, allChannelWorkspace }: SurfaceProps) {
   const { desk, anySolo, isActive } = view;
   const selectedAccount = accounts.find((account) => account.id === acctId);
   const accountScope = selectedAccount ? `${selectedAccount.name} ACCOUNT` : "ACCOUNT UNSELECTED";
@@ -83,8 +83,8 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   // Traded indices (desk-wide, armed) for the TODAY readiness strip — gaps are market-wide.
   const tradedUnderlyings = [...new Set(desk.strategists.filter((s) => s.status === "armed").map((s) => s.underlying.toUpperCase()))]
     .sort((a, b) => { const o = ["SPY", "QQQ", "IWM"]; const ai = o.indexOf(a), bi = o.indexOf(b); return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.localeCompare(b); });
-  const armed = accountChannels.filter((s) => s.status === "armed");
-  const benched = accountChannels.filter((s) => s.status !== "armed");
+  const armed = accountChannels.filter((s) => channelWorkspace.bySlug[s.slug]?.lifecycle === "paper-root");
+  const benched = accountChannels.filter((s) => channelWorkspace.bySlug[s.slug]?.lifecycle !== "paper-root");
   const { persist, canWrite } = useChannelOrdering(armed, write);
   const [expanded, setExpanded] = useState<string | null>(null); // Mixer: channel open for full-knob editing
   const [benchOpen, setBenchOpen] = useState(false);
@@ -103,12 +103,12 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
   const running = desk.fund.running && !desk.fund.is_halted;
   const runLabel = desk.fund.is_halted ? "HALT" : running ? "RUN" : "STOP";
   const runCls = desk.fund.is_halted ? "halt" : running ? "on" : "off";
-  const down = liveFund.dayPnl < 0;
-  const dayLed = (down ? "-" : "") + Math.abs(Math.round(liveFund.dayPnl));
+  const down = (liveFund.dayPnl ?? 0) < 0;
+  const dayLed = liveFund.dayPnl == null ? "—" : (down ? "-" : "") + Math.abs(Math.round(liveFund.dayPnl));
   const dayColor = down ? "var(--led-red)" : "var(--pm-green)";
   // K-format NAV: fits the $1M cockpit buckets in 5 cells (a raw 7-digit NAV
   // overflowed the 6-digit window) and buys the ticker pills their column.
-  const navK = (liveFund.nav / 1000).toFixed(1);
+  const navK = liveFund.nav == null ? "—" : (liveFund.nav / 1000).toFixed(1);
 
   // TODAY readiness → header ticker pills (replaces the space-eating TodayStrip):
   // lit + arrow = gap cleared the gate (direction of the move); unlit + dim
@@ -117,8 +117,8 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
 
   // BOOKS Δ + composite HEALTH dot for the persistent vitals header (mirrors the desktop Shell).
   const attrib = Object.values(livePnl).reduce((a, c) => a + (c.dayPnl || 0), 0);
-  const booksDelta = Math.round(liveFund.dayPnl - attrib);
-  const dTone = Math.abs(booksDelta) < 100 ? "ok" : Math.abs(booksDelta) < 500 ? "warn" : "bad";
+  const booksDelta = liveFund.dayPnl == null ? null : Math.round(liveFund.dayPnl - attrib);
+  const dTone = Math.abs(booksDelta ?? Infinity) < 100 ? "ok" : Math.abs(booksDelta ?? Infinity) < 500 ? "warn" : "bad";
   const rth = inRth();
   let hTone: "ok" | "warn" | "bad" | "dim" = "dim";
   if (ops.loaded) {
@@ -260,7 +260,7 @@ export function MobileApp({ data, view, feed, write, spotUp, selected, setSelect
             />
             <BriefPanel />
             <SentinelPanel />
-            <AutopsyPanel strategists={desk.strategists} daily={reviewEvidence.daily} weekly={reviewEvidence.weekly} />
+            <AutopsyPanel passports={allChannelWorkspace} strategists={desk.strategists} daily={reviewEvidence.daily} weekly={reviewEvidence.weekly} />
             <ForensicsPanel
               forensics={reviewEvidence.forensics}
               pyramid={reviewEvidence.pyramid}

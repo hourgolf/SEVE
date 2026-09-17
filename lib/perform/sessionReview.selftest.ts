@@ -19,8 +19,8 @@ assert.equal(model.resultUsd, -518);
 assert.equal(model.resultLabel, "GROSS POSITION-ROW ATTRIBUTION");
 assert.equal(model.profitable, 3);
 assert.equal(model.evidenceLabel, "legacy position rows");
-assert.equal(model.averageBestMovePct, 27);
-assert.equal(model.retainedPct, 40);
+assert.equal(model.averageBestMovePct, null, "legacy peaks lack coherent provenance");
+assert.equal(model.retainedPct, null, "legacy clamped captures must not survive the reader");
 assert.equal(model.nextAction, "Compare one exit alternative on the same opportunities.");
 assert.match(model.limitation ?? "", /predates logical-trade evidence/i);
 assert.equal(shouldAnchorHistoricalResults("2026-08-07", new Date("2026-08-08T17:00:00Z")), true);
@@ -38,4 +38,6 @@ const technicalAction = buildSessionReviewModel({
 });
 assert.equal(technicalAction.nextAction, "Count why signals were blocked. If one reason dominates, test that entry rule or fix the source problem.");
 
+assert.equal(shouldAnchorHistoricalResults("2026-09-16", new Date("2026-09-16T20:05Z")), true);
+assert.equal(shouldAnchorHistoricalResults("2026-09-16", new Date("2026-09-16T19:05Z")), false);
 console.log("session-review-selftest: PASS");

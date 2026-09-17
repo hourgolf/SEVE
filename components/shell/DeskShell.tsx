@@ -21,7 +21,7 @@ import type { useAccounts } from "@/hooks/useAccounts";
 
 export interface DeskShellProps {
   fund: FundState;
-  liveFund: { nav: number; dayPnl: number };
+  liveFund: { nav: number | null; dayPnl: number | null };
   ops: OpsStatus;
   accounts: ReturnType<typeof useAccounts>["accounts"];
   acctId: string | null;
@@ -34,7 +34,8 @@ export interface DeskShellProps {
 }
 
 // Compact NAV — $1.94M above a million, else $NNNk (mirrors the mock's LCD).
-function navCompact(n: number): string {
+function navCompact(n: number | null): string {
+  if (n == null) return "—";
   if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
   return `$${Math.round(n / 1000)}k`;
 }
@@ -65,9 +66,9 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
   useEffect(() => { if (strike) { const t = setTimeout(() => setStrike(false), 200); return () => clearTimeout(t); } }, [strike]);
 
   const spotStr = spot != null ? spot.toFixed(2) : "----";
-  const dayVal = Math.round(liveFund.dayPnl);
-  const dayColor = dayVal < 0 ? "var(--hw-red-soft)" : "var(--hw-green)";
-  const navStr = navCompact(fund.is_halted ? 0 : liveFund.nav);
+  const dayVal = liveFund.dayPnl == null ? null : Math.round(liveFund.dayPnl);
+  const dayColor = (dayVal ?? 0) < 0 ? "var(--hw-red-soft)" : "var(--hw-green)";
+  const navStr = navCompact(liveFund.nav);
   const worker = ops.hbNote ? ops.hbNote.slice(0, 16) : "—";
 
   return (
@@ -106,9 +107,9 @@ export function DeskShell({ fund, liveFund, ops, accounts, acctId, setAcctId, sy
 
         {/* DAY P&L LED */}
         <div className="tb-mod tb-day">
-          <div className={`ledwin ${dayVal < 0 ? "red" : "grn"}`}>
+          <div className={`ledwin ${(dayVal ?? 0) < 0 ? "red" : "grn"}`}>
             <span className="led-dollar" style={{ color: dayColor }}>$</span>
-            <LedDisplay value={String(dayVal)} digits={String(Math.abs(dayVal)).length + (dayVal < 0 ? 1 : 0)} color={dayColor} />
+            <LedDisplay value={dayVal == null ? "—" : String(dayVal)} digits={dayVal == null ? 1 : String(Math.abs(dayVal)).length + (dayVal < 0 ? 1 : 0)} color={dayColor} />
           </div>
           <span className="silk">SESSION NAV Δ</span>
         </div>

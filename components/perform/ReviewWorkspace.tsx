@@ -60,7 +60,7 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
       </header>
       <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="review" onNavigate={onNavigate} />
       {destination?.channel && <section className="rvw-channel-context"><span><small>CURRENT SESSION · {destination.channel}</small><b>{signedUsd(focusedPnl?.dayPnl ?? 0)} ATTRIBUTED · {focusedRows.length} POSITION ROWS · {focusedPnl?.openCount ?? 0} OPEN</b></span><button type="button" onClick={() => onNavigate?.({ section: "research", channel: destination.channel, axis: "sources", researchMode: "decisions" })}>OPEN PAIRED REVIEW →</button></section>}
-      {latestSessionModel && <SeveEvidenceContext kind="actual" scope={latestSessionModel.scope.replaceAll("_", " ")} asOf={latestSessionModel.reportDate} era="executed session" sample={`${latestSessionModel.observations} ${latestSessionModel.evidenceLabel}`} quality={latestSessionModel.limitation ? "partial" : "complete"} />}
+      {section === "tape" && latestSessionModel && <SeveEvidenceContext kind="actual" scope={latestSessionModel.scope.replaceAll("_", " ")} asOf={latestSessionModel.reportDate} era="executed session" sample={`${latestSessionModel.observations} ${latestSessionModel.evidenceLabel}`} quality={latestSessionModel.limitation ? "partial" : "complete"} />}
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>
         {section === "tape" && (
@@ -80,6 +80,7 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
         )}
         {section === "autopsy" && (
           <AutopsyPanel
+            passports={surface.allChannelWorkspace}
             strategists={view.desk.strategists}
             daily={reviewEvidence.daily}
             weekly={reviewEvidence.weekly}
@@ -87,7 +88,7 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
         )}
         {section === "performance" && (
           <>
-            {latestCompletedSession && <div className="rvw-results-anchor"><b>LAST COMPLETED SESSION · {latestCompletedSession}</b><span>Account Results opens to the week through this close; choose Today only for the live session.</span></div>}
+            {latestCompletedSession && <div className="rvw-results-anchor"><b>LAST COMPLETED SESSION · {latestCompletedSession}</b><span>Results use rolling 7/30-day windows through the read time; the observed NAV endpoints are shown below. Today uses the exchange session.</span></div>}
             <PnlPanel
               strategists={view.desk.strategists}
               pnlByStrategist={livePnl}

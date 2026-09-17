@@ -22,13 +22,13 @@ export function DayBooksStrip({
 }: {
   strategists: StrategistState[];
   pnl: Record<string, ChannelPnl>;
-  fund: { nav: number; dayPnl: number };
+  fund: { nav: number | null; dayPnl: number | null };
   closedToday: number;
   openCount: number;
 }) {
   const attrib = Object.values(pnl).reduce((a, c) => a + (c.dayPnl || 0), 0);
-  const delta = Math.round(fund.dayPnl - attrib);
-  const dTone = Math.abs(delta) < 100 ? "ok" : Math.abs(delta) < 500 ? "warn" : "bad";
+  const delta = fund.dayPnl == null ? null : Math.round(fund.dayPnl - attrib);
+  const dTone = Math.abs(delta ?? Infinity) < 100 ? "ok" : Math.abs(delta ?? Infinity) < 500 ? "warn" : "bad";
   let topSlug = "", topVal = 0;
   for (const [slug, c] of Object.entries(pnl)) if (Math.abs(c.dayPnl || 0) > Math.abs(topVal)) { topSlug = slug; topVal = c.dayPnl || 0; }
   const topName = strategists.find((s) => s.slug === topSlug)?.name ?? topSlug;
@@ -38,19 +38,19 @@ export function DayBooksStrip({
     <div className={`panel dbk${folded ? " folded" : ""}`}>
       <div className="phead">
         <span className="t">Day · Books</span>
-        <span className="x" title="the NAV-delta is account truth; per-channel rows are relative attribution (shared-OCC)">NAV is truth</span>
+        <span className="x" title="the NAV-delta is account truth; per-channel rows are relative attribution (shared-OCC)">NAV endpoints required</span>
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody dbk-row">
-        <div className="dbk-stat" title="account-truth day P&L (NAV delta, re-marked live)">
+        <div className="dbk-stat" title="Observed broker NAV delta using matching snapshot endpoints">
           <span className="dbk-k">Session NAV Δ</span>
-          <span className={`dbk-v ${fund.dayPnl < 0 ? "neg" : "pos"}`}>{signedUsd(fund.dayPnl)}</span>
+          <span className={`dbk-v ${(fund.dayPnl ?? 0) < 0 ? "neg" : "pos"}`}>{signedUsd(fund.dayPnl)}</span>
         </div>
         <div className="dbk-stat" title="Σ per-channel day P&L — the attribution view (approximate under shared OCCs)">
           <span className="dbk-k">Attribution Σ</span>
           <span className={`dbk-v ${attrib < 0 ? "neg" : "pos"}`}>{signedUsd(attrib)}</span>
         </div>
-        <div className="dbk-stat" title="NAV − attribution. Small = the books reconcile; large = a booking leak — check coverage in the day report">
+        <div className="dbk-stat" title="NAV minus gross attribution. Fees, adjustments, coverage and mark timing require reconciliation; magnitude alone does not identify a defect.">
           <span className="dbk-k">Books Δ</span>
           <span className={`dbk-v dbk-d-${dTone}`}>{signedUsd(delta)}</span>
         </div>

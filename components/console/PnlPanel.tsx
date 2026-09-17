@@ -13,8 +13,8 @@ import type { SessionNavReconciliation } from "@/lib/desk/sessionNavReconciliati
 
 const WINDOWS: { id: PnlWindow; label: string }[] = [
   { id: "today", label: "Today" },
-  { id: "week", label: "Week" },
-  { id: "month", label: "Month" },
+  { id: "week", label: "7 days" },
+  { id: "month", label: "30 days" },
   { id: "all", label: "All" },
 ];
 
@@ -31,7 +31,7 @@ export function PnlPanel({
 }: {
   strategists: StrategistState[];
   pnlByStrategist: Record<string, ChannelPnl>;
-  fundPnl: { nav: number; dayPnl: number; reconciliation?: SessionNavReconciliation | null };
+  fundPnl: { nav: number | null; dayPnl: number | null; reconciliation?: SessionNavReconciliation | null };
   equityCurve: { ts: string; equity: number }[];
   /** Page-owned Review state and evidence. The panel renders without subscribing. */
   window: PnlWindow;
@@ -93,6 +93,7 @@ export function PnlPanel({
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody">
+        {windowed?.windowLabel && window !== "today" && <p className="wk-ee-note">{windowed.windowLabel}</p>}
         {/* hero: the window's fund number leads; the seg picks the window */}
         <div className="pnl-hero">
           <span className={`pnl-big ${blocked || fundVal == null ? "neg" : fundVal < 0 ? "neg" : "pos"}`}>

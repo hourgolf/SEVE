@@ -129,6 +129,7 @@ export interface ShadowChannelSummary {
   typicalGivebackPct: number | null;
   typicalReturnPct: number | null;
   typicalCapture: number | null;
+  captureCoverage?: { eligible: number; observed: number; excluded: number };
   sessions: number;
   positiveSessions: number;
   positiveSessionRate: number | null;
@@ -601,10 +602,10 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
       if (debit > 0) {
         const resultPct = row.pnlPerContract / debit * 100;
         channel.returns.push(resultPct);
-        if (row.mfePct != null && row.mfePct > 0) channel.capture.push(resultPct / row.mfePct);
+        if (row.mfePct != null && Number.isFinite(row.mfePct) && row.mfePct > 0 && resultPct >= 0 && resultPct <= row.mfePct) channel.capture.push(resultPct / row.mfePct);
       }
     }
-    if (row.mfePct != null) {
+    if (row.mfePct != null && Number.isFinite(row.mfePct) && row.mfePct >= 0) {
       channel.mfe.push(row.mfePct);
     }
     if (row.givebackPct != null) {
@@ -644,7 +645,8 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     typicalMfePct: median(channel.mfe),
     typicalGivebackPct: median(channel.giveback),
     typicalReturnPct: median(channel.returns),
-    typicalCapture: median(channel.capture),
+    typicalCapture: channel.capture.length === channel.scored ? median(channel.capture) : null,
+    captureCoverage: { eligible: channel.capture.length, observed: channel.scored, excluded: channel.scored - channel.capture.length },
     sessions: sessionResults.length,
     positiveSessions: sessionResults.filter((value) => value > 0).length,
     positiveSessionRate: sessionResults.length ? rounded(sessionResults.filter((value) => value > 0).length / sessionResults.length) : null,
