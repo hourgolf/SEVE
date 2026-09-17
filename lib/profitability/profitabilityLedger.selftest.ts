@@ -242,7 +242,8 @@ check("logical trade MFE and MAE use lineage extremes", () => {
   assert.equal(first.troughMark, 0.7);
   assert.equal(first.mfePct, 80);
   assert.equal(first.maePct, -30);
-  assert.equal(first.mfeCaptureRatio, 0.25);
+  assert.equal(first.mfeCaptureRatio, null);
+  assert.equal(first.captureCensorCode, "capture_requires_quantity_aware_path");
 });
 
 check("execution leakage is diagnostic and never subtracted twice", () => {
@@ -485,8 +486,10 @@ check("manager paths remain separate from actual realized P&L", () => {
   assert.equal(
     baseline.managerCounterfactualPaths.reduce((sum, path) =>
       sum + (path.counterfactualPnlUsd ?? 0), 0),
-    70,
+    0,
   );
+  assert.equal(baseline.managerCounterfactualPaths.reduce((sum,p)=>sum+(p.rawCounterfactualPnlUsd??0),0),70);
+  assert.deepEqual(baseline.managerCounterfactualPaths.map(p=>p.censorCode),["comparison_native_policy_unresolved","comparison_requires_logical_root"]);
   assert.equal(baseline.actualPnlIncludesCounterfactuals, false);
 });
 
@@ -600,13 +603,13 @@ check("counterfactual report denominator is observed paths, not actual trades", 
   const report = buildProfitabilityReport(baseline, "2026-07-28");
   const manager = report.periods.all.managerCounterfactuals[0];
   assert.equal(manager.observedPaths, 2);
-  assert.equal(manager.pairedPaths, 2);
-  assert.equal(manager.actualComparatorPnlUsd, 40);
-  assert.equal(manager.counterfactualPnlUsd, 70);
-  assert.equal(manager.counterfactualExpectancyUsd, 35);
-  assert.equal(manager.counterfactualWinRate, 0.5);
-  assert.equal(manager.counterfactualMaxDrawdownUsd, 0);
-  assert.equal(manager.pairedDeltaUsd, 30);
+  assert.equal(manager.pairedPaths, 0);
+  assert.equal(manager.actualComparatorPnlUsd, null);
+  assert.equal(manager.counterfactualPnlUsd, null);
+  assert.equal(manager.counterfactualExpectancyUsd, null);
+  assert.equal(manager.counterfactualWinRate, null);
+  assert.equal(manager.counterfactualMaxDrawdownUsd, null);
+  assert.equal(manager.pairedDeltaUsd, null);
   assert.match(renderProfitabilityMarkdown(report), /LOCK30\\\|v1\\\|book-v2/);
 });
 

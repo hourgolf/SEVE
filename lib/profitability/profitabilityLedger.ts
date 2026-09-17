@@ -1,3 +1,4 @@
+import { nativeComparisonReason, type ComparisonSpec } from "../research/nativeManagerComparison";
 // ============================================================================
 // Canonical profitability ledger.
 //
@@ -69,6 +70,10 @@ export interface ProfitabilityExecutionQualityRow {
 }
 
 export interface ProfitabilityManagerShadowRow {
+  terminal_return_pct?: number | string | null;
+  economic_mode?: string;
+  peak_return_pct?: number | string | null;
+  terminal_trigger?: string | null;
   account_id?: string | null;
   strategist_id?: string | null;
   configuration_epoch_id?: string | null;
@@ -98,6 +103,7 @@ export interface ProfitabilityEquityDayRow {
 }
 
 export interface ProfitabilityLedgerInput {
+  comparisonSpecs?: readonly ComparisonSpec[];
   accounts: readonly ProfitabilityAccountRow[];
   positions: readonly ProfitabilityPositionRow[];
   outcomes: readonly ProfitabilityOutcomeRow[];
@@ -167,6 +173,7 @@ export interface LogicalTrade {
   mfePct: number | null;
   maePct: number | null;
   mfeCaptureRatio: number | null;
+  captureCensorCode?: string | null;
   executionQualityReceipts: number;
   executionLeakageUsd: number | null;
   closeReasons: string[];
@@ -199,6 +206,7 @@ export interface BrokerNavDay {
 }
 
 export interface ProfitabilityLedger {
+  comparisonIntegrityVersion?: "native-comparison-v1";
   logicalTrades: LogicalTrade[];
   managerCounterfactualPaths: ManagerCounterfactualPath[];
   brokerNavDays: BrokerNavDay[];
@@ -599,7 +607,19 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     const maePct = troughMark != null && weightedEntry != null && weightedEntry > 0
       ? ratio(((troughMark / weightedEntry) - 1) * 100)
       : null;
-    const mfeCaptureRatio = realizedReturnPct != null && mfePct != null && mfePct > 0
+    const missedNativePeak = rows.some(row => input.executionRoutes.some(obs => {
+      const detail = obs.payload?.decisionDetail as {bid?:unknown} | undefined;
+      const bid = finite(detail?.bid);
+      return obs.position_id === row.id && !obs.payload?.shadowOnly && bid != null
+        && Date.parse(obs.event_at) >= Date.parse(row.opened_at)
+        && Date.parse(obs.event_at) <= Date.parse(row.closed_at ?? "")
+        && finite(row.peak_mark) != null && bid > Number(row.peak_mark) + 0.0001;
+    }));
+    const captureCensorCode = rows.length > 1 ? "capture_requires_quantity_aware_path"
+      : missedNativePeak ? "capture_native_quote_above_recorded_peak"
+      : realizedReturnPct != null && mfePct != null && realizedReturnPct > mfePct + 0.1 ? "capture_exit_above_recorded_peak"
+      : null;
+    const mfeCaptureRatio = !captureCensorCode && realizedReturnPct != null && mfePct != null && mfePct > 0
       ? ratio(realizedReturnPct / mfePct)
       : null;
 
@@ -662,6 +682,7 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
       mfePct,
       maePct,
       mfeCaptureRatio,
+      captureCensorCode,
       executionQualityReceipts: qualityRows.length,
       executionLeakageUsd,
       closeReasons: distinct(rows.flatMap((row) => row.close_reason ? [row.close_reason] : [])).sort(),
@@ -697,7 +718,10 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     shadowIds.add(row.id);
     const logicalTradeId = tradeIdByPosition.get(row.position_id) ?? null;
     if (!logicalTradeId) pushIssue(warnings, `manager-shadow run ${row.id} has no ledger position`);
+    const comparisonReason = nativeComparisonReason({ run: row, position: input.positions.find(p => p.id === row.position_id),
+      positions: input.positions, specs: input.comparisonSpecs ?? [], runs: input.managerShadow, observations: input.executionRoutes });
     managerCounterfactualPaths.push({
+      ...(comparisonReason ? { rawCounterfactualPnlUsd: finite(original.terminal_pnl), rawActualComparatorPnlUsd: finite(original.actual_realized_pnl) } : {}),
       ...(row.raw_fixed_manager_evidence ? {rawCounterfactualPnlUsd:finite(original.terminal_pnl),
         rawActualComparatorPnlUsd:finite(original.actual_realized_pnl)} : {}),
       id: row.id,
@@ -706,12 +730,12 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
       managerId: row.manager_id,
       managerPolicyVersion: row.manager_policy_version,
       shadowBookVersion: row.shadow_book_version,
-      status: row.status,
+      status: comparisonReason ? "censored" : row.status,
       terminalAt: validIso(row.terminal_at) ? row.terminal_at : null,
-      counterfactualPnlUsd: finite(row.terminal_pnl),
-      actualComparatorPnlUsd: finite(row.actual_realized_pnl),
+      counterfactualPnlUsd: comparisonReason ? null : finite(row.terminal_pnl),
+      actualComparatorPnlUsd: !comparisonReason && row.status === "terminal" && trade?.status === "closed" ? trade.realizedPnlUsd : null,
       censoredAt: validIso(row.censored_at) ? row.censored_at : null,
-      censorCode: row.censor_code,
+      censorCode: comparisonReason ?? row.censor_code,
     });
   }
   managerCounterfactualPaths.sort((left, right) =>
@@ -762,11 +786,14 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     trade.configuration.kind === "legacy_unstamped").length;
   const missingRoutes = logicalTrades.filter((trade) =>
     trade.censorCodes.includes("missing_immutable_account_route")).length;
+  const censoredCaptures = logicalTrades.filter(t => t.captureCensorCode).length;
+  if (censoredCaptures) warnings.push(`${censoredCaptures} capture ratios withheld for incomplete peak or quantity-path evidence`);
   if (legacyUnstamped) warnings.push(`${legacyUnstamped} logical trades predate exact configuration stamping`);
   if (missingRoutes) warnings.push(`${missingRoutes} logical trades lack an immutable execution-account route`);
   if (!brokerNavDays.length) warnings.push("no account-complete broker NAV days observed");
 
   return {
+    comparisonIntegrityVersion: "native-comparison-v1",
     logicalTrades,
     managerCounterfactualPaths,
     brokerNavDays,

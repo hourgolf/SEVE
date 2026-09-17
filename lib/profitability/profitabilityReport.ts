@@ -299,8 +299,8 @@ export function renderProfitabilityMarkdown(
       usd(manager.counterfactualExpectancyUsd),
       pf(
         manager.counterfactualProfitFactor,
-        Math.max(manager.counterfactualPnlUsd, 0),
-        Math.max(-manager.counterfactualPnlUsd, 0),
+        Math.max(manager.counterfactualPnlUsd ?? 0, 0),
+        Math.max(-(manager.counterfactualPnlUsd ?? 0), 0),
       ),
       usd(manager.counterfactualMaxDrawdownUsd),
       usd(manager.pairedDeltaUsd),

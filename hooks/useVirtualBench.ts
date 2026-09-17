@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { readCompleteEvidence } from "@/lib/perform/windowedEvidenceRead";
 import { useRefreshTick } from "./useRefreshTick";
 import { isVirtualBenchSlug } from "@/lib/research/shadowResearch";
 
@@ -12,7 +13,7 @@ import { isVirtualBenchSlug } from "@/lib/research/shadowResearch";
 // ⚠ every number is capital-blind + mid/ask-basis — hypothesis substrate, never evidence.
 
 export interface VirtualRow {
-  slug: string; blocked: string; exit_reason: string;
+  id: string; slug: string; blocked: string; exit_reason: string;
   pnl_per_contract: number | null; signal_at: string;
 }
 export interface BenchAgg {
@@ -44,12 +45,13 @@ function fold(rows: VirtualRow[]): BenchAgg[] {
 
 export function useVirtualBench(enabled = true): {
   bench: BenchAgg[]; benchToday: BenchAgg[]; todayET: string; since: string | null;
-  gateBlocks: { n: number; scored: number; pnl: number }; loading: boolean;
+  gateBlocks: { n: number; scored: number; pnl: number }; loading: boolean; error: string | null;
 } {
   const [bench, setBench] = useState<BenchAgg[]>([]);
   const [benchToday, setBenchToday] = useState<BenchAgg[]>([]);
   const [since, setSince] = useState<string | null>(null);
   const [gateBlocks, setGateBlocks] = useState({ n: 0, scored: 0, pnl: 0 });
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const todayET = etDate();
   // virtual_trades accrue INTRADAY (gate-shadow scores within minutes) — the slow tick
@@ -60,16 +62,16 @@ export function useVirtualBench(enabled = true): {
     if (!enabled) return;
     let alive = true;
     (async () => {
+      setLoading(true); setError(null);
       try {
         const sb = getSupabase();
-        const { data } = await sb
+        const rows = await readCompleteEvidence<VirtualRow>(() => sb
           .from("virtual_trades")
-          .select("slug,blocked,exit_reason,pnl_per_contract,signal_at")
+          .select("id:signal_id,slug,blocked,exit_reason,pnl_per_contract,signal_at", { count: "exact" })
           .gte("signal_at", new Date(Date.now() - 30 * 86_400_000).toISOString())
           .order("signal_at", { ascending: false })
-          .limit(2000);
+          .order("signal_id", { ascending: false }), "virtual bench");
         if (!alive) return;
-        const rows = (data ?? []) as VirtualRow[];
         // Day 1 uses lifecycle-aware block codes such as
         // day1_dark_lifecycle. Fleet membership is the durable identity.
         const benchRows = rows.filter((r) => isVirtualBenchSlug(r.slug));
@@ -84,11 +86,13 @@ export function useVirtualBench(enabled = true): {
         // rows arrive signal_at-desc, so the tail bench row is the earliest
         setSince(benchRows.length ? etDate(benchRows[benchRows.length - 1].signal_at) : null);
         setGateBlocks({ n: gn, scored: gs, pnl: Math.round(gp) });
-      } catch { /* table absent / offline → empty panel */ }
+      } catch {
+        if (alive) { setError("Complete research history could not be verified. Results are unavailable."); setBench([]); setBenchToday([]); setSince(null); setGateBlocks({ n: 0, scored: 0, pnl: 0 }); }
+      }
       if (alive) setLoading(false);
     })();
     return () => { alive = false; };
   }, [enabled, todayET, tick]);
 
-  return { bench, benchToday, todayET, since, gateBlocks, loading };
+  return { bench, benchToday, todayET, since, gateBlocks, loading, error };
 }

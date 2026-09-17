@@ -93,14 +93,14 @@ export interface ManagerCounterfactualMetrics {
   observedPaths: number;
   pairedPaths: number;
   censoredPaths: number;
-  actualComparatorPnlUsd: number;
-  counterfactualPnlUsd: number;
+  actualComparatorPnlUsd: number | null;
+  counterfactualPnlUsd: number | null;
   counterfactualWinRate: number | null;
   counterfactualProfitFactor: number | null;
   counterfactualExpectancyUsd: number | null;
   counterfactualExpectancyConfidence95: ConfidenceInterval;
-  counterfactualMaxDrawdownUsd: number;
-  pairedDeltaUsd: number;
+  counterfactualMaxDrawdownUsd: number | null;
+  pairedDeltaUsd: number | null;
   averagePairedDeltaUsd: number | null;
   pathsBetterThanActual: number;
 }
@@ -380,7 +380,7 @@ function managerMetrics(
   }
   return [...groups].map(([managerKey, rows]) => {
     const paired = rows.filter((row) =>
-      row.counterfactualPnlUsd != null && row.actualComparatorPnlUsd != null);
+      row.status === "terminal" && row.counterfactualPnlUsd != null && row.actualComparatorPnlUsd != null);
     const actual = paired.reduce((sum, row) => sum + (row.actualComparatorPnlUsd as number), 0);
     const counterfactual = paired.reduce((sum, row) => sum + (row.counterfactualPnlUsd as number), 0);
     const counterfactualPnls = paired.map((row) => row.counterfactualPnlUsd as number);
@@ -400,20 +400,20 @@ function managerMetrics(
       pairedPaths: paired.length,
       censoredPaths: rows.filter((row) =>
         row.censoredAt != null || row.counterfactualPnlUsd == null).length,
-      actualComparatorPnlUsd: money(actual),
-      counterfactualPnlUsd: money(counterfactual),
+      actualComparatorPnlUsd: paired.length ? money(actual) : null,
+      counterfactualPnlUsd: paired.length ? money(counterfactual) : null,
       counterfactualWinRate: paired.length
         ? ratio(counterfactualWins.length / paired.length)
         : null,
-      counterfactualProfitFactor: counterfactualGrossLoss > 0
+      counterfactualProfitFactor: !paired.length ? null : counterfactualGrossLoss > 0
         ? ratio(counterfactualGrossProfit / counterfactualGrossLoss)
         : counterfactualGrossProfit > 0 ? null : 0,
       counterfactualExpectancyUsd: paired.length
         ? money(mean(counterfactualPnls) as number)
         : null,
       counterfactualExpectancyConfidence95: meanConfidence95(counterfactualPnls),
-      counterfactualMaxDrawdownUsd: maximumDrawdown(counterfactualPnls),
-      pairedDeltaUsd: money(delta),
+      counterfactualMaxDrawdownUsd: paired.length ? maximumDrawdown(counterfactualPnls) : null,
+      pairedDeltaUsd: paired.length ? money(delta) : null,
       averagePairedDeltaUsd: paired.length ? money(delta / paired.length) : null,
       pathsBetterThanActual: paired.filter((row) =>
         (row.counterfactualPnlUsd as number) > (row.actualComparatorPnlUsd as number)).length,
