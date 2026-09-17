@@ -296,7 +296,10 @@ export function buildLogicalManagerPaths(
     group.runs.push(run);
     groups.set(key, group);
   }
-  return [...groups.values()].map(({ trade, managerId, managerVersion, runs }) => {
+  return [...groups.values()].map(({ trade, managerId, managerVersion, runs: allRuns }) => {
+    // Root paths already model the original lot; do not add runner paths again.
+    const root = allRuns.find(r => r.position_id === trade.rootPositionId);
+    const runs = root ? [root] : allRuns.map(r => ({...r, status: "censored" as const}));
     const terminal = runs.every((run) => run.status === "terminal");
     const active = runs.some((run) => run.status === "active");
     const status: AtlasManagerPath["status"] = terminal ? "terminal" : active ? "active" : "censored";
@@ -606,7 +609,7 @@ export function adaptDecisionAtlasSnapshot(input: {
       occSymbol: virtual?.occ ?? facts?.occSymbol ?? text(rationale?.occ),
       direction: signal.direction === "call" || signal.direction === "put" ? signal.direction : facts?.direction ?? null,
       contractSelected: exactCandidate ? true : facts?.contractSelected ?? (text(rationale?.occ) ? true : null),
-      quoteEligible: exactPath ? true : facts?.quoteEligible ?? null,
+      quoteEligible: virtual ? null : exactPath ? true : facts?.quoteEligible ?? null,
       admissionAllowed: facts?.admissionAllowed ?? signal.acted_on,
       filled: facts?.filled ?? null,
       blockedReason: facts?.blockedReason ?? signal.blocked_reason ?? virtual?.blocked ?? null,
@@ -616,13 +619,13 @@ export function adaptDecisionAtlasSnapshot(input: {
       returnPct,
       mfePct,
       maePct: null,
-      captureRatio: mfePct != null && mfePct > 0 && returnPct != null ? returnPct / mfePct : null,
+      captureRatio: mfePct != null && mfePct > 0 && returnPct != null && returnPct <= mfePct + 0.1 ? returnPct / mfePct : null,
       stopExposurePerContractUsd: virtualPolicy.verified && entryPrice != null && virtual?.stop_pct != null
         ? entryPrice * Number(virtual.stop_pct) : null,
       boundedRetuneStamp: parseBoundedRetuneSignalStamp(rationale?.bounded_retune_experiment),
       sourceRefs: [
         `signals:${signal.id}`,
-        ...(virtual ? [`virtual_trades:${virtual.signal_id}`] : []),
+        ...(virtual ? [`virtual_trades:${virtual.signal_id}`, "limitation:virtual-entry-clock-unverified"] : []),
         virtualPolicy.verified ? "limitation:virtual-reference-policy-not-full-native-manager"
           : "limitation:virtual-policy-unverified",
         ...(facts?.refs ?? []),
@@ -652,13 +655,19 @@ export function adaptDecisionAtlasSnapshot(input: {
       contractSelected: virtual.occ ? true : null, quoteEligible: null, admissionAllowed: null, filled: null,
       blockedReason: virtual.blocked, quantity: spec?.quantity ?? null, entryPrice,
       resultPerContractUsd: pnl, returnPct, mfePct, maePct: null,
-      captureRatio: mfePct != null && mfePct > 0 && returnPct != null ? returnPct / mfePct : null,
+      captureRatio: mfePct != null && mfePct > 0 && returnPct != null && returnPct <= mfePct + 0.1 ? returnPct / mfePct : null,
       stopExposurePerContractUsd: null,
       boundedRetuneStamp: null,
-      sourceRefs: [`virtual_trades:${virtual.signal_id}`, "limitation:signal-row-missing"],
+      sourceRefs: [`virtual_trades:${virtual.signal_id}`, "limitation:signal-row-missing", "limitation:virtual-entry-clock-unverified"],
     });
   }
-  const managerPaths = buildLogicalManagerPaths(snapshot.managerRuns, tradeByPosition, {
+  const integrityById = new Map((snapshot.ledger.managerCounterfactualPaths ?? []).map(p => [p.id, p]));
+  const checkedManagerRuns = snapshot.managerRuns.map(run => {
+    const proof = snapshot.ledger.comparisonIntegrityVersion === "native-comparison-v1" ? integrityById.get(run.id) : undefined;
+    return !proof || proof.status === "censored" || proof.actualComparatorPnlUsd == null ? { ...run, status: "censored" as const,
+      terminal_pnl: null, terminal_return_pct: null, censor_code: proof?.censorCode ?? "comparison_integrity_unavailable" } : run;
+  });
+  const managerPaths = buildLogicalManagerPaths(checkedManagerRuns, tradeByPosition, {
     positionIds:new Set((snapshot.positions ?? []).filter(fixedEntryOwnershipPresent).map(r => r.id)),
     evidence:snapshot.fixedManagerComparison });
   return {

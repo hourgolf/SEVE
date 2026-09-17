@@ -7,6 +7,7 @@ export interface ExecutableShadowSummary {
   slug: string;
   posture: "OBSERVING";
   evidenceLayer: "EXECUTABLE SHADOW";
+  from: string; through: string; incompleteRuns: number;
   sessions: number;
   opportunities: number;
   scored: number;

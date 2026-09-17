@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { pageAll } from "@/engine/pageAll";
+import { readCompleteEvidence } from "@/lib/perform/windowedEvidenceRead";
+import type { ComparisonSpec, NativeObservation } from "@/lib/research/nativeManagerComparison";
 import { requireDeskOperator } from "@/lib/auth/serverOperator";
 import { createFixedEntryServiceClient } from "@/worker/src/fixedEntryServiceClient";
 import { readFixedManagerComparisonEvidence } from "@/worker/src/fixedEntryManagerComparisonEvidence";
@@ -16,7 +17,7 @@ const SB_URL = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SB_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const COHORT_FROM = "2026-07-13";
 const COHORT_ISO = "2026-07-13T04:00:00.000Z";
-const READ_OPTIONS = { pageSize: 500, max: 10_000, attempts: 3, retryDelaysMs: [250, 750], timeoutMs: 10_000 } as const;
+
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, {
   status,
@@ -33,27 +34,33 @@ export async function GET(req: Request) {
     const sb = createClient(SB_URL, SB_SERVICE, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
-    const [managerRuns, positions, fixedManagerComparison] = await Promise.all([
-      pageAll<ChannelManagerRunRow>((from) => sb.from("manager_shadow_runs")
+    const [managerRuns, positions, fixedManagerComparison, comparisonSpecs, nativeObservations] = await Promise.all([
+      readCompleteEvidence<ChannelManagerRunRow>(() => sb.from("manager_shadow_runs")
         .select([
           "id", "position_id", "channel_slug", "manager_id", "manager_policy_version",
           "shadow_book_version", "configuration_epoch_id", "status", "evidence_state",
           "entry_at", "entry_price", "original_qty", "economic_mode", "peak_return_pct",
           "terminal_at", "terminal_return_pct", "terminal_pnl", "censored_at", "censor_code",
           "account_id", "strategist_id", "admitted_at", "admission_source",
-          "first_quote_at",
-        ].join(","))
+          "first_quote_at", "terminal_trigger",
+        ].join(","), { count: "exact" })
         .gte("entry_at", COHORT_ISO)
         .order("entry_at", { ascending: true })
-        .order("id", { ascending: true }), READ_OPTIONS),
-      pageAll<ChannelManagerPositionRow>((from) => sb.from("positions")
-        .select("id,runner_of,realized_pnl,entry_features,qty,avg_entry_price,status,closed_at")
-        .order("id", { ascending: true }), READ_OPTIONS),
+        .order("id", { ascending: true }), "manager evidence"),
+      readCompleteEvidence<ChannelManagerPositionRow>(() => sb.from("positions")
+        .select("id,runner_of,realized_pnl,entry_features,qty,avg_entry_price,status,closed_at,close_reason,channel_spec_version_id", { count: "exact" })
+        .order("id", { ascending: true }), "manager positions"),
       readFixedManagerComparisonEvidence(createFixedEntryServiceClient(SB_URL,SB_SERVICE)),
+      readCompleteEvidence<ComparisonSpec>(() => sb.from("channel_spec_versions")
+        .select("id,version_key,stop_loss,take_profit,ratchet_parameters,exit_parameters", { count: "exact" }).order("id"), "comparison specs"),
+      readCompleteEvidence<NativeObservation & {id:string}>(() => sb.from("execution_observations")
+        .select("id,position_id,event_at,reason,bid,payload", { count: "exact" })
+        .eq("reason", "target_premium").gte("event_at", COHORT_ISO).order("id"), "native target observations"),
     ]);
     const book = deriveChannelManagerEvidenceBook({
       managerRuns,
       positions,
+      comparisonSpecs, nativeObservations,
       fixedManagerComparison,
       generatedAt: new Date().toISOString(),
       cohortFrom: COHORT_FROM,

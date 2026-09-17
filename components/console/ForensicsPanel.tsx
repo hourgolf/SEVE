@@ -451,8 +451,9 @@ export function ForensicsPanel({
 
       {/* ── VB BENCH — the vb-* virtual fleet (the old Lab panel, merged) ── */}
       <Inst
-        k="vbbench" label="Observe roster" question="Which research-only channels are producing repeatable opportunity?"
+        k="vbbench" label="Observe roster" question="What do reconstructed reference paths show?"
         mid={vb.loading ? <span className="mut">loading…</span>
+          : vb.error ? <span className="neg">Research history unavailable</span>
           : vbTop.length === 0 ? <span className="mut">no reconstructions yet</span>
           : (
             <>
@@ -462,15 +463,16 @@ export function ForensicsPanel({
               {vbRed > 0 && <span className="mut">{vbRed} losing</span>}
             </>
           )}
-        stat={<span className={vbRed > 0 ? "neg" : "mut"}>{vbTop.length === 0 ? "No decision yet" : vbRed > 0 ? `${vbRed} losing channels still need review` : "No losing channel in this view"}</span>}
+        stat={<span className={vbRed > 0 ? "neg" : "mut"}>{vb.error ? "Comparison unavailable" : vbTop.length === 0 ? "No decision yet" : vbRed > 0 ? `${vbRed} losing channels still need review` : "No losing channel in this view"}</span>}
       >
+        {vb.error && <p role="alert" className="au-market">{vb.error}</p>}
         <div className="sb-toggle-row">
-          <span className="roster-toggle sc-toggle" title="today's signals (ET) vs the accrued book">
+          <span className="roster-toggle sc-toggle" title="today's signals (ET) vs the last 30 days">
             <button type="button" className={vbShowToday ? "on" : ""} disabled={!vbHasToday} onClick={() => setVbWin("today")}>today</button>
-            <button type="button" className={!vbShowToday ? "on" : ""} onClick={() => setVbWin("cum")}>cumulative</button>
+            <button type="button" className={!vbShowToday ? "on" : ""} onClick={() => setVbWin("cum")}>last 30 days</button>
           </span>
         </div>
-        <div className="brief-mini">ranked by <b>avg $/ct</b> (right) · Σ = the cumulative mid-basis book</div>
+        <div className="brief-mini">ranked by <b>avg $/ct</b> (right) · Σ = mid-price reconstructions; entry clocks and native managers are not verified</div>
         <div className="fx-rows">
           {[...vbRows].sort((a, b) => vbAvg(b) - vbAvg(a)).map((b) => (
             <div className="fx-row vb-row" key={b.slug} title={b.slug}>
@@ -480,7 +482,7 @@ export function ForensicsPanel({
             </div>
           ))}
         </div>
-        <div className="brkfoot">gate-shadow blocks: {vb.gateBlocks.scored}/{vb.gateBlocks.n} scored · Σ {signedUsd(Math.round(vb.gateBlocks.pnl))}/ct — K eval at ≥30</div>
+        {!vb.error && <div className="brkfoot">gate-shadow blocks: {vb.gateBlocks.scored}/{vb.gateBlocks.n} scored · Σ {signedUsd(Math.round(vb.gateBlocks.pnl))}/ct — K eval at ≥30</div>}
       </Inst>
 
       <div className="fx-foot">Updated {asOf} ET · hypothetical research only. These comparisons cannot change orders or configuration, and one session is not enough evidence.</div>

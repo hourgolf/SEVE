@@ -1,3 +1,4 @@
+import { nativeComparisonReason, type ComparisonSpec, type NativeObservation } from "./nativeManagerComparison";
 import { DAY1_MANAGER_ARMS } from "@/lib/channels/day1Release";
 import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
 import { applyFixedManagerComparison, constrainFixedManagerEvidence, type FixedManagerComparisonIndex } from "./fixedManagerComparison";
@@ -6,6 +7,7 @@ export const COMMON_MANAGER_ARMS = DAY1_MANAGER_ARMS;
 export type CommonManagerId = (typeof COMMON_MANAGER_ARMS)[number];
 
 export interface ChannelManagerRunRow {
+  terminal_trigger?: string | null;
   account_id?: string | null;
   strategist_id?: string | null;
   admitted_at?: string | null;
@@ -33,6 +35,8 @@ export interface ChannelManagerRunRow {
 }
 
 export interface ChannelManagerPositionRow {
+  channel_spec_version_id?: string | null;
+  close_reason?: string | null;
   entry_features?: Record<string,unknown> | null;
   qty?: number | string;
   avg_entry_price?: number | string;
@@ -175,8 +179,8 @@ function maxDrawdown(values: readonly number[]): number | null {
 }
 
 function classify(summary: Pick<ChannelManagerArmSummary,
-  "terminalPaths" | "sessions" | "medianDeltaPct" | "deltaConfidence95">): ManagerVerdict {
-  if (summary.terminalPaths < 10 || summary.sessions < 5) return "collecting";
+  "terminalPaths" | "sessions" | "medianDeltaPct" | "deltaConfidence95" | "coverage">): ManagerVerdict {
+  if (summary.coverage < 1 || summary.terminalPaths < 10 || summary.sessions < 5) return "collecting";
   if (summary.deltaConfidence95.lower != null && summary.deltaConfidence95.lower > 0
       && (summary.medianDeltaPct ?? 0) > 0) return "promising";
   if (summary.deltaConfidence95.upper != null && summary.deltaConfidence95.upper < 0
@@ -271,6 +275,8 @@ export function filterChannelManagerEvidenceByEpoch(
  * arms remain paired to their own canonical root+runner actual result.
  */
 export function deriveChannelManagerEvidenceBook(input: {
+  comparisonSpecs?: readonly ComparisonSpec[];
+  nativeObservations?: readonly NativeObservation[];
   managerRuns: readonly ChannelManagerRunRow[];
   positions: readonly ChannelManagerPositionRow[];
   generatedAt: string;
@@ -312,6 +318,10 @@ export function deriveChannelManagerEvidenceBook(input: {
     const byPosition = new Map<string, ChannelManagerRunRow[]>();
     for (const row of rows) {
       const id = fixedEvidence[row.position_id]?.rootPositionId ?? row.position_id;
+      // A root observer models the whole original lot. Its runner observer is
+      // not another independent trade or another original lot.
+      const position = positionById.get(id);
+      if (position?.runner_of) continue;
       byPosition.set(id, [...(byPosition.get(id) ?? []), row]);
     }
     const trades: ChannelManagerTradePoint[] = [...byPosition].map(([positionId, positionRuns]) => {
@@ -322,13 +332,15 @@ export function deriveChannelManagerEvidenceBook(input: {
       const pnl = actualPnl(positionId);
       const actualReturnPct = pnl != null && debit > 0 ? round((pnl / debit) * 100) : null;
       const noStop = positionRuns.find((row) => row.manager_id === "BELL/no-stop");
-      const commonMfe = noStop?.status === "terminal" && noStop.evidence_state === "observing"
+      let commonMfe = noStop?.status === "terminal" && noStop.evidence_state === "observing"
         ? finite(noStop.peak_return_pct)
         : null;
       const runByManager = new Map(positionRuns.map((row) => [row.manager_id, row]));
       const arms = COMMON_MANAGER_ARMS.map((managerId): ChannelManagerArmPoint => {
         const run = runByManager.get(managerId);
-        const invalidBeforeActualClose = run?.evidence_state === "no_eligible_quote_before_actual_close";
+        const comparisonReason = run ? nativeComparisonReason({run, position: positionById.get(positionId),
+          positions: input.positions, specs: input.comparisonSpecs ?? [], runs: input.managerRuns, observations: input.nativeObservations ?? []}) : null;
+        const invalidBeforeActualClose = !!comparisonReason || run?.evidence_state === "no_eligible_quote_before_actual_close";
         const returnPct = run?.status === "terminal" && !invalidBeforeActualClose
           ? finite(run.terminal_return_pct)
           : null;
@@ -339,10 +351,11 @@ export function deriveChannelManagerEvidenceBook(input: {
           deltaVsActualPct: returnPct != null && actualReturnPct != null ? round(returnPct - actualReturnPct) : null,
           terminalAt: run?.terminal_at ?? null,
           censorCode: invalidBeforeActualClose
-            ? "no_eligible_quote_before_actual_close"
+            ? comparisonReason ?? "no_eligible_quote_before_actual_close"
             : run?.censor_code ?? null,
         };
       });
+      if (arms.some(arm => arm.censorCode === "comparison_native_quote_missed")) commonMfe = null;
       return {
         positionId,
         session: etDate(first.entry_at),

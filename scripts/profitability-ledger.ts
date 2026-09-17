@@ -1,3 +1,4 @@
+import type { ComparisonSpec } from "../lib/research/nativeManagerComparison";
 // ============================================================================
 // SELECT-only canonical profitability snapshot and report.
 //
@@ -12,6 +13,7 @@ import { createHash } from "node:crypto";
 import { isFixedEntryProtocolObservation } from "../lib/research/fixedEntryProtocolEvidence";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { readCompleteEvidence } from "../lib/perform/windowedEvidenceRead";
 import { pageAll } from "../engine/pageAll";
 import {
   buildProfitabilityLedger,
@@ -189,7 +191,7 @@ async function main(): Promise<void> {
         "shadow_book_version", "status", "terminal_at", "terminal_pnl",
         "actual_realized_pnl", "censored_at", "censor_code",
         "account_id", "strategist_id", "configuration_epoch_id", "entry_at", "entry_price", "original_qty", "admitted_at", "admission_source",
-        "evidence_state", "first_quote_at",
+        "evidence_state", "first_quote_at", "economic_mode", "peak_return_pct", "terminal_trigger", "terminal_return_pct",
       ].join(","))
       .order("id", { ascending: true }), {
       ...READ_OPTIONS,
@@ -224,7 +226,10 @@ async function main(): Promise<void> {
           || left.id.localeCompare(right.id));
     }, timings);
 
+    const comparisonSpecs = await timed("comparison_specs", () => readCompleteEvidence<ComparisonSpec>(() => sb.from("channel_spec_versions")
+      .select("id,version_key,stop_loss,take_profit,ratchet_parameters,exit_parameters", {count:"exact"}).order("id"), "comparison specs", 2000), timings);
     input = {
+      comparisonSpecs,
       fixedManagerComparison: await timed("fixed_manager_comparison", () => readFixedManagerComparisonEvidence(
         createFixedEntryServiceClient(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
           process.env.SUPABASE_SERVICE_ROLE_KEY ?? "")), timings),

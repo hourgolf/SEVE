@@ -71,6 +71,7 @@ assert.equal(isExactCurrentChannelConfiguration(changedChannel, "spec-orb"), fal
 
 const logicalTrade = {
   id: "trade:root",
+  rootPositionId: "root",
   opportunityId: "opportunity-1",
   channelSlug: "grind-v3",
   configuration: firstReceipt,
@@ -103,10 +104,12 @@ const logicalPaths = buildLogicalManagerPaths([
     terminal_pnl: -20, terminal_return_pct: -10 }),
 ], new Map([["root", logicalTrade], ["runner", logicalTrade]]));
 assert.equal(logicalPaths.length, 1, "root and runner arms must form one logical manager path");
-assert.equal(logicalPaths[0]?.resultPerContractUsd, 10,
-  "logical manager result per contract must use summed P&L and quantity");
-assert.equal(logicalPaths[0]?.returnPct, 7.5,
-  "logical manager return must use summed P&L over summed entry debit");
+assert.equal(logicalPaths[0]?.resultPerContractUsd, 25,
+  "root observer already models original lot; runner observer must not be added");
+assert.equal(logicalPaths[0]?.returnPct, 25,
+  "root return uses original lot only");
+
+assert.equal(buildLogicalManagerPaths([run({position_id:"runner"})],new Map([["runner",logicalTrade]]))[0].status,"censored", "a runner-only observer cannot stand in for the original lot");
 
 const boundedInput: Parameters<typeof adaptDecisionAtlasSnapshot>[0] = {
   generatedAt: "2026-08-24T20:00:00.000Z",
@@ -139,6 +142,8 @@ const boundedInput: Parameters<typeof adaptDecisionAtlasSnapshot>[0] = {
   } as never,
 };
 const bounded = adaptDecisionAtlasSnapshot(boundedInput);
+assert.equal(bounded.opportunities.find(o=>o.id==="prospective_virtual:included")?.quoteEligible,null);
+assert.ok(bounded.opportunities.find(o=>o.id==="prospective_virtual:included")?.sourceRefs.includes("limitation:virtual-entry-clock-unverified"));
 const originalExecution = boundedInput.snapshot.executionObservations[0];
 const protocolEvidence = { ...originalExecution, id: "recovery-protocol", account_id: "wrong-account",
   reason: "fixed_entry_protocol:command", action: "reconcile", payload: { fixed_entry_protocol: "fixed-entry-intent-v1" } };
