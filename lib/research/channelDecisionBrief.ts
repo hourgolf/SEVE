@@ -248,9 +248,10 @@ function decisionDistribution(rows: readonly AtlasOpportunity[]): NonNullable<Ch
     strongSessionUsd: quantile(sessionValues, .75),
     typicalBestMovePct,
     typicalFinalReturnPct,
-    coherentCapture: typicalFinalReturnPct != null && typicalFinalReturnPct <= 0 ? 0
-      : typicalBestMovePct != null && typicalBestMovePct > 0 && typicalFinalReturnPct != null
-        ? round(Math.max(0, Math.min(1, typicalFinalReturnPct / typicalBestMovePct))) : null,
+    // Never reconstruct a censored ratio from unrelated medians or clamp an
+    // impossible peak into an apparently perfect 100% capture result.
+    coherentCapture: rows.length > 0 && rows.every(row => finite(row.captureRatio) && row.captureRatio <= 1)
+      ? median(rows.map(row => row.captureRatio as number)) : null,
     largestWinnerShare: positiveTotal > 0 ? round(Math.max(...positiveResults) / positiveTotal) : null,
   };
 }
@@ -306,7 +307,8 @@ function nativeExit(rows: readonly AtlasOpportunity[], frontier: AtlasEntryExitF
   const bestMove = median(bestMoves);
   const giveback = median(givebacks);
   const result = frontier?.nativeTypicalResultUsd ?? null;
-  const capture = frontier?.nativeTypicalCapture ?? null;
+  const capture = rows.length > 0 && rows.every(row => finite(row.captureRatio) && row.captureRatio <= 1)
+    ? median(rows.map(row => row.captureRatio as number)) : null;
   const conclusion = rows[0]?.evidenceLayer === "prospective_virtual"
     ? "These are virtual reference paths, not verified full native-manager outcomes or broker fills."
     : result == null ? "The native exit does not yet have comparable scored outcomes."
@@ -425,6 +427,12 @@ function chooseRecommendation(input: {
       nextExperiment = "Keep entry, exit, manager, and route fixed; validate one contract step in the portfolio replay before proposing it.";
     }
   } else if (dossier.disposition === "retune_one_variable") {
+    if (native.typicalCapture == null) return {
+      axis: "collection", label: "VERIFY CAPTURE",
+      summary: "Comparable capture evidence is incomplete; entry quality and exit contribution remain separate questions.",
+      nextExperiment: "Verify paired quote paths and retain the native entry and manager as controls.",
+      productionChangeAuthorized: false,
+    };
     axis = native.typicalCapture != null && native.typicalCapture < 0.45 ? "exit" : "entry";
     label = axis === "exit" ? "REVIEW EXIT" : "REVIEW ENTRY";
     summary = axis === "exit" ? native.conclusion
@@ -454,7 +462,8 @@ export function buildChannelDecisionBriefs(input: {
     const entries = entryFrequency(rows, dossier);
     const native = nativeExit(rows, frontier);
     const managers = managerReview(frontier);
-    const trailChannel = input.trailFrontier?.channels[dossier.channel];
+    const trailChannel = input.trailFrontier?.nativeComparisonIntegrity === "native-path-v1"
+      ? input.trailFrontier.channels[dossier.channel] : undefined;
     const trailEra = trailChannel?.eras.find((row) => row.configurationEra === trailChannel.selectedConfigurationEra)
       ?? trailChannel?.virtualEras.find((row) => row.configurationEra === trailChannel.selectedVirtualConfigurationEra)
       ?? null;

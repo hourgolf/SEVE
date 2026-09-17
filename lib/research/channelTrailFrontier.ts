@@ -150,6 +150,9 @@ export interface ChannelTrailFrontier {
 }
 
 export interface ChannelTrailFrontierBook {
+  /** Reserved for a producer that verifies native stops, clocks and quote paths.
+   * The current reference-policy producer deliberately does not emit this proof. */
+  nativeComparisonIntegrity?: "native-path-v1";
   schemaVersion: 1;
   frontierVersion: typeof CHANNEL_TRAIL_FRONTIER_VERSION;
   generatedAt: string;

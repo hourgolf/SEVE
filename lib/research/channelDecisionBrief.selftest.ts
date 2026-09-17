@@ -45,9 +45,18 @@ assert.equal(brief.decisionDistribution?.opportunities, 2);
 assert.equal(brief.decisionDistribution?.typicalSessionUsd, 20);
 assert.equal(brief.decisionDistribution?.weakSessionUsd, 20);
 assert.equal(brief.decisionDistribution?.typicalFinalReturnPct, 10);
-assert.equal(brief.decisionDistribution?.coherentCapture, .29);
-assert.equal(brief.trail?.label, "TRAIL FRONTIER");
-assert.equal(brief.trail?.leading?.pairedOpportunities, 1);
+assert.equal(brief.decisionDistribution?.coherentCapture, .05, "median of paired ratios, not ratio of different medians");
+assert.equal(brief.trail, undefined, "unverified reference frontier cannot supply native manager recommendations");
+const missingCapture = buildChannelDecisionBriefs({ atlas, weekly,
+  opportunities: opportunities.map(row => ({...row, captureRatio: null})) });
+assert.equal(missingCapture.channels.test.decisionDistribution?.coherentCapture, null,
+  "censored capture must not be recreated from return and peak medians");
+assert.equal(missingCapture.channels.test.nativeExit.typicalCapture, null,
+  "native summary must preserve missing capture too");
+const impossibleCapture = buildChannelDecisionBriefs({ atlas, weekly,
+  opportunities: opportunities.map(row => ({...row, captureRatio: 1.2})) });
+assert.equal(impossibleCapture.channels.test.decisionDistribution?.coherentCapture, null,
+  "impossible capture cannot be clamped into 100 percent");
 const trialSnapshot = {
   currentConfigurationEpochId: WEEKEND_TRIAL_EPOCH,
   activeChannelSpecs: [{ slug: "vb-gap-drift-qqq", id: "version", accountId: "paper", executionPosture: "paper" }],
