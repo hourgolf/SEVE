@@ -89,10 +89,11 @@ export function deriveChannelLineupStory(input: {
   const rawBestMove = distribution ? distribution.typicalBestMovePct : summary.typicalMfePct;
   const bestMove = rawBestMove == null ? null : Math.max(0, rawBestMove);
   const finalReturn = distribution ? distribution.typicalFinalReturnPct : summary.typicalReturnPct;
-  const capture = finalReturn != null && finalReturn <= 0 ? 0
-    : bestMove != null && bestMove > 0 && finalReturn != null
-      ? Math.max(0, Math.min(1, finalReturn / bestMove))
-      : null;
+  // A selected cohort's unknown value must not borrow another cohort or be
+  // reconstructed from medians belonging to different observations.
+  const rawCapture = distribution ? distribution.coherentCapture : summary.typicalCapture;
+  const capture = rawCapture != null && Number.isFinite(rawCapture) && rawCapture <= 1
+    ? Math.max(0, rawCapture) : null;
   const typicalSession = distribution ? distribution.typicalSessionUsd : summary.typicalSessionPerContract;
   const positiveSessions = distribution?.positiveSessions ?? summary.positiveSessions;
   const positiveSessionRate = distribution ? distribution.positiveSessionRate : summary.positiveSessionRate;
@@ -106,7 +107,8 @@ export function deriveChannelLineupStory(input: {
     || (largestWinnerShare ?? 0) > .4
     || (positiveSessionRate ?? 0) < .6;
   const favorableMove = (bestMove ?? 0) >= 10;
-  const leaksExit = favorableMove && ((finalReturn ?? 0) <= 0 || (capture ?? 0) < .35);
+  const leaksExit = favorableMove && ((finalReturn != null && finalReturn <= 0)
+    || (capture != null && capture < .35));
   let group: ChannelLineupGroup;
   let why: string;
   let next: ChannelLineupStory["next"];

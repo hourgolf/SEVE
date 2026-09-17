@@ -41,7 +41,7 @@ for (const testCase of [
 }
 
 // A selected empty cohort must never borrow a profitable older virtual cohort.
-const selected = { managers: { recommended: null }, throughSession: "2026-09-04", decisionDistribution: {
+const selected = { managers: { recommended: null }, recommendation: { axis: "collect" }, throughSession: "2026-09-04", decisionDistribution: {
   label: "DECISION COHORT", sessions: 0, opportunities: 0, positiveSessions: 0,
   positiveSessionRate: null, typicalOpportunityUsd: null, typicalSessionUsd: null,
   weakSessionUsd: null, strongSessionUsd: null, typicalBestMovePct: null,
@@ -56,6 +56,20 @@ assert.equal(emptyCurrent.positiveSessionRate, null);
 assert.equal(emptyCurrent.weakSession, null);
 assert.equal(emptyCurrent.freshness, "UNKNOWN");
 assert.equal(emptyCurrent.group, "TOO EARLY / STALE");
+const unknownCapture = structuredClone(selected);
+Object.assign(unknownCapture.decisionDistribution!, {sessions: 10, opportunities: 10,
+  throughSession: "2026-09-04", typicalBestMovePct: 19.2, typicalFinalReturnPct: 21,
+  typicalOpportunityUsd: 23, typicalSessionUsd: 26, positiveSessionRate: .7});
+assert.equal(deriveChannelLineupStory({summary: summary(), brief: unknownCapture,
+  referenceSession: "2026-09-04"}).typicalCapture, null,
+  "contradicted sampled peaks must stay unknown on the channel card, never become 100%");
+unknownCapture.decisionDistribution!.coherentCapture = .25;
+assert.equal(deriveChannelLineupStory({summary: summary(), brief: unknownCapture,
+  referenceSession: "2026-09-04"}).typicalCapture, .25, "use paired capture, not ratio of medians");
+for (const capture of [null, 1.2, Number.NaN]) {
+  assert.equal(deriveChannelLineupStory({summary: summary({typicalCapture: capture}),
+    referenceSession: "2026-08-19"}).typicalCapture, null);
+}
 const oldCohort = structuredClone(selected);
 Object.assign(oldCohort.decisionDistribution!, {sessions: 10, opportunities: 30, throughSession: "2026-08-03"});
 assert.equal(deriveChannelLineupStory({summary: summary(), brief: oldCohort, referenceSession: "2026-09-04"}).freshness, "STALE", "new report date must not refresh an old channel cohort");
