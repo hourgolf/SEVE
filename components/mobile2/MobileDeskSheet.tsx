@@ -126,7 +126,7 @@ function MobilePeriodResults({ props, channels, livePnl }: {
   const period = props.reviewEvidence.pnlWindow;
   const historical = props.reviewEvidence.windowedPnl;
   const today = period === "today";
-  const loading = !today && (historical?.loading ?? true);
+  const loading = today ? props.feed.positionAttribution.state === "checking" : (historical?.loading ?? true);
   const fundValue = today ? props.liveFund.dayPnl : historical?.fundPnl;
   const curve = today ? props.feed.equityCurve.map((point) => point.equity) : historical?.curve ?? [];
   const labels = today ? props.feed.equityCurve.map((point) => timeOfDay(point.ts)) : historical?.curveLabels;
@@ -137,17 +137,19 @@ function MobilePeriodResults({ props, channels, livePnl }: {
     : historical?.statsBySlug ?? {};
   const rows = mobileAccountResultRows(scopedStats, channels);
   const coveragePartial = !today && historical?.attributionEvidenceState === "partial";
-  const coverageBlocked = !today && historical?.attributionEvidenceState === "blocked";
+  const coverageBlocked = today
+    ? !loading && !["ok", "recovered"].includes(props.feed.positionAttribution.state)
+    : historical?.attributionEvidenceState === "blocked";
   const issue = !today && historical?.attributionIssues[0]
     ? summarizePerformanceIssue(historical.attributionIssues[0])
     : null;
   return <Section title="ACCOUNT RESULTS" meta="selected paper account">
     <div className="m2-period-results">
       <nav aria-label="Results period">{MOBILE_PERIODS.map((item) => <button type="button" key={item.id} className={period === item.id ? "on" : ""} onClick={() => props.reviewEvidence.setPnlWindow(item.id)}>{item.label}</button>)}</nav>
-      <div className="m2-period-hero"><span><small>{period === "today" ? "SESSION NAV CHANGE" : `${MOBILE_PERIODS.find((item) => item.id === period)?.label} NAV CHANGE`}</small><b className={(fundValue ?? 0) < 0 ? "neg" : "pos"}>{loading ? "…" : fundValue == null ? "UNAVAILABLE" : signedUsd(fundValue)}</b></span><span><small>CHANNELS THAT TRADED</small><b>{rows.length}</b></span><span><small>LOGICAL TRADES</small><b>{rows.reduce((total, row) => total + row.result.trades, 0)}</b></span></div>
+      <div className="m2-period-hero"><span><small>{period === "today" ? "SESSION NAV CHANGE" : `${MOBILE_PERIODS.find((item) => item.id === period)?.label} NAV CHANGE`}</small><b className={(fundValue ?? 0) < 0 ? "neg" : "pos"}>{loading ? "…" : fundValue == null ? "UNAVAILABLE" : signedUsd(fundValue)}</b></span><span><small>CHANNELS THAT TRADED</small><b>{loading || coverageBlocked ? "—" : rows.length}</b></span><span><small>LOGICAL TRADES</small><b>{loading || coverageBlocked ? "—" : rows.reduce((total, row) => total + row.result.trades, 0)}</b></span></div>
       {coveragePartial || coverageBlocked ? <div className="m2-period-coverage" role="status"><b>{coverageBlocked ? "CHANNEL HISTORY UNAVAILABLE" : "CHANNEL HISTORY PARTIAL"}</b><span>{issue ?? "Some older channel rows do not have a verified account route."}</span>{coveragePartial ? <small>{historical?.attributedPositionRows ?? 0} verified rows shown · {historical?.withheldPositionRows ?? 0} rows withheld to keep trades whole. Account NAV is complete.</small> : null}</div> : null}
       {curve.length >= 2 ? <LineChart values={curve} height={92} id={`m2-results-${period}`} baseline={curve[0]} format={usd0} formatDelta={signedUsd} labels={labels} /> : <div className="m2-desk-empty">{loading ? "Loading account history…" : "No account curve in this period."}</div>}
-      {!coverageBlocked ? <div className="m2-review-rows">{rows.map(({ slug, color, result }) => <div key={slug} style={{ ["--pm" as string]: pmVar(color) }}><i /><b>{slug}</b><span className={result.pnl < 0 ? "neg" : result.pnl > 0 ? "pos" : ""}>{signedUsd(result.pnl)}</span><small>{result.trades} logical trade{result.trades === 1 ? "" : "s"} · {result.wins} profitable</small></div>)}{!loading && rows.length === 0 ? <div className="m2-period-empty">No channel activity in this period.</div> : null}</div> : null}
+      {!loading && !coverageBlocked ? <div className="m2-review-rows">{rows.map(({ slug, color, result }) => <div key={slug} style={{ ["--pm" as string]: pmVar(color) }}><i /><b>{slug}</b><span className={result.pnl < 0 ? "neg" : result.pnl > 0 ? "pos" : ""}>{signedUsd(result.pnl)}</span><small>{result.trades} logical trade{result.trades === 1 ? "" : "s"} · {result.wins} profitable</small></div>)}{!loading && rows.length === 0 ? <div className="m2-period-empty">No channel activity in this period.</div> : null}</div> : null}
     </div>
   </Section>;
 }

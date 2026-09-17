@@ -107,11 +107,11 @@ export function MobileShell(props: SurfaceProps) {
         <div className="m2-head-r1">
           <button type="button" className={`m2-status m2-status--${props.incident.severity}`} onClick={() => setRoom("play")}>
             <span className="m2-brand m2-brand--led">
-              <LedWordmark value="$EVE" color={dayColor} label={`$EVE desk ${down ? "down" : "up"} for the day`} />
+              <LedWordmark value="$EVE" color={dayColor} label={liveFund.dayPnl == null ? "$EVE desk · session NAV unavailable" : `$EVE desk ${down ? "down" : liveFund.dayPnl === 0 ? "unchanged" : "up"} for the day`} />
             </span>
             <span className="m2-status-center">
               <i />
-              <span className="m2-status-copy"><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {props.feed.positions.length} · {props.incident.session.replaceAll("_", " ")}</small></span>
+              <span className="m2-status-copy"><b>{statusOn ? props.incident.title : "SYSTEM NOMINAL"}</b><small>OPEN {["ok", "recovered"].includes(props.feed.positionAttribution.state) ? props.feed.positions.length : "—"} · {props.incident.session.replaceAll("_", " ")}</small></span>
             </span>
           </button>
           <MobileKillControl halted={desk.fund.is_halted} write={props.write} />
