@@ -143,12 +143,12 @@ export function MobilePerform({
   const [chartSettingsOpen, setChartSettingsOpen] = useState(false);
   const fleet = buildFleetDecisionSummary(props.decisionAtlas.bySlug, props.decisionAtlas.throughSession);
   const atlasLabel = decisionAtlasFreshnessShortLabel({ freshness: props.decisionAtlas.freshness, reportThroughSession: props.decisionAtlas.throughSession });
-  const ready = props.incident.severity === "normal" && props.opsReadiness.summary.tone !== "red";
+  const ready = props.incident.severity === "normal" && props.opsReadiness.summary.tone === "green";
   const researchVerified = props.decisionAtlas.state === "ready"
     && props.decisionAtlas.publication?.state === "verified" && props.decisionAtlas.freshness === "current";
   const researchLabel = props.decisionAtlas.state === "ready"
     ? props.decisionAtlas.freshness === "stale" ? atlasLabel : researchVerified
-      ? `VERIFIED · ${props.decisionAtlas.throughSession?.slice(5).replace("-", "/")}` : "BUNDLE UNVERIFIED"
+      ? `BUNDLE VERIFIED · ${props.decisionAtlas.throughSession?.slice(5).replace("-", "/")}` : "BUNDLE UNVERIFIED"
     : props.decisionAtlas.state.toUpperCase();
   const changeSymbol = (next: string) => {
     setSelected(null);
@@ -159,9 +159,9 @@ export function MobilePerform({
     <>
       <div className="m2-scroll">
         <section className={`m2-decision-home ${ready && researchVerified ? "ready" : "attention"}`} aria-label="Decision Home summary">
-          <header><span><small>DECISION HOME</small><b>{ready ? researchVerified ? "PAPER DESK READY" : "PAPER DESK READY · RESEARCH NEEDS REVIEW" : "CHECK BEFORE THE NEXT SESSION"}</b></span><em>{signedUsd(props.liveFund.dayPnl)} TODAY</em></header>
+          <header><span><small>DECISION HOME</small><b>{ready ? researchVerified ? "OBSERVED HEALTH CHECKS PASS" : "OBSERVED CHECKS PASS · RESEARCH NEEDS REVIEW" : "CHECK BEFORE THE NEXT SESSION"}</b></span><em>{signedUsd(props.liveFund.dayPnl)} SESSION NAV Δ</em></header>
           <p>{!researchVerified ? "Channel research needs a verified close before the next decision." : fleet.lead ? `Next review: ${fleet.lead.channel} · ${fleet.lead.disposition.toLowerCase()}.` : "No urgent channel action. Continue collecting evidence."}</p>
-          <div><span data-review={props.opsReadiness.summary.tone === "red"}><small>TRADING</small><b>{props.opsReadiness.summary.tone === "red" ? "REVIEW" : "READY"}</b></span><span data-review={data.status === "err"}><small>DATA</small><b>{data.status === "err" ? "REVIEW" : "AVAILABLE"}</b></span><span data-review={!researchVerified}><small>RESEARCH</small><b>{researchLabel}</b></span></div>
+          <div><span data-review={props.opsReadiness.summary.tone !== "green"}><small>TRADING</small><b>{props.opsReadiness.summary.tone === "green" ? "OBSERVED CHECKS PASS" : "CHECKS INCOMPLETE / NEED REVIEW"}</b></span><span data-review={data.status !== "live" || !data.lastIngestTs}><small>DATA</small><b>{!data.lastIngestTs ? "CHECKING" : data.status === "live" ? "RECENT INGEST OBSERVED" : "STALE / NEEDS REVIEW"}</b></span><span data-review={!researchVerified}><small>PUBLICATION · CALIBRATION IS SEPARATE</small><b>{researchLabel}</b></span></div>
         </section>
         <nav className="m2-market-switch" aria-label="Markets workspace">
           <button type="button" className={marketView === "chart" ? "on" : ""} onClick={() => onMarketViewChange("chart")} aria-pressed={marketView === "chart"}>CHART</button>

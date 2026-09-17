@@ -118,7 +118,7 @@ function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps,
           <FolioMark />
         </article>
         <article className="folio-account-card"><small>ACCOUNT</small><AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} /><span>Paper-only routing</span></article>
-        <article className="folio-stat coral"><small>OPEN POSITIONS</small><b>{feed.positions.length}</b><span>{feed.positions.length === 0 ? "Desk is flat" : "Manager active"}</span></article>
+        <article className="folio-stat coral"><small>OPEN POSITIONS</small><b>{["ok", "recovered"].includes(feed.positionAttribution.state) ? feed.positions.length : "—"}</b><span>{!["ok", "recovered"].includes(feed.positionAttribution.state) ? "Position evidence unavailable" : feed.positions.length === 0 ? "Desk is flat" : "Manager active"}</span></article>
         <article className="folio-stat teal"><small>RISK USED</small><b>{(riskUsed == null ? "—" : riskUsed.toFixed(1))}%</b><span>{usd0(exposure)} desk exposure</span></article>
         <article className="folio-state-card"><span><small>PROCESS</small><b className={process.tone}>{process.label}</b></span><span><small>BROKER</small><b className={broker.tone}>{broker.label}</b></span></article>
       </section>

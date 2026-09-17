@@ -117,7 +117,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
         ? "checking"
         : "normal";
   const railLabel = incidentOn ? incident.title : railTone === "normal" ? "SYSTEM NOMINAL" : "SYSTEM CHECK";
-  const railDetail = `DATA ${processTelemetry.label} · BROKER ${brokerTelemetry.label} · ${incident.session.replaceAll("_", " ")}`;
+  const railDetail = `WORKER ${processTelemetry.label} · BROKER ${brokerTelemetry.label} · ${incident.session.replaceAll("_", " ")}`;
   const navLed = ledCompact(liveFund.nav);
   const dayLed = liveFund.dayPnl == null ? { value: "—", digits: 1, unit: "" } : ledCompact(liveFund.dayPnl);
   const dayPctLed = dayPnlPct == null
@@ -125,7 +125,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
     : `${dayPnlPct >= 0 ? "+" : "-"}${Math.abs(dayPnlPct).toFixed(2)}`;
   const capacityLed = ledCompact(deskCapacity);
   const positionsLed = ledCompact(feed.positions.length);
-  const positionAttributionBlocked = feed.positionAttribution.state === "blocked";
+  const positionAttributionBlocked = !["ok", "recovered"].includes(feed.positionAttribution.state);
   const riskLedValue = (riskUsed == null ? "—" : riskUsed.toFixed(1));
   const dayLedColor = (liveFund.dayPnl ?? 0) < 0 ? "var(--led-red)" : "var(--pm-green)";
   const activeNav = NAV.find((item) => mode === item.mode && (item.mode === "studio" || ("section" in item && performSection === item.section))) ?? NAV[0];
@@ -194,8 +194,8 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
           </div>
         </div>
         <div className="ws-metric ws-metric--led ws-metric--capacity"><small>DESK CAPACITY</small><div className="ws-led-readout neutral" role="img" aria-label={`Desk capacity ${compactUsd(deskCapacity)}`}><span aria-hidden="true">$</span><LedDisplay value={capacityLed.value} digits={capacityLed.digits} color="var(--ws-led-neutral)" unit={capacityLed.unit} /></div></div>
-        <div className="ws-metric ws-metric--led ws-metric--positions"><small>OPEN POSITIONS</small><div className="ws-led-readout neutral" role="img" aria-label={positionAttributionBlocked ? "Open positions unavailable because immutable account attribution is blocked" : `${feed.positions.length} open positions`}>{positionAttributionBlocked ? <span className="ws-led-unknown">—</span> : <LedDisplay value={positionsLed.value} digits={Math.max(2, positionsLed.digits)} color="var(--ws-led-neutral)" />}</div></div>
-        <div className="ws-metric ws-metric--led ws-metric--risk"><small>RISK USED</small><div className="ws-led-readout neutral" role="img" aria-label={positionAttributionBlocked ? "Risk used unavailable because immutable account attribution is blocked" : `Risk used ${riskLedValue} percent`}>{positionAttributionBlocked ? <span className="ws-led-unknown">—</span> : <LedDisplay value={riskLedValue} digits={riskLedValue.replace(".", "").length} color="var(--ws-led-neutral)" unit="%" />}</div></div>
+        <div className="ws-metric ws-metric--led ws-metric--positions"><small>OPEN POSITIONS</small><div className="ws-led-readout neutral" role="img" aria-label={positionAttributionBlocked ? "Open positions unavailable while account attribution is checking or unavailable" : `${feed.positions.length} open positions`}>{positionAttributionBlocked ? <span className="ws-led-unknown">—</span> : <LedDisplay value={positionsLed.value} digits={Math.max(2, positionsLed.digits)} color="var(--ws-led-neutral)" />}</div></div>
+        <div className="ws-metric ws-metric--led ws-metric--risk"><small>RISK USED</small><div className="ws-led-readout neutral" role="img" aria-label={positionAttributionBlocked ? "Risk used unavailable while account attribution is checking or unavailable" : `Risk used ${riskLedValue} percent`}>{positionAttributionBlocked ? <span className="ws-led-unknown">—</span> : <LedDisplay value={riskLedValue} digits={riskLedValue.replace(".", "").length} color="var(--ws-led-neutral)" unit="%" />}</div></div>
         <button type="button" className={`ws-health ws-health--${railTone}`} title={incidentOn ? incident.facts.join(" · ") : railDetail} aria-label={`${railLabel}. ${railDetail}.`} onClick={() => { setMode("perform"); setPerformSection("overview"); }}>
           <i aria-hidden="true" /><span><b>{railLabel}</b><small>{railDetail}</small></span>
         </button>
