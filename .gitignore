@@ -30,3 +30,6 @@ data/
 # user reference artifacts (not app source) — keep local, don't track
 TR-909_T_600_FNL_A.jpg
 Trading Thesis/files.zip
+.vercel/
+.env*
+!.env*.example
