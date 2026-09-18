@@ -40,7 +40,10 @@ export function projectStoredHistoricalReport<T extends Record<string,any>>(row:
   const from=kind==='daily'?row.report_date:row.week_start,through=kind==='daily'?row.report_date:row.week_end;
   if(through<snapshot.from||from>snapshot.through)return row;
   // A week straddling the frozen boundary cannot be partially replaced and silently lose later trades.
-  if(from<snapshot.from||through>snapshot.through)return {...row,narrative:null,digest:{...row.digest,evidence:{...row.digest?.evidence,limitations:[...(row.digest?.evidence?.limitations??[]),'This report crosses the reconstruction boundary; its legacy economics are not certified.']}}};
+  if(from<snapshot.from||through>snapshot.through){
+    const historicalBoundaryWarning=`This report crosses the broker-audit boundary (${snapshot.from} through ${snapshot.through}). Its stored gross and channel values are not a broker-reconstructed total for the full report period. Compare audited dates separately before using this report for a channel decision.`;
+    return {...row,narrative:null,digest:{...row.digest,evidence:{...row.digest?.evidence,historicalBoundaryWarning,limitations:[...(row.digest?.evidence?.limitations??[]),historicalBoundaryWarning]}}};
+  }
   const selection=selectHistorical(snapshot,{from,through});
   // Keep modern held-mark diagnostics only when every original trade result/identity agrees.
   const originalTrades=(row.digest?.channels??[]).flatMap((c:any)=>c.trades??[]);

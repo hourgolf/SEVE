@@ -68,6 +68,7 @@ export function WeeklyAutopsyBody({
       )}
 
       <HistoricalAttributionNote evidence={d.evidence?.historicalAttribution} />
+      {d.evidence?.historicalBoundaryWarning && <div className="wk-ee-note" role="note">{d.evidence.historicalBoundaryWarning}</div>}
       <div className="au-fund">
         <span title={d.evidence?.historicalAttribution ? "Observed close dates and broker-reconstructed logical trades in the matched subset; this is not a complete calendar or signal inventory." : logicalEvidence ? "Logical trades with recorded position-ledger P&L attribution. Immutable account routing does not independently verify fill prices, fees or broker NAV. Tranche exit-efficiency is separately labeled." : "This stored weekly report predates logical-trade evidence; do not compare its count directly with current reports."}>{md(d.weekStart)}–{md(d.weekEnd)} · {d.days.length}d · {d.fund.trades} {observationLabel}{d.evidence?.historicalAttribution ? " matched" : ""}</span>
         <span className={d.fund.realized < 0 ? "neg" : "pos"}>{shownUsd(d.fund.realized)} {d.evidence?.historicalAttribution ? "audited matched subset" : "recorded attribution"}</span>

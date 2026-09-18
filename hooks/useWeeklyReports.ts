@@ -44,6 +44,7 @@ export interface WeeklyDigest {
   exitEfficiency: { totalUpsideLeft: number | null; worstCaptureChannels: { slug: string; captureRatio: number; left: number }[]; redThatRanGreen: WeeklyRunner[] };
   evidence?: {
     historicalAttribution?: HistoricalSelection;
+    historicalBoundaryWarning?: string;
     schemaVersion: number;
     producerVersion?: string;
     layer: string;

@@ -8,6 +8,10 @@ import positions from '../lib/reporting/fixtures/september16.json';
 import { validatedNarrative } from '../supabase/functions/_shared/reportingEvidence';
 import { HISTORICAL_SCHEMA, validateHistoricalManifest, type HistoricalManifest } from '../supabase/functions/_shared/historicalAttribution';
 import { historicalDigest } from '../supabase/functions/_shared/historicalReporting';
+import { projectStoredHistoricalReport } from '../supabase/functions/_shared/historicalReporting';
+import React, { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { WeeklyAutopsyBody } from '../components/console/WeeklyAutopsyPanel';
 
 type Row = Record<string, any>;
 const accountFor = (slug: string) => /macd|vwap/.test(slug) ? 'paper2' : /pb-ride|orb-trend/.test(slug) ? 'paper3' : 'paper1';
@@ -76,6 +80,14 @@ async function main(){
   assert.match(daily.renderSkeleton(juneDaily),/broker|realized attribution/i);
   assert.match(weekly.renderSkeleton(juneWeekly),/unavailable/);
   assert.doesNotMatch(weekly.renderSkeleton(juneWeekly),/\$NaN|undefined/);
+  const crossing=projectStoredHistoricalReport({week_start:'2026-09-14',week_end:'2026-09-18',mode:'paper',digest:{...juneWeekly,weekStart:'2026-09-14',weekEnd:'2026-09-18',fund:{...juneWeekly.fund,realized:123},evidence:{...juneWeekly.evidence,historicalAttribution:undefined}},narrative:{weekSummary:'Legacy prose'}},audited,'weekly');
+  assert.equal(crossing.digest.fund.realized,123);
+  assert.equal(crossing.narrative,null);
+  assert.match(crossing.digest.evidence.historicalBoundaryWarning,/not a broker-reconstructed total/);
+  // tsx's standalone JSX transform uses the classic global factory; Next uses automatic JSX.
+  (globalThis as any).React=React;
+  const crossingHtml=renderToStaticMarkup(createElement(WeeklyAutopsyBody,{strategists:[],evidence:{reports:[crossing],loading:false,error:null}} as any));
+  assert.match(crossingHtml,/not a broker-reconstructed total/);
   const week=await weekly.buildWeekly('2026-09-18');
   assert.equal(week.fund.trades,8);assert.equal(week.fund.realized,518);assert.equal(week.fund.winRate,.75);
   assert.equal(week.exitEfficiency.totalUpsideLeft,null);assert.equal(week.fund.wins,6);
@@ -89,6 +101,6 @@ async function main(){
   await assert.rejects(()=>weekly.buildWeekly('2026-09-18'),/require regeneration/);
   assert.equal(validatedNarrative({weekSummary:'broken </parameter>',channels:[]},'weekly'),null);
   assert.ok(validatedNarrative({weekSummary:'Valid limited study.',channels:[],keyLearnings:[]},'weekly'));
-  console.log('dashboard-reporting-regression: PASS (8 roots, 9 rows, 6 wins, +518 gross, 3 peak exclusions; daily/weekly parity; legacy refusal; no network or writes)');
+  console.log('dashboard-reporting-regression: PASS (8 roots, 9 rows, 6 wins, +518 gross, 3 peak exclusions; daily/weekly parity; crossing-week disclosure; legacy refusal; no network or writes)');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});
