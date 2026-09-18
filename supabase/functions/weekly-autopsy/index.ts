@@ -74,6 +74,9 @@
 //  OFF). Needs ANTHROPIC_API_KEY in edge secrets; SUPABASE_* auto-injected.
 // ============================================================================
 
+import { loadHistoricalAttribution } from "../_shared/loadHistoricalAttribution.ts";
+import { historicalDigest } from "../_shared/historicalReporting.ts";
+import { historicalCoverageText } from "../_shared/historicalAttribution.ts";
 import { REPORTING_SCHEMA, summarizePeakDiagnostics, validatedNarrative } from "../_shared/reportingEvidence.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
@@ -105,6 +108,7 @@ type Any = any;
 async function buildWeekly(weekEnd: string): Promise<Any> {
   const monday = new Date(weekEnd + "T12:00:00Z");
   monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+  if (weekEnd >= "2026-06-01" && weekEnd < "2026-09-14") return historicalDigest(await loadHistoricalAttribution(sb), monday.toISOString().slice(0,10), weekEnd, "weekly");
   const { data: reps, error: dailyError } = await sb.from("daily_reports").select("report_date,mode,digest").eq("mode", "paper").gte("report_date", monday.toISOString().slice(0,10)).lte("report_date", weekEnd).order("report_date", { ascending: false }).limit(7);
   if (dailyError) throw new Error(dailyError.message);
   const rows = ((reps ?? []) as Any[]).reverse();
@@ -207,12 +211,14 @@ async function buildWeekly(weekEnd: string): Promise<Any> {
 }
 
 function renderSkeleton(w: Any): string {
-  const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
+  const usd = (v: number | null | undefined) => v == null || !Number.isFinite(v) ? "unavailable" : (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
   // Channels are referenced by the operator's chosen NAME everywhere a human reads them;
   // the slug stays an internal key. nm resolves slug→name for the exit lists below.
   const nm: Record<string, string> = Object.fromEntries(((w.channels ?? []) as Any[]).map((c) => [c.slug, c.name]));
-  const L: string[] = [`# SEVE WEEKLY autopsy — ${w.weekStart} → ${w.weekEnd}  (${w.mode}, ${w.days.length} sessions)`];
-  L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · maxDD ${w.fund.maxDrawdown == null ? "unknown" : usd(-w.fund.maxDrawdown)} · ${w.fund.trades} trades · win ${(w.fund.winRate * 100).toFixed(0)}%`);
+  const historical = Boolean(w.evidence?.historicalAttribution);
+  const L: string[] = [`# SEVE WEEKLY autopsy — ${w.weekStart} → ${w.weekEnd}  (${w.mode}, ${w.days.length} ${historical ? "observed close dates" : "reported sessions"})`];
+  if (historical) L.push(`\n**Historical coverage:** ${historicalCoverageText(w.evidence.historicalAttribution)} Matched-trade economics only; zero-trade sessions and full-calendar coverage are unverified.`);
+  L.push(`\n**Fund:** realized ${usd(w.fund.realized)}${w.fund.navDelta != null ? ` · NAV-truth ${usd(w.fund.navDelta)}` : ""} · maxDD ${w.fund.maxDrawdown == null ? "unknown" : usd(-w.fund.maxDrawdown)} · ${w.fund.trades} trades · win ${w.fund.winRate == null ? "unavailable" : (w.fund.winRate * 100).toFixed(0) + "%"}`);
   if (w.fund.bestDay && w.fund.worstDay) L.push(`- best ${w.fund.bestDay.date} ${usd(w.fund.bestDay.pnl)} · worst ${w.fund.worstDay.date} ${usd(w.fund.worstDay.pnl)}`);
   L.push(`\n**Regime ledger:**`); for (const r of w.regimeLedger) L.push(`- ${r.date}: ${r.note} (${r.returnPct >= 0 ? "+" : ""}${r.returnPct.toFixed(2)}%, eff ${r.efficiency.toFixed(2)})`);
   L.push("\n**Capture:** sampled held marks only; executable capture and recoverable portfolio upside are unavailable.");
@@ -221,7 +227,7 @@ function renderSkeleton(w: Any): string {
   for (const c of w.channels) {
     const m = c.metrics; L.push(`\n## ${c.name} — ${c.status}`); L.push(`_${c.mandate}_`);
     if (!m.nTrades) { L.push(`- no trades this week`); continue; }
-    L.push(`- trades **${m.nTrades}** · win **${(m.winRate * 100).toFixed(0)}%** · realized **${usd(m.realizedPnl)}** · avgWin ${usd(m.avgWin)}/avgLoss ${usd(m.avgLoss)} · avgR ${m.avgR.toFixed(2)} · median hold ${m.medianHoldMin}m`);
+    L.push(`- trades **${m.nTrades}** · win **${m.winRate == null ? "unavailable" : (m.winRate * 100).toFixed(0) + "%"}** · realized **${usd(m.realizedPnl)}** · avgWin ${usd(m.avgWin)}/avgLoss ${usd(m.avgLoss)} · avgR ${m.avgR == null ? "unavailable" : m.avgR.toFixed(2)} · median hold ${m.medianHoldMin == null ? "unavailable" : `${m.medianHoldMin}m`}`);
     L.push(`- best ${usd(m.bestTrade)}/worst ${usd(m.worstTrade)} · exits ${JSON.stringify(c.exitReasons)} · by day ${c.byDay.map((d: Any) => `${d.date.slice(5)} ${usd(d.pnl)}`).join(" · ")}`);
     L.push(`- exit capture **${(c.exitEfficiency.captureRatio == null ? "unknown" : `${(c.exitEfficiency.captureRatio * 100).toFixed(1)}%`)}**${c.exitEfficiency.biggestRunner ? ` · biggest runner ${c.exitEfficiency.biggestRunner.occ}: ${usd(c.exitEfficiency.biggestRunner.actual)} of ${usd(c.exitEfficiency.biggestRunner.couldHave)}` : ""}`);
     if (c.recurringFlaws.length) for (const f of c.recurringFlaws) L.push(`- ⚑ **${f.type}** recurred ${f.days} days (${f.severity})`);
@@ -270,7 +276,7 @@ Deno.serve(async (req) => {
     const history = await sb.from("reporting_publication_versions").select("id").limit(1);
     if (history.error) throw new Error("Version-preserving reporting migration is required before publication");
     const digest = await buildWeekly(weekEnd);
-    const narrative = validatedNarrative(await narrate(digest), "weekly");
+    const narrative = digest.evidence?.historicalAttribution ? null : validatedNarrative(await narrate(digest), "weekly");
     // Dedup the LLM's per-channel list by slug (it occasionally emits a channel twice —
     // the "DUPLICATE-GUARD" rows in the 06-12 run). Keep the first, drop repeats.
     if (narrative?.channels && Array.isArray(narrative.channels)) {

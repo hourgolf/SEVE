@@ -7,6 +7,7 @@ import { ChannelDecisionCard } from "@/components/studio/ChannelDecisionCard";
 import { ChannelRosterActivationConsole } from "@/components/studio/ChannelRosterActivationConsole";
 import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
+import { HistoricalChannelEvidence } from "@/components/perform/HistoricalChannelEvidence";
 import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
 import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
 import { ChannelResearchProgramCard } from "@/components/research/ChannelResearchBooks";
@@ -148,6 +149,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           <span className="ih-stats">state <b>{effectiveStateLabel}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
         </div>
         <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
+        <details className="channel-disclosure"><summary><span><small>REVIEW</small><b>HISTORICAL EXECUTED ECONOMICS</b></span><i>▾</i></summary><HistoricalChannelEvidence channel={slug} /></details>
         <ExecutableShadowStatus slug={slug} />
         <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
         <div className="mixer-deck">

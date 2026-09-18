@@ -1,3 +1,4 @@
+import { loadHistoricalAttribution } from '../supabase/functions/_shared/loadHistoricalAttribution';
 import type { ComparisonSpec } from "../lib/research/nativeManagerComparison";
 // ============================================================================
 // SELECT-only canonical profitability snapshot and report.
@@ -229,6 +230,7 @@ async function main(): Promise<void> {
     const comparisonSpecs = await timed("comparison_specs", () => readCompleteEvidence<ComparisonSpec>(() => sb.from("channel_spec_versions")
       .select("id,version_key,stop_loss,take_profit,ratchet_parameters,exit_parameters", {count:"exact"}).order("id"), "comparison specs", 2000), timings);
     input = {
+      historicalAttribution: await loadHistoricalAttribution(sb),
       comparisonSpecs,
       fixedManagerComparison: await timed("fixed_manager_comparison", () => readFixedManagerComparisonEvidence(
         createFixedEntryServiceClient(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",

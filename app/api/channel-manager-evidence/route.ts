@@ -1,3 +1,4 @@
+import { loadHistoricalAttribution } from "@/supabase/functions/_shared/loadHistoricalAttribution";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { readCompleteEvidence } from "@/lib/perform/windowedEvidenceRead";
@@ -58,6 +59,7 @@ export async function GET(req: Request) {
         .eq("reason", "target_premium").gte("event_at", COHORT_ISO).order("id"), "native target observations"),
     ]);
     const book = deriveChannelManagerEvidenceBook({
+      historicalAttribution: await loadHistoricalAttribution(sb),
       managerRuns,
       positions,
       comparisonSpecs, nativeObservations,

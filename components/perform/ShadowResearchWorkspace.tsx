@@ -8,6 +8,7 @@ import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCur
 import { ChannelManagerEvidencePanel } from "@/components/research/ChannelManagerEvidencePanel";
 import { DecisionAtlasPreviewCard } from "@/components/research/DecisionAtlasPreviewCard";
 import { CurrentEvidenceCard } from "@/components/research/CurrentEvidenceCard";
+import { HistoricalChannelEvidence } from "@/components/perform/HistoricalChannelEvidence";
 import { ManagerFleetHeatmap } from "@/components/research/ManagerFleetHeatmap";
 import { ResearchCouncilRoom } from "@/components/research/ResearchCouncilRoom";
 import { ResearchBookBoard } from "@/components/research/ChannelResearchBooks";
@@ -355,6 +356,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     {shadowResearch.boundedRetuneError ? <div className="srw-empty error" role="status">Experiment comparisons unavailable · {shadowResearch.boundedRetuneError}. Other research evidence remains separate.</div>
       : shadowResearch.sourceCounts.retuneSignals != null ? <p>{shadowResearch.sourceCounts.retuneSignals.toLocaleString()} experiment signals · source count verified · selected range only</p> : null}
     <p>Complete row counts do not establish quote-path quality. Missing, stale or sampled quotes can still limit entry and exit comparisons.</p>
+    {focusSlug && <details className="rvw-system-activity"><summary><span><small>EXECUTED HISTORY</small><b>Audited broker results for {focusSlug}</b></span><i>▾</i></summary><HistoricalChannelEvidence channel={focusSlug} /></details>}
     <nav className="srw-view-mode" aria-label="Research presentation">
       <button type="button" className={viewMode === "decisions" ? "on" : ""} aria-pressed={viewMode === "decisions"} onClick={() => setViewMode("decisions")}><b>DECISIONS</b><small>what the evidence suggests</small></button>
       <button type="button" className={viewMode === "data" ? "on" : ""} aria-pressed={viewMode === "data"} onClick={() => setViewMode("data")}><b>DATA</b><small>full virtual ledger</small></button>

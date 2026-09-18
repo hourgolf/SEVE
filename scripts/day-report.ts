@@ -33,6 +33,8 @@ import { ratchetShadowSummary, slotAwareA4, slotAwareMomo, type RatchetSummary, 
 import { pageAll } from "../engine/pageAll";
 import { getPositionResearchAnnotation, type PositionResearchAnnotation } from "../lib/research/positionAnnotations";
 import { createServerSupabaseClient } from "./serverSupabase";
+import { loadHistoricalAttribution } from "../supabase/functions/_shared/loadHistoricalAttribution";
+import { selectHistorical, historicalCoverageText } from "../supabase/functions/_shared/historicalAttribution";
 
 const sb = createServerSupabaseClient("day-report");
 
@@ -140,6 +142,18 @@ async function publishForensics(date: string, payload: unknown): Promise<string>
 
 async function main() {
   console.log(`\nDAY REPORT — ${DATE} (ET)\n`);
+  if (DATE >= "2026-06-01" && DATE < "2026-09-14") {
+    if (!READ_ONLY) throw new Error("Historical forensics publication is withheld; review the audited attribution first. Use --read-only for a broker-matched economic summary.");
+    const audit = await loadHistoricalAttribution(sb);
+    const evidence = selectHistorical(audit, { from: DATE, through: DATE });
+    console.log(historicalCoverageText(evidence));
+    const grossUsd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+    for (const slug of [...new Set([...evidence.records, ...evidence.brokerOnly].map(row => row.slug))].sort()) {
+      const row = selectHistorical(audit, { from: DATE, through: DATE, slug });
+      console.log(`${slug}: ${row.reconstructedTrades}/${row.recordedTrades} matched · ${row.unresolvedTrades} unresolved · ${row.reconstructedGross == null ? "gross unavailable" : grossUsd.format(row.reconstructedGross) + " matched gross"} · ${row.brokerOnly.length} additional broker-only`);
+    }
+    return;
+  }
 
   // ---- catalyst calendar (market-events.ts): what's ahead + table freshness ----
   // The events table is hand-maintained code (a stale table fails SAFE — no

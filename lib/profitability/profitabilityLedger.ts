@@ -1,3 +1,4 @@
+import { historicalTradeForRows, selectHistorical, historicalCoverageText, type HistoricalSnapshot } from '../../supabase/functions/_shared/historicalAttribution';
 import { nativeComparisonReason, type ComparisonSpec } from "../research/nativeManagerComparison";
 // ============================================================================
 // Canonical profitability ledger.
@@ -103,6 +104,7 @@ export interface ProfitabilityEquityDayRow {
 }
 
 export interface ProfitabilityLedgerInput {
+  historicalAttribution?: HistoricalSnapshot;
   comparisonSpecs?: readonly ComparisonSpec[];
   accounts: readonly ProfitabilityAccountRow[];
   positions: readonly ProfitabilityPositionRow[];
@@ -167,6 +169,8 @@ export interface LogicalTrade {
   quantity: number;
   entryDebitUsd: number | null;
   realizedPnlUsd: number | null;
+  originalLedgerPnlUsd?: number | null;
+  historicalEvidenceVersion?: string | null;
   realizedReturnPct: number | null;
   peakMark: number | null;
   troughMark: number | null;
@@ -573,6 +577,8 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     const allClosed = rows.every((row) => row.status === "closed" && validIso(row.closed_at))
       && (!fixedRows.length || !!fixedCongruent && !!fixedProof?.settlementId);
     const anyOpen = rows.some((row) => row.status === "open");
+    const historical = input.historicalAttribution ? historicalTradeForRows(input.historicalAttribution, rows.map(r=>({...r}))) : null;
+    if (historical && historical.state !== 'broker_reconstructed') censorCodes.push('historical_attribution_unresolved');
     const quantities = rows.map((row) => finite(row.qty));
     const entries = rows.map((row) => finite(row.avg_entry_price));
     const realized = rows.map((row) => finite(row.realized_pnl));
@@ -590,10 +596,11 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
       ? money(rows.reduce((sum, _row, index) =>
         sum + (quantities[index] as number) * (entries[index] as number) * 100, 0))
       : null;
-    const realizedPnlUsd = allClosed && realized.every((value) => value != null)
+    const originalLedgerPnlUsd = allClosed && realized.every((value) => value != null)
       ? money(realized.reduce((sum, value) => sum + (value as number), 0))
       : null;
-    const realizedReturnPct = realizedPnlUsd != null && entryDebitUsd != null && entryDebitUsd > 0
+    const realizedPnlUsd = historical ? historical.reconstructedGross : originalLedgerPnlUsd;
+    const realizedReturnPct = !historical && realizedPnlUsd != null && entryDebitUsd != null && entryDebitUsd > 0
       ? ratio((realizedPnlUsd / entryDebitUsd) * 100)
       : null;
     const peakValues = rows.map((row) => finite(row.peak_mark)).filter((value): value is number => value != null);
@@ -615,7 +622,7 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
         && Date.parse(obs.event_at) <= Date.parse(row.closed_at ?? "")
         && finite(row.peak_mark) != null && bid > Number(row.peak_mark) + 0.0001;
     }));
-    const captureCensorCode = rows.length > 1 ? "capture_requires_quantity_aware_path"
+    const captureCensorCode = historical ? 'historical_path_not_revalidated' : rows.length > 1 ? "capture_requires_quantity_aware_path"
       : missedNativePeak ? "capture_native_quote_above_recorded_peak"
       : realizedReturnPct != null && mfePct != null && realizedReturnPct > mfePct + 0.1 ? "capture_exit_above_recorded_peak"
       : null;
@@ -637,7 +644,7 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
       || code === "partial_configuration_lineage"
       || code === "invalid_quantity"
       || code === "invalid_entry_price"
-      || code === "missing_realized_pnl" || code === "fixed_intent_evidence_unavailable_or_drifted")
+      || code === "historical_attribution_unresolved" || code === "missing_realized_pnl" || code === "fixed_intent_evidence_unavailable_or_drifted")
       ? "censored"
       : anyOpen || !allClosed ? "open" : "closed";
     const comparability: ProfitabilityComparability = status === "censored"
@@ -676,6 +683,8 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
       quantity,
       entryDebitUsd,
       realizedPnlUsd,
+      originalLedgerPnlUsd,
+      historicalEvidenceVersion: historical ? input.historicalAttribution!.version : null,
       realizedReturnPct,
       peakMark,
       troughMark,
@@ -790,6 +799,7 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
   if (censoredCaptures) warnings.push(`${censoredCaptures} capture ratios withheld for incomplete peak or quantity-path evidence`);
   if (legacyUnstamped) warnings.push(`${legacyUnstamped} logical trades predate exact configuration stamping`);
   if (missingRoutes) warnings.push(`${missingRoutes} logical trades lack an immutable execution-account route`);
+  if (input.historicalAttribution) warnings.push(historicalCoverageText(selectHistorical(input.historicalAttribution)), ...input.historicalAttribution.issues);
   if (!brokerNavDays.length) warnings.push("no account-complete broker NAV days observed");
 
   return {

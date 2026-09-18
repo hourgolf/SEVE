@@ -70,6 +70,9 @@
 //  (+ optional ANTHROPIC_MODEL); SUPABASE_* are auto-injected.
 // ============================================================================
 
+import { loadHistoricalAttribution } from "../_shared/loadHistoricalAttribution.ts";
+import { historicalDigest } from "../_shared/historicalReporting.ts";
+import { historicalCoverageText } from "../_shared/historicalAttribution.ts";
 import { REPORTING_SCHEMA, summarizePeakDiagnostics, validatedNarrative, heldTradePeakObservation } from "../_shared/reportingEvidence.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { collapseDailyLogicalTrades, type DailyDigestPositionRow, type DailyDigestRouteRow } from "./logicalTradeDigest.ts";
@@ -152,6 +155,8 @@ function detectFlaws(m: Row, exitReasons: Record<string, number>, activity: Row)
 }
 
 async function buildDigest(date: string): Promise<Row> {
+  // Older positions lack modern policy stamps and June allocations are not channel economics.
+  if (date >= "2026-06-01" && date < "2026-09-14") return historicalDigest(await loadHistoricalAttribution(sb), date, date, "daily");
   const dayStartMs = Date.parse(`${date}T12:00:00Z`);
   const { data: stratRows, error: strategistError } = await sb.from("strategists").select("id,slug,name,mandate,status,strategist_config(capital_pct,aggression,max_contracts,daily_stop_usd,muted,soloed)");
   if (strategistError) throw new Error(strategistError.message);
@@ -276,16 +281,17 @@ async function buildDigest(date: string): Promise<Row> {
 }
 
 function renderSkeleton(d: Row): string {
-  const usd = (v: number) => (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
+  const usd = (v: number | null) => v == null ? "unavailable" : (v < 0 ? "-$" : "$") + Math.abs(v).toFixed(0);
   const L: string[] = [`# SEVE daily autopsy — ${d.date}  (${d.mode})`];
+  if (d.evidence?.historicalAttribution) L.push(`\n**Historical coverage:** ${historicalCoverageText(d.evidence.historicalAttribution)} Matched-trade economics only; stored entry, stop, and exit paths are not revalidated.`);
   if (d.market) L.push(`\n**Market (SPY):** ${d.market.open.toFixed(2)} → ${d.market.close.toFixed(2)} (${d.market.returnPct >= 0 ? "+" : ""}${d.market.returnPct.toFixed(2)}%), range ${d.market.rangePct.toFixed(2)}%, efficiency ${d.market.efficiency.toFixed(2)} — _${d.market.note}_`);
   if (d.marketQQQ) L.push(`**Market (QQQ):** ${d.marketQQQ.open.toFixed(2)} → ${d.marketQQQ.close.toFixed(2)} (${d.marketQQQ.returnPct >= 0 ? "+" : ""}${d.marketQQQ.returnPct.toFixed(2)}%), range ${d.marketQQQ.rangePct.toFixed(2)}%, efficiency ${d.marketQQQ.efficiency.toFixed(2)} — _${d.marketQQQ.note}_`);
-  L.push(`\n**Fund:** ${d.fund.trades} logical trades across ${d.fund.channelsTraded} channels · realized attribution ${usd(d.fund.dayRealized)} · positive ${(d.fund.winRate * 100).toFixed(0)}%`);
+  L.push(`\n**Fund:** ${d.fund.trades} logical trades across ${d.fund.channelsTraded} channels · realized attribution ${usd(d.fund.dayRealized)} · positive ${d.fund.winRate == null ? "unavailable" : (d.fund.winRate * 100).toFixed(0) + "%"}`);
   for (const c of d.channels) {
     const m = c.metrics;
     L.push(`\n## ${c.name} — ${c.status}`); L.push(`_${c.mandate}_`);
-    if (!m.nTrades) { L.push(`- no closed logical trades · signals ${c.activity.signals} (acted ${c.activity.acted}, blocked ${JSON.stringify(c.activity.blocked)})`); continue; }
-    L.push(`- logical trades **${m.nTrades}** · positive **${(m.winRate * 100).toFixed(0)}%** · realized attribution **${usd(m.realizedPnl)}** · typical hold **${m.medianHoldMin.toFixed(1)}m**`);
+    if (!m.nTrades) { L.push(`- no closed logical trades · signals ${c.activity.signals ?? "unavailable"} (acted ${c.activity.acted ?? "unavailable"}, blocked ${JSON.stringify(c.activity.blocked)})`); continue; }
+    L.push(`- logical trades **${m.nTrades}** · positive **${m.winRate == null ? "unavailable" : (m.winRate * 100).toFixed(0) + "%"}** · realized attribution **${usd(m.realizedPnl)}** · typical hold **${m.medianHoldMin == null ? "unavailable" : m.medianHoldMin.toFixed(1) + "m"}**`);
     if (m.peakDiagnostic) L.push(`- Sampled held-mark diagnostic: ${m.peakDiagnostic.valid}/${m.peakDiagnostic.total} valid logical trades; ${m.peakDiagnostic.excluded} excluded. Retained ${m.peakCapturePct == null ? "unknown" : m.peakCapturePct.toFixed(1) + "%"}. These separate held windows are not a common executable exit horizon.`);
     L.push(`- exits: ${JSON.stringify(c.exitReasons)}`);
     L.push(`- signals ${c.activity.signals} (acted ${c.activity.acted}, blocked ${JSON.stringify(c.activity.blocked)}) · conviction(avg) ${JSON.stringify(c.convictionAvg)}`);
@@ -421,19 +427,20 @@ Deno.serve(async (req) => {
     }));
 
     const skeleton = renderSkeleton(digest);
-    const narrative = validatedNarrative(await narrate(digest, priorFindings), "daily");
+    const auditedHistory = Boolean(digest.evidence?.historicalAttribution);
+    const narrative = auditedHistory ? null : validatedNarrative(await narrate(digest, priorFindings), "daily");
     // Guarantee a complete findings ledger from the deterministic digest flaws even when
     // the LLM under-emits (06-03: 7 flaws, 0 LLM findings). The LLM enriches on top.
-    const enriched = ensureFindings(digest, narrative, priorFindings);
+    const enriched = auditedHistory ? null : ensureFindings(digest, narrative, priorFindings);
     const nameBySlug: Record<string, string> = Object.fromEntries((digest.channels ?? []).map((c: Row) => [c.slug, c.name]));
-    const markdown = renderNarrative(skeleton, enriched, nameBySlug);
+    const markdown = auditedHistory ? skeleton : renderNarrative(skeleton, enriched, nameBySlug);
 
     const { error } = await sb.from("daily_reports").upsert({ report_date: date, mode: digest.mode, digest, narrative: enriched, markdown, updated_at: new Date().toISOString() }, { onConflict: "report_date" });
     if (error) throw new Error(`daily_reports upsert: ${error.message}`);
     // best-effort breadcrumb (level is the event_level enum — use INFO; never let
     // this fail the run after the report is already persisted).
-    try { await sb.from("events").insert({ level: "INFO", message: `daily-autopsy ${date}: ${digest.fund.trades} trades, ${digest.fund.channelsTraded} channels, $${digest.fund.dayRealized.toFixed(0)} · ${enriched.systemFindings.length} findings${narrative ? "" : " (no LLM — set ANTHROPIC_API_KEY)"}`, meta: { date, channels: digest.channels.length } }); } catch { /* */ }
-    return Response.json({ ok: true, date, trades: digest.fund.trades, narrated: !!narrative, findings: enriched.systemFindings.length });
+    try { await sb.from("events").insert({ level: "INFO", message: `daily-autopsy ${date}: ${digest.fund.trades} trades, ${digest.fund.channelsTraded} channels, ${digest.fund.dayRealized == null ? "gross unavailable" : `$${digest.fund.dayRealized.toFixed(0)}`} · ${enriched?.systemFindings?.length ?? 0} findings${narrative ? "" : digest.evidence?.historicalAttribution ? " (audited historical subset; no narrative)" : " (no LLM — set ANTHROPIC_API_KEY)"}`, meta: { date, channels: digest.channels.length } }); } catch { /* */ }
+    return Response.json({ ok: true, date, trades: digest.fund.trades, narrated: !!narrative, findings: enriched?.systemFindings?.length ?? 0 });
   } catch (e) {
     try { await sb.from("events").insert({ level: "WARN", message: `daily-autopsy failed: ${(e as Error).message}` }); } catch { /* */ }
     return Response.json({ ok: false, error: (e as Error).message }, { status: 500 });

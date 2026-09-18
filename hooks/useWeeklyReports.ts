@@ -1,4 +1,7 @@
 "use client";
+import { readHistoricalAttribution } from '@/lib/reporting/readHistoricalAttribution';
+import { projectStoredHistoricalReport } from '@/supabase/functions/_shared/historicalReporting';
+import type { HistoricalSelection } from '@/supabase/functions/_shared/historicalAttribution';
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
@@ -40,6 +43,7 @@ export interface WeeklyDigest {
   channels: WeeklyChannelDigest[];
   exitEfficiency: { totalUpsideLeft: number | null; worstCaptureChannels: { slug: string; captureRatio: number; left: number }[]; redThatRanGreen: WeeklyRunner[] };
   evidence?: {
+    historicalAttribution?: HistoricalSelection;
     schemaVersion: number;
     producerVersion?: string;
     layer: string;
@@ -74,11 +78,13 @@ export function useWeeklyReports(limit = 6, enabled = true): { reports: WeeklyRe
         .eq("mode", "paper")
         .order("week_end", { ascending: false })
         .limit(limit);
+      if (error) throw error;
+      const historical = await readHistoricalAttribution();
       if (!alive) return;
       // Pre-deploy (table not created yet) degrades to the neutral empty state, not a
       // red error banner on prod. A real RLS/network error still surfaces.
-      setError(error?.message ?? null);
-      setReports(((data ?? []) as WeeklyReport[]).map(row => ({ ...row, narrative: validatedNarrative(row.narrative, "weekly") })));
+      setError(null);
+      setReports(((data ?? []) as WeeklyReport[]).map(row => projectStoredHistoricalReport({ ...row, narrative: validatedNarrative(row.narrative, "weekly") }, historical, 'weekly')));
       setLoading(false);
     })().catch((e) => {
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }

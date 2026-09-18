@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import positions from '../lib/reporting/fixtures/september16.json';
 import { validatedNarrative } from '../supabase/functions/_shared/reportingEvidence';
+import { HISTORICAL_SCHEMA, validateHistoricalManifest, type HistoricalManifest } from '../supabase/functions/_shared/historicalAttribution';
+import { historicalDigest } from '../supabase/functions/_shared/historicalReporting';
 
 type Row = Record<string, any>;
 const accountFor = (slug: string) => /macd|vwap/.test(slug) ? 'paper2' : /pb-ride|orb-trend/.test(slug) ? 'paper3' : 'paper1';
@@ -37,7 +39,9 @@ function from(table: string) {
 }
 async function loadProducer(kind:'daily'|'weekly') {
   const dir=path.resolve('supabase/functions/'+kind+'-autopsy');
-  const source=fs.readFileSync(path.join(dir,'index.ts'),'utf8').replace(`async function ${kind==='daily'?'buildDigest':'buildWeekly'}(`,`export async function ${kind==='daily'?'buildDigest':'buildWeekly'}(`);
+  const source=fs.readFileSync(path.join(dir,'index.ts'),'utf8')
+    .replace(`async function ${kind==='daily'?'buildDigest':'buildWeekly'}(`,`export async function ${kind==='daily'?'buildDigest':'buildWeekly'}(`)
+    .replace('function renderSkeleton(', 'export function renderSkeleton(');
   const bundle=await build({stdin:{contents:source,resolveDir:dir,loader:'ts'},bundle:true,platform:'node',format:'cjs',write:false,
     plugins:[{name:'read-only-fixture',setup(b){b.onResolve({filter:/^jsr:/},()=>({path:'supabase',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const createClient=()=>globalThis.testDatabase;',loader:'js'}))}}]});
   const context={module:{exports:{} as any},exports:{},console,Response,Intl,Date,Deno:{env:{get:()=>undefined},serve:()=>{}},testDatabase:{from}};
@@ -58,6 +62,20 @@ async function main(){
   tables.daily_reports=[{report_date:'2026-09-16',mode:'paper',digest}];
   tables.equity_snapshots=tables.accounts.flatMap((a,i)=>[0,1].map(j=>({account_id:a.id,net_liquidation:10000+i*100+j*10,captured_at:`2026-09-16T${j?'20:05':'13:30'}:00.000Z`})));
   const weekly=await loadProducer('weekly');
+  // Public synthetic fixture exercises historical null handling without exposing
+  // the private broker audit in the public Git repository.
+  const historicalManifest:HistoricalManifest={schema:HISTORICAL_SCHEMA,version:'synthetic-report-fixture',from:'2026-06-01',through:'2026-09-16',
+    positions:[{id:'matched'},{id:'unresolved'}],strategistIds:{fixture:'fixture-id'},brokerOnly:[],records:[
+      {rootPositionId:'matched',positionIds:['matched'],slug:'fixture',occ:'SYNTHETIC',openedAt:'2026-06-08T13:35:00Z',closedAt:'2026-06-08T14:00:00Z',qty:1,brokerAccountId:'paper1',state:'broker_reconstructed',reasons:[],ledgerGross:50,reconstructedGross:40,buyOrderIds:['buy-1'],sellOrderIds:['sell-1'],policyIdentityComplete:false,entryPrice:1,identitySources:[]},
+      {rootPositionId:'unresolved',positionIds:['unresolved'],slug:'fixture',occ:'SYNTHETIC',openedAt:'2026-06-08T14:05:00Z',closedAt:'2026-06-08T14:10:00Z',qty:1,brokerAccountId:null,state:'unresolved',reasons:['missing_broker_economics'],ledgerGross:10,reconstructedGross:null,buyOrderIds:[],sellOrderIds:[],policyIdentityComplete:false,entryPrice:1,identitySources:[]},
+    ]};
+  const audited=validateHistoricalManifest(historicalManifest,historicalManifest.positions,[],new Date().toISOString());
+  const juneDaily=historicalDigest(audited,'2026-06-08','2026-06-08','daily');
+  const juneWeekly=historicalDigest(audited,'2026-06-08','2026-06-12','weekly');
+  assert.equal(juneDaily.evidence.historicalAttribution.unresolvedTrades>0,true);
+  assert.match(daily.renderSkeleton(juneDaily),/broker|realized attribution/i);
+  assert.match(weekly.renderSkeleton(juneWeekly),/unavailable/);
+  assert.doesNotMatch(weekly.renderSkeleton(juneWeekly),/\$NaN|undefined/);
   const week=await weekly.buildWeekly('2026-09-18');
   assert.equal(week.fund.trades,8);assert.equal(week.fund.realized,518);assert.equal(week.fund.winRate,.75);
   assert.equal(week.exitEfficiency.totalUpsideLeft,null);assert.equal(week.fund.wins,6);

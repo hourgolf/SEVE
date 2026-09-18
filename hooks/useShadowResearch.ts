@@ -1,5 +1,7 @@
 "use client";
 
+import { readHistoricalAttribution } from '@/lib/reporting/readHistoricalAttribution';
+import { type HistoricalTrade } from '@/supabase/functions/_shared/historicalAttribution';
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
@@ -241,6 +243,8 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
             opportunities: retuneOpportunities,
           });
         } catch (error) { boundedRetuneError = message(error); retuneCount = null; }
+        let historicalExecutedWithheld = 0;
+        let historicalMissingChannels: string[] = [];
         let currentExecutedBySlug: Record<string, CurrentExecutedSummary> = {};
         let pairedCurrent: PairedCurrentComparison[] = [];
         let currentExecutedState: ShadowResearch["currentExecutedState"] = "empty";
@@ -308,8 +312,17 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
             positionLabel: "current executed research positions",
           });
           if (!attribution.ok) throw new Error(attribution.issues.join("; "));
+          const historical = await readHistoricalAttribution();
+          const byId = new Map<string,HistoricalTrade>(historical.records.flatMap(t=>t.positionIds.map(id=>[id,t] as const)));
+          const missingChannels = new Set(historical.brokerOnly.map(t=>t.slug));
+          historicalMissingChannels=[...missingChannels].sort();
           const executedRows: ExecutedResearchRow[] = [...attribution.byAccount.entries()].flatMap(([accountId, accountRows]) =>
-            accountRows.map((row) => ({ ...row, accountId })));
+            accountRows.map((row) => ({ ...row, accountId }))).filter(row=>{
+              const trade=byId.get(row.id);
+              const eligible=!missingChannels.has(row.slug)&&(!trade||trade.state==='broker_reconstructed'&&Math.abs(Math.round((trade.reconstructedGross!-trade.ledgerGross)*100))===0);
+              if(!eligible)historicalExecutedWithheld++;
+              return eligible;
+            });
           const current = deriveCurrentExecutedEvidence(executedRows);
           currentExecutedBySlug = current.bySlug;
           pairedCurrent = derivePairedCurrentComparisons(current.opportunities, rows);
@@ -353,10 +366,10 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
             fromSession: currentSessions[0] ?? null, throughSession: currentSessions.at(-1) ?? null,
             configurationEpochId: null, managerVersion: null,
             scope: { kind: "portfolio", accountIds: [...new Set(Object.values(currentExecutedBySlug).flatMap((summary) => summary.accountIds))], channelSlugs: Object.keys(currentExecutedBySlug) },
-            completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
+            completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated || historicalExecutedWithheld || historicalMissingChannels.length ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
             reconciliation: currentExecutedState === "ok" ? "reconciled" : "blocked",
             source: "positions lineage + immutable execution route · latest channel behavior spec", receiptHash: null,
-            limitations: ["Current execution cohort begins July 20; earlier virtual history remains separately available.", "Channel behavior specifications are selected independently; receipt-only portfolio epoch changes do not reset unchanged channel evidence.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : [])], asOf }),
+            limitations: ["Current execution cohort begins July 20; earlier virtual history remains separately available.", "Channel behavior specifications are selected independently; receipt-only portfolio epoch changes do not reset unchanged channel evidence.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : []), ...(historicalExecutedWithheld ? [`${historicalExecutedWithheld} position rows withheld from current behavior comparisons because their broker result or inventory does not match the recorded ledger.`] : []), ...(historicalMissingChannels.length ? [`Broker-only historical fills prevent complete executed comparisons for ${historicalMissingChannels.join(", ")}. See Review for their audited economic subtotals.`] : [])], asOf }),
           cohortStart: dateRange.from,
           truncated: false,
           error: "",

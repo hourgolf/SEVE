@@ -1,7 +1,9 @@
 "use client";
+import { HistoricalAttributionNote } from "./HistoricalAttributionNote";
 
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
+const shownUsd=(value:number|null|undefined)=>value==null?'unavailable':signedUsd(value);
 import { useFold } from "@/hooks/useFold";
 import type { useDailyReports } from "@/hooks/useDailyReports";
 import type { StrategistState } from "@/lib/desk/types";
@@ -79,11 +81,12 @@ export function DailyAutopsyBody({
         ))}
       </div>
 
+      <HistoricalAttributionNote evidence={d.evidence?.historicalAttribution} />
       {d.fund && (
         <div className="au-fund">
-          <span title={logicalEvidence ? `${d.evidence?.positionRows ?? 0} position rows · ${d.evidence?.runnerRowsCollapsed ?? 0} runners collapsed · immutable routes` : "This stored report predates logical-trade evidence; do not compare its count directly with current reports."}>{d.fund.trades} {observationLabel} · {d.fund.channelsTraded} ch</span>
-          <span className={d.fund.dayRealized < 0 ? "neg" : "pos"}>{signedUsd(d.fund.dayRealized)}</span>
-          <span>{Math.round(d.fund.winRate * d.fund.trades)} of {d.fund.trades} finished profitable</span>
+          <span title={d.evidence?.historicalAttribution ? "Broker-reconstructed logical trades in the matched subset; unresolved and broker-only cycles are shown separately." : logicalEvidence ? `${d.evidence?.positionRows ?? 0} position rows · ${d.evidence?.runnerRowsCollapsed ?? 0} runners collapsed · immutable routes` : "This stored report predates logical-trade evidence; do not compare its count directly with current reports."}>{d.fund.trades} {observationLabel}{d.evidence?.historicalAttribution ? " matched" : ""} · {d.fund.channelsTraded} ch</span>
+          <span className={d.fund.dayRealized < 0 ? "neg" : "pos"}>{shownUsd(d.fund.dayRealized)}</span>
+          <span>{d.fund.winRate == null ? "positive rate unavailable" : `${Math.round(d.fund.winRate * d.fund.trades)} of ${d.fund.trades} finished profitable`}</span>
         </div>
       )}
 
@@ -120,10 +123,10 @@ export function DailyAutopsyBody({
                 <span className="au-dot" style={{ background: colorOf(c.slug), boxShadow: `0 0 5px ${colorOf(c.slug)}` }} />
                 <span className="au-name">{c.name}</span>
                 {benched.has(c.slug) && <span className="au-chip au-benched" title="Current receipt-bound posture; this report remains historical.">OBSERVE ONLY NOW</span>}
-                <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(m.realizedPnl)}</span>
+                <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{shownUsd(m.realizedPnl)}</span>
               </div>
               <div className="au-metrics">
-                {m.nTrades} trades · {Math.round(m.winRate * m.nTrades)} profitable · median hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R (50% risk proxy) · most common exit {topExit(c.exitReasons)}
+                {m.nTrades} trades · {Math.round(m.winRate * m.nTrades)} profitable · median hold {m.medianHoldMin == null ? "unavailable" : m.medianHoldMin.toFixed(1)}m · {m.avgR == null ? "risk proxy unavailable" : `${m.avgR >= 0 ? "+" : ""}${m.avgR.toFixed(2)}R (50% risk proxy)`} · most common exit {topExit(c.exitReasons)}
                 {peak && (
                   <span title={`Coherent held marks: ${peak.valid}/${peak.total} logical trades valid; ${peak.excluded} excluded. Executable capture is unknown.`}>
                     {" "}· sampled held peak {peak.averagePeakPct == null ? "unknown" : `+${peak.averagePeakPct.toFixed(1)}%`} · <b>held-mark ratio {peak.retainedPct == null ? "unknown" : `${peak.retainedPct.toFixed(1)}%`}</b>
@@ -141,7 +144,7 @@ export function DailyAutopsyBody({
           );
         })}
         {dormant.length > 0 && (
-          <div className="au-dormant">No recorded trade: {dormant.map((c) => c.name).join(" · ")}</div>
+          <div className="au-dormant">{d.evidence?.historicalAttribution ? "No broker-reconstructed trade in this subset" : "No recorded trade"}: {dormant.map((c) => c.name).join(" · ")}</div>
         )}
       </div>
       )}
@@ -152,17 +155,17 @@ export function DailyAutopsyBody({
             <span className="au-mover">
               <span className="au-dot" style={{ background: colorOf(best.slug), boxShadow: `0 0 5px ${colorOf(best.slug)}` }} />
               <span className={`au-mv-ar ${best.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>▲</span><span className="au-mv-name">{best.name}</span>
-              <span className={`au-pnl ${best.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(best.metrics.realizedPnl)}</span>
+              <span className={`au-pnl ${best.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{shownUsd(best.metrics.realizedPnl)}</span>
             </span>
           )}
           {worst && (
             <span className="au-mover">
               <span className="au-dot" style={{ background: colorOf(worst.slug), boxShadow: `0 0 5px ${colorOf(worst.slug)}` }} />
               <span className={`au-mv-ar ${worst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>▼</span><span className="au-mv-name">{worst.name}</span>
-              <span className={`au-pnl ${worst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(worst.metrics.realizedPnl)}</span>
+              <span className={`au-pnl ${worst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{shownUsd(worst.metrics.realizedPnl)}</span>
             </span>
           )}
-          <span className="au-mv-count">{traded.length} channels traded{dormant.length ? ` · ${dormant.length} had no recorded trade` : ""}</span>
+          <span className="au-mv-count">{traded.length} channels traded{dormant.length ? ` · ${dormant.length} had no ${d.evidence?.historicalAttribution ? "broker-reconstructed trade in this subset" : "recorded trade"}` : ""}</span>
         </div>
       )}
 

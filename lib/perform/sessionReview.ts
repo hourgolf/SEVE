@@ -51,7 +51,9 @@ export function buildSessionReviewModel(report: DailyReport): SessionReviewModel
     nextAction: plainNextAction(report.narrative?.topActions?.[0]
       ?? report.narrative?.systemFindings?.[0]?.suggestedExperiment
       ?? "Open Trade Review to inspect channel-level evidence."),
-    limitation: logical
+    limitation: report.digest.evidence?.historicalAttribution
+      ? `Broker fills reconstruct ${report.digest.evidence.historicalAttribution.reconstructedTrades} of ${report.digest.evidence.historicalAttribution.recordedTrades} recorded trades; ${report.digest.evidence.historicalAttribution.unresolvedTrades} remain unresolved. Broker-only executions are separate. Historical manager and path eligibility are unverified.`
+      : logical
       ? report.digest.peakDiagnostic ? `Held-mark diagnostic only; ${report.digest.peakDiagnostic.valid} valid / ${report.digest.peakDiagnostic.total} observed, ${report.digest.peakDiagnostic.excluded} excluded. Executable capture is unverified.` : "Peak coverage is unavailable in this stored report; executable capture is unverified."
       : "This stored report predates logical-trade evidence. Counts are legacy position rows and should not be compared directly with current reports.",
   };

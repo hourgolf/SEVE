@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { HistoricalChannelEvidence } from "@/components/perform/HistoricalChannelEvidence";
 import { EventTapeWorkspace } from "@/components/perform/EventTapeWorkspace";
 import { AutopsyPanel } from "@/components/console/AutopsyPanel";
 import { PnlPanel } from "@/components/console/PnlPanel";
@@ -63,6 +64,7 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
       {section === "tape" && latestSessionModel && <SeveEvidenceContext kind="actual" scope={latestSessionModel.scope.replaceAll("_", " ")} asOf={latestSessionModel.reportDate} era="executed session" sample={`${latestSessionModel.observations} ${latestSessionModel.evidenceLabel}`} quality={latestSessionModel.limitation ? "partial" : "complete"} />}
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>
+        {(section === "tape" || section === "performance" || section === "autopsy") && <details className="rvw-system-activity"><summary><span><small>AUDITED HISTORY</small><b>Broker matched channel comparison</b></span><em>June through September · original values and unresolved gaps</em><i>▾</i></summary><HistoricalChannelEvidence channel={destination?.channel} accountId={section === "performance" ? surface.acctId : null} /></details>}
         {section === "tape" && (
           <>
             <ReviewSessionScorecard evidence={reviewEvidence.daily} />
