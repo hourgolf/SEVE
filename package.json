@@ -546,7 +546,9 @@
     "session-lifecycle-evidence-selftest": "tsx lib/ops/sessionLifecycleEvidence.selftest.ts",
     "morning-publisher-cli-selftest": "tsx scripts/remote-morning-publisher.selftest.ts",
     "morning-publication-status": "tsx scripts/morning-publication-status.ts",
-    "reporting-integrity-selftest": "tsx lib/desk/reportingSession.selftest.ts && tsx lib/reporting/reportingEvidence.selftest.ts && tsx scripts/dashboard-reporting-regression.ts"
+    "reporting-integrity-selftest": "tsx lib/desk/reportingSession.selftest.ts && tsx lib/reporting/reportingEvidence.selftest.ts && tsx scripts/dashboard-reporting-regression.ts",
+    "reporting-producer-canary": "tsx scripts/reporting-producer-canary.ts",
+    "reporting-producer-canary-selftest": "tsx lib/reporting/producerCanary.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1086.0",
