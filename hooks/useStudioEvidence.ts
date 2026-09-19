@@ -1,5 +1,9 @@
 "use client";
 
+import { readHistoricalAttribution } from '@/lib/reporting/readHistoricalAttribution';
+import { historicalTradeForRows, selectHistorical, historicalCoverageText, closeSession } from '@/supabase/functions/_shared/historicalAttribution';
+import { summarizeLogicalTradeCohort } from '@/lib/positions/logicalTradeCohort';
+import { readWindowedPositions, readWindowedExecutionRoutes } from '@/lib/perform/windowedEvidenceRead';
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { deriveStudioEvidence, type StudioEvidenceSnapshot } from "@/lib/studio/deriveStudioEvidence";
@@ -7,7 +11,6 @@ import { startVisibilityPoll } from "@/lib/pollControl";
 import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
 import {
   attributePositionsByImmutableExecutionAccount,
-  type ExecutionAccountObservation,
 } from "@/lib/ops/brokerReconciliation";
 
 export interface StudioEvidence extends StudioEvidenceSnapshot {
@@ -51,53 +54,39 @@ export function useStudioEvidence(
           throw new Error("selected account is not a configured paper account");
         }
         const since = new Date(Date.now() - 12 * 86_400_000).toISOString();
-        const rows: Array<{ id: string; qty: number; realized_pnl: number; closed_at: string; runner_of: string | null; strategists: { slug?: string } | null }> = [];
-        for (let from = 0; from < 10_000; from += 1000) {
-          const res = await sb.from("positions")
-            .select("id,qty,realized_pnl,closed_at,runner_of,strategists!inner(slug)")
-            .eq("status", "closed")
-            .gte("closed_at", since)
-            .order("closed_at", { ascending: true })
-            .range(from, from + 999);
-          if (res.error) throw res.error;
-          const page = (res.data ?? []) as unknown as typeof rows;
-          rows.push(...page);
-          if (page.length < 1000) break;
-        }
-        const observations: ExecutionAccountObservation[] = [];
-        for (let from = 0; from < rows.length; from += 200) {
-          const routeRead = await sb.from("execution_observations")
-            .select("id,position_id,account_id,event_at")
-            .in("position_id", rows.slice(from, from + 200).map((row) => row.id));
-          if (routeRead.error) throw routeRead.error;
-          observations.push(...((routeRead.data ?? []) as ExecutionAccountObservation[]));
-        }
+        const rows = await readWindowedPositions(sb, since, new Date().toISOString());
+        const [observations, historical] = await Promise.all([readWindowedExecutionRoutes(sb, rows),readHistoricalAttribution()]);
         const attribution = attributePositionsByImmutableExecutionAccount({
           positions: rows,
           observations,
           configuredPaperAccountIds: configuredAccounts,
           positionLabel: "studio evidence positions",
         });
-        if (!attribution.ok) throw new Error(attribution.issues.join("; "));
-        const accountRows = (attribution.byAccount.get(acctId) ?? []) as typeof rows;
+        const route = new Map([...attribution.byAccount].flatMap(([id,rs])=>rs.map(r=>[r.id,id] as const)));
+        const cohort = summarizeLogicalTradeCohort(rows);
+        if(cohort.issues.length)throw Error(cohort.issues.join('; '));
+        const selection=selectHistorical(historical,{from:closeSession(since),accountId:acctId});
+        const logicalRows=cohort.groups.flatMap(t=>{
+          if(t.status!=='closed')return [];
+          const h=historicalTradeForRows(historical,t.rows);
+          const accounts=new Set(t.rows.map(r=>route.get(r.id)??h?.brokerAccountId));
+          const close=t.rows.map(r=>r.closed_at??'').sort().at(-1)??'';
+          if(accounts.size!==1||!accounts.has(acctId)||close<since)return [];
+          const pnl=h?h.reconstructedGross:t.realizedPnl;
+          if(pnl==null)return [];
+          return [{id:t.rootPositionId,slug:h?.slug??t.rows[0].strategists?.slug??'unknown',qty:t.rows.reduce((s,r)=>s+Math.abs(Number(r.qty)),0),pnl,closedAt:close,runnerOf:null}];
+        });
         if (!alive) return;
-        const snapshot = deriveStudioEvidence(accountRows.map((row) => ({
-          id: row.id,
-          slug: row.strategists?.slug ?? "unknown",
-          qty: Number(row.qty),
-          pnl: Number(row.realized_pnl ?? 0),
-          closedAt: row.closed_at,
-          runnerOf: row.runner_of,
-        })));
+        const snapshot = deriveStudioEvidence(logicalRows);
         const asOf = new Date().toISOString();
         setState({ ...snapshot, loading: false, error: false, asOf, basis: "gross desk attribution",
           evidence: evidenceEnvelope({ layer: "historical_executed", unit: "logical_trade",
             fromSession: snapshot.sessionDates[0] ?? null, throughSession: snapshot.sessionDates.at(-1) ?? null,
             configurationEpochId: null, managerVersion: null,
             scope: { kind: "account", accountIds: [acctId], channelSlugs: Object.keys(snapshot.bySlug) },
-            completeness: snapshot.totalTrades ? "complete" : "unavailable", reconciliation: "reconciled",
+            completeness: selection.unresolvedTrades || selection.unknownAccountTrades ? "partial" : snapshot.totalTrades ? "complete" : "unavailable", reconciliation: "reconciled",
             source: "positions + immutable execution route", receiptHash: null,
-            limitations: ["Historical configurations are pooled in this Studio summary."], asOf }) });
+            limitations: ["Historical configurations are pooled in this Studio summary.", historicalCoverageText(selection), ...selection.issues], asOf }) });
       } catch {
         if (alive) setState((prior) => ({ ...prior, loading: false, error: true,
           evidence: evidenceEnvelope({ ...prior.evidence, completeness: prior.asOf ? "stale" : "unavailable" }) }));

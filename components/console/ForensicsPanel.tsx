@@ -95,7 +95,10 @@ export function ForensicsPanel({
   if (error) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}><div className="chart-empty">couldn&apos;t load — {error}</div></Shell>;
   if (!report) return <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}><div className="chart-empty">no report yet — run <code>npm run day-report</code> same-week (with APP_URL + PUSH_SECRET set) to publish</div></Shell>;
 
-  const execution = readForensicsExecutionSummary(report.payload.executionSummary, report.report_date);
+  // Pre-September reports can carry June's allocated ledger economics. Keep
+  // their model studies visible but withhold the booked-cash headline.
+  const execution = report.report_date < "2026-09-14" ? null
+    : readForensicsExecutionSummary(report.payload.executionSummary, report.report_date);
   const scToday = report.payload.overrideToday ?? null;
   const showToday = scWin === "today" && !!scToday;
   const sc = showToday ? scToday! : report.payload.overrideScorecard;
@@ -122,6 +125,7 @@ export function ForensicsPanel({
   return (
     <Shell folded={folded} onFold={toggleFold} dateTag={dateTag} foldable={!alwaysOpen}>
       <p className="wk-ee-note"><b>HISTORICAL MODEL STUDIES · {report.report_date}</b><br />These are overlapping modeled paths and historical policy comparisons, not booked gains or additions to the current roster. Currency is whole modeled position dollars unless explicitly marked $/ct. The bench simulator uses its legacy cost gate and 50% stop; old Momo ratchet arms do not represent current BANK20/RUN50. Account capacity uses the captured historical roster and sizing assumptions. Current-policy compatibility and portfolio displacement are unverified.</p>
+      {report.report_date < "2026-09-14" && <p className="wk-ee-note">Historical ledger P&amp;L attribution may be allocated incorrectly. Use the audited channel comparison in Review for broker matched economics; these saved model studies have not been rebuilt against it.</p>}
       <div className="au-fund">
         <span>All-account closed ledger: <b>{execution ? signedUsd(execution.grossPnlUsd) : "unavailable in this report"}</b></span>
         {execution && <span>{execution.nClosedTranches} closed tranches · {execution.nUnattributedTranches} without account attribution · before fees · broker reconciliation is separate</span>}

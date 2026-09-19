@@ -1,5 +1,7 @@
 "use client";
 
+import { readHistoricalAttribution } from '@/lib/reporting/readHistoricalAttribution';
+import { historicalTradeForRows, selectHistorical, historicalCoverageText, closeSession } from '@/supabase/functions/_shared/historicalAttribution';
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { shortDate } from "@/lib/format";
@@ -111,7 +113,10 @@ export function useWindowedPnl(
         withheldPositionRows: number;
       }> => {
         const positionRows = await readWindowedPositions(sb, start, asOf);
-        const observations = await readWindowedExecutionRoutes(sb, positionRows);
+        const [observations, historical] = await Promise.all([readWindowedExecutionRoutes(sb, positionRows), readHistoricalAttribution()]);
+        const historicalIssues: string[] = [];
+        const selection = selectHistorical(historical, { from: start ? closeSession(start) : undefined, through: closeSession(asOf), accountId: acctId });
+        if (selection.recordedTrades || selection.unknownAccountTrades || selection.brokerOnly.length) historicalIssues.push(historicalCoverageText(selection), ...selection.issues);
         const attribution = attributePositionsByImmutableExecutionAccount({
           positions: positionRows,
           observations,
@@ -130,8 +135,11 @@ export function useWindowedPnl(
         const bump = (slug: string): ChannelStat =>
           (stats[slug] ??= { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
         for (const trade of logical.groups) {
-          const accounts = [...new Set(trade.rows.map((row) => accountByPositionId.get(row.id)).filter((value): value is string => Boolean(value)))];
-          if (accounts.length === 0 || trade.rows.some((row) => !accountByPositionId.has(row.id))) {
+          const reconstructed = historicalTradeForRows(historical, trade.rows);
+          if (reconstructed && reconstructed.state !== 'broker_reconstructed') { withheldPositionRows += trade.rows.length; continue; }
+          const route = (id: string) => accountByPositionId.get(id) ?? reconstructed?.brokerAccountId;
+          const accounts = [...new Set(trade.rows.map(row => route(row.id)).filter((value): value is string => Boolean(value)))];
+          if (accounts.length === 0 || trade.rows.some(row => !route(row.id))) {
             withheldPositionRows += trade.rows.length;
             continue;
           }
@@ -150,7 +158,7 @@ export function useWindowedPnl(
           if (trade.status === "closed" && start && (!finalClose || finalClose < start)) continue;
           const channel = bump(slugs[0]);
           if (trade.status === "closed") {
-            const pnl = trade.realizedPnl;
+            const pnl = reconstructed ? reconstructed.reconstructedGross : trade.realizedPnl;
             if (pnl == null) throw new Error(`logical trade ${trade.rootPositionId} lacks realized P&L`);
             channel.pnl += pnl;
             channel.trades += 1;
@@ -163,7 +171,7 @@ export function useWindowedPnl(
               ? trade.rows.reduce((sum, row) =>
                 sum + Math.abs(Number(row.qty) || 0) * Number(row.avg_entry_price || 0), 0) / quantity
               : null;
-            if (Number.isFinite(peak) && weightedEntry != null && weightedEntry > 0) {
+            if (!reconstructed && Number.isFinite(peak) && weightedEntry != null && weightedEntry > 0) {
               channel.pkSum += Math.max(0, (peak / weightedEntry - 1) * 100);
               channel.pkN += 1;
             }
@@ -172,7 +180,7 @@ export function useWindowedPnl(
           }
         }
         for (const channel of Object.values(stats)) channel.pnl = Math.round(channel.pnl);
-        return { stats, issues: attribution.issues, attributedPositionRows, withheldPositionRows };
+        return { stats, issues: [...historicalIssues, ...(withheldPositionRows ? [`${withheldPositionRows} position rows withheld for unresolved economics or routing.`] : [])], attributedPositionRows, withheldPositionRows };
       };
 
       const readNav = async (): Promise<{

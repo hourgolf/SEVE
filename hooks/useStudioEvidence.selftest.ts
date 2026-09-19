@@ -3,12 +3,15 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("./useStudioEvidence.ts", import.meta.url), "utf8");
 
-assert.match(source, /from\("execution_observations"\)/);
+assert.match(source, /readWindowedExecutionRoutes/);
+assert.match(readFileSync(new URL("../lib/perform/windowedEvidenceRead.ts", import.meta.url), "utf8"), /from\("execution_observations"\)/);
+assert.match(source, /historicalTradeForRows/);
 assert.match(source, /attributePositionsByImmutableExecutionAccount/);
 assert.match(source, /configuredPaperAccountIds/);
 assert.doesNotMatch(source, /strategists\.account_id/);
 assert.doesNotMatch(source, /\.eq\("strategists\.account_id"/);
-assert.match(source, /runner_of/);
+assert.match(source, /summarizeLogicalTradeCohort/);
+assert.match(readFileSync(new URL("../lib/perform/windowedEvidenceRead.ts", import.meta.url), "utf8"), /runner_of/);
 assert.match(source, /deriveStudioEvidence/);
 
 console.log("studio-evidence-read-selftest: immutable account attribution passed");

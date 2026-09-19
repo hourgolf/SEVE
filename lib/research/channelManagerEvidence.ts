@@ -1,3 +1,4 @@
+import { historicalTradeForRows, type HistoricalSnapshot } from '../../supabase/functions/_shared/historicalAttribution';
 import { nativeComparisonReason, type ComparisonSpec, type NativeObservation } from "./nativeManagerComparison";
 import { DAY1_MANAGER_ARMS } from "@/lib/channels/day1Release";
 import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
@@ -277,6 +278,7 @@ export function filterChannelManagerEvidenceByEpoch(
 export function deriveChannelManagerEvidenceBook(input: {
   comparisonSpecs?: readonly ComparisonSpec[];
   nativeObservations?: readonly NativeObservation[];
+  historicalAttribution?: HistoricalSnapshot;
   managerRuns: readonly ChannelManagerRunRow[];
   positions: readonly ChannelManagerPositionRow[];
   generatedAt: string;
@@ -291,7 +293,14 @@ export function deriveChannelManagerEvidenceBook(input: {
   for (const row of input.positions) {
     if (row.runner_of) children.set(row.runner_of, [...(children.get(row.runner_of) ?? []), row]);
   }
+  const historicalByRoot=new Map(input.historicalAttribution?.records.map(t=>[t.rootPositionId,t])??[]);
   const actualPnl = (positionId: string): number | null => {
+    const historical=historicalByRoot.get(positionId);
+    if(historical){
+      const sourceRows=historical.positionIds.map(id=>positionById.get(id)).filter((r):r is ChannelManagerPositionRow=>Boolean(r));
+      const verified=historicalTradeForRows(input.historicalAttribution!,sourceRows.map(row=>({...row})));
+      return verified?.state==='broker_reconstructed'?verified.reconstructedGross:null;
+    }
     const fixed = fixedEvidence[positionId];
     if (fixed || fixedPositionIds.has(positionId)) return fixed?.settlementId ? fixed.finalPnlUsd : null;
     const rows: ChannelManagerPositionRow[] = [];
@@ -327,7 +336,9 @@ export function deriveChannelManagerEvidenceBook(input: {
     const trades: ChannelManagerTradePoint[] = [...byPosition].map(([positionId, positionRuns]) => {
       const first = [...positionRuns].sort((left, right) => left.entry_at.localeCompare(right.entry_at))[0];
       const fixed = fixedEvidence[positionId];
-      const debit = fixed?.settlementId ? fixed.finalDebitUsd ?? 0
+      const audit=historicalByRoot.get(positionId);
+      const debit = audit?.state==='broker_reconstructed' && audit.entryPrice ? audit.entryPrice * audit.qty * 100
+        : fixed?.settlementId ? fixed.finalDebitUsd ?? 0
         : (finite(first.entry_price) ?? 0) * 100 * (finite(first.original_qty) ?? 0);
       const pnl = actualPnl(positionId);
       const actualReturnPct = pnl != null && debit > 0 ? round((pnl / debit) * 100) : null;
@@ -338,7 +349,7 @@ export function deriveChannelManagerEvidenceBook(input: {
       const runByManager = new Map(positionRuns.map((row) => [row.manager_id, row]));
       const arms = COMMON_MANAGER_ARMS.map((managerId): ChannelManagerArmPoint => {
         const run = runByManager.get(managerId);
-        const comparisonReason = run ? nativeComparisonReason({run, position: positionById.get(positionId),
+        const comparisonReason = audit?.state === 'unresolved' ? 'historical_attribution_unresolved' : run ? nativeComparisonReason({run, position: positionById.get(positionId),
           positions: input.positions, specs: input.comparisonSpecs ?? [], runs: input.managerRuns, observations: input.nativeObservations ?? []}) : null;
         const invalidBeforeActualClose = !!comparisonReason || run?.evidence_state === "no_eligible_quote_before_actual_close";
         const returnPct = run?.status === "terminal" && !invalidBeforeActualClose

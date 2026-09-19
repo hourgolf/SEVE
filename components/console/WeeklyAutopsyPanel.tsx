@@ -1,7 +1,9 @@
 "use client";
+import { HistoricalAttributionNote } from "./HistoricalAttributionNote";
 
 import { useEffect, useState } from "react";
 import { signedUsd } from "@/lib/format";
+const shownUsd=(value:number|null|undefined)=>value==null?'unavailable':signedUsd(value);
 import { useFold } from "@/hooks/useFold";
 import type { useWeeklyReports } from "@/hooks/useWeeklyReports";
 import type { StrategistState } from "@/lib/desk/types";
@@ -65,18 +67,20 @@ export function WeeklyAutopsyBody({
         </div>
       )}
 
+      <HistoricalAttributionNote evidence={d.evidence?.historicalAttribution} />
+      {d.evidence?.historicalBoundaryWarning && <div className="wk-ee-note" role="note">{d.evidence.historicalBoundaryWarning}</div>}
       <div className="au-fund">
-        <span title={logicalEvidence ? "Logical trades with recorded position-ledger P&L attribution. Immutable account routing does not independently verify fill prices, fees or broker NAV. Tranche exit-efficiency is separately labeled." : "This stored weekly report predates logical-trade evidence; do not compare its count directly with current reports."}>{md(d.weekStart)}–{md(d.weekEnd)} · {d.days.length}d · {d.fund.trades} {observationLabel}</span>
-        <span className={d.fund.realized < 0 ? "neg" : "pos"}>{signedUsd(d.fund.realized)} recorded attribution</span>
-        {d.fund.navDelta != null && <span className={d.fund.navDelta < 0 ? "neg" : "pos"} title="Stored NAV change using this report's original snapshot endpoints; it is not independently broker reconciled and may not cover the full displayed week.">recorded NAV Δ {signedUsd(d.fund.navDelta)}</span>}
+        <span title={d.evidence?.historicalAttribution ? "Observed close dates and broker-reconstructed logical trades in the matched subset; this is not a complete calendar or signal inventory." : logicalEvidence ? "Logical trades with recorded position-ledger P&L attribution. Immutable account routing does not independently verify fill prices, fees or broker NAV. Tranche exit-efficiency is separately labeled." : "This stored weekly report predates logical-trade evidence; do not compare its count directly with current reports."}>{md(d.weekStart)}–{md(d.weekEnd)} · {d.days.length}d · {d.fund.trades} {observationLabel}{d.evidence?.historicalAttribution ? " matched" : ""}</span>
+        <span className={d.fund.realized < 0 ? "neg" : "pos"}>{shownUsd(d.fund.realized)} {d.evidence?.historicalAttribution ? "audited matched subset" : "recorded attribution"}</span>
+        {d.fund.navDelta != null && <span className={d.fund.navDelta < 0 ? "neg" : "pos"} title="Stored NAV change using this report's original snapshot endpoints; it is not independently broker reconciled and may not cover the full displayed week.">recorded NAV Δ {shownUsd(d.fund.navDelta)}</span>}
         {d.fund.maxDrawdown != null && <span className="neg" title="intraday peak-to-trough drawdown">maxDD −${Math.abs(d.fund.maxDrawdown).toFixed(0)}</span>}
         <span>positive {pct(d.fund.winRate)}</span>
       </div>
-      <p className="mut">Scope: {d.days.length} published daily reports. Unreported sessions are not zero-trade sessions; full-calendar coverage is unverified. NAV uses the stored snapshot endpoints.</p>
+      <p className="mut">{d.evidence?.historicalAttribution ? `Scope: ${d.days.length} observed close dates in the audited extract. Zero-trade sessions and full-calendar coverage are unverified.` : `Scope: ${d.days.length} published daily reports. Unreported sessions are not zero-trade sessions; full-calendar coverage is unverified. NAV uses the stored snapshot endpoints.`}</p>
       {d.fund.bestDay && d.fund.worstDay && (
         <div className="wk-extremes">
-          <span>best <b>{md(d.fund.bestDay.date)}</b> <span className="pos">{signedUsd(d.fund.bestDay.pnl)}</span></span>
-          <span>worst <b>{md(d.fund.worstDay.date)}</b> <span className="neg">{signedUsd(d.fund.worstDay.pnl)}</span></span>
+          <span>best <b>{md(d.fund.bestDay.date)}</b> <span className="pos">{shownUsd(d.fund.bestDay.pnl)}</span></span>
+          <span>worst <b>{md(d.fund.worstDay.date)}</b> <span className="neg">{shownUsd(d.fund.worstDay.pnl)}</span></span>
         </div>
       )}
 
@@ -113,14 +117,14 @@ export function WeeklyAutopsyBody({
                 {benched.has(c.slug) && <span className="au-chip au-benched" title="Current receipt-bound posture; historical verdict is not current policy.">OBSERVE ONLY NOW</span>}
                 {cn?.verdict && <span className={`au-chip ${VERDICT_CLASS[cn.verdict] ?? "au-sev-low"}`}>{cn.verdict}</span>}
                 <span className="wk-cap" title="Coherent sampled-held-mark subset only; excludes missing or inconsistent peaks. This is not an executable capture estimate.">held-mark ratio {cap == null ? "unknown" : `${(cap * 100).toFixed(1)}%`}</span>
-                <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(m.realizedPnl)}</span>
+                <span className={`au-pnl ${m.realizedPnl < 0 ? "neg" : "pos"}`}>{shownUsd(m.realizedPnl)}</span>
               </div>
               <div className="au-metrics">
-                {m.nTrades}t · {pct(m.winRate)} · hold {m.medianHoldMin.toFixed(1)}m · {m.avgR >= 0 ? "+" : ""}{m.avgR.toFixed(2)}R (50% risk proxy) · best {signedUsd(m.bestTrade)}/worst {signedUsd(m.worstTrade)}
+                {m.nTrades}t · {pct(m.winRate)} · hold {m.medianHoldMin == null ? "unavailable" : m.medianHoldMin.toFixed(1)}m · {m.avgR == null ? "risk proxy unavailable" : `${m.avgR >= 0 ? "+" : ""}${m.avgR.toFixed(2)}R (50% risk proxy)`} · best {shownUsd(m.bestTrade)}/worst {shownUsd(m.worstTrade)}
               </div>
               {c.exitEfficiency.peakDiagnostic && <p className="mut">Held marks: {c.exitEfficiency.peakDiagnostic.valid}/{c.exitEfficiency.peakDiagnostic.total} logical trades valid · {c.exitEfficiency.peakDiagnostic.excluded} excluded.</p>}
               <div className="wk-byday">
-                {c.byDay.map((b) => <span key={b.date} className={b.pnl < 0 ? "neg" : b.pnl > 0 ? "pos" : ""}>{md(b.date)} {signedUsd(b.pnl)}</span>)}
+                {c.byDay.map((b) => <span key={b.date} className={b.pnl == null ? "" : b.pnl < 0 ? "neg" : b.pnl > 0 ? "pos" : ""}>{md(b.date)} {shownUsd(b.pnl)}</span>)}
               </div>
               {cn?.exitQuality && <div className="au-verdict">exit: {cn.exitQuality}</div>}
               {cn?.note && <div className="au-verdict">{cn.note}</div>}
@@ -141,14 +145,14 @@ export function WeeklyAutopsyBody({
             <span className="au-mover">
               <span className="au-dot" style={{ background: colorOf(wkBest.slug), boxShadow: `0 0 5px ${colorOf(wkBest.slug)}` }} />
               <span className={`au-mv-ar ${wkBest.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>▲</span><span className="au-mv-name">{wkBest.name}</span>
-              <span className={`au-pnl ${wkBest.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(wkBest.metrics.realizedPnl)}</span>
+              <span className={`au-pnl ${wkBest.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{shownUsd(wkBest.metrics.realizedPnl)}</span>
             </span>
           )}
           {wkWorst && (
             <span className="au-mover">
               <span className="au-dot" style={{ background: colorOf(wkWorst.slug), boxShadow: `0 0 5px ${colorOf(wkWorst.slug)}` }} />
               <span className={`au-mv-ar ${wkWorst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>▼</span><span className="au-mv-name">{wkWorst.name}</span>
-              <span className={`au-pnl ${wkWorst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{signedUsd(wkWorst.metrics.realizedPnl)}</span>
+              <span className={`au-pnl ${wkWorst.metrics.realizedPnl < 0 ? "neg" : "pos"}`}>{shownUsd(wkWorst.metrics.realizedPnl)}</span>
             </span>
           )}
           <span className="au-mv-count">{traded.length} ch</span>

@@ -1,4 +1,7 @@
 "use client";
+import { readHistoricalAttribution } from '@/lib/reporting/readHistoricalAttribution';
+import { projectStoredHistoricalReport } from '@/supabase/functions/_shared/historicalReporting';
+import type { HistoricalSelection } from '@/supabase/functions/_shared/historicalAttribution';
 
 import { useEffect, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
@@ -53,6 +56,7 @@ export interface ReportDigest {
   fund?: { dayRealized: number; trades: number; wins?: number; winRate: number; channelsTraded: number };
   channels?: ReportDigestChannel[];
   evidence?: {
+    historicalAttribution?: HistoricalSelection;
     schemaVersion: number;
     producerVersion?: string;
     layer: string;
@@ -90,11 +94,13 @@ export function useDailyReports(limit = 10, enabled = true): { reports: DailyRep
         .eq("mode", "paper")
         .order("report_date", { ascending: false })
         .limit(limit);
+      if (error) throw error;
+      const historical = await readHistoricalAttribution();
       if (!alive) return;
       // Surface a read failure (RLS / missing table / network) instead of silently
       // showing "no reports" — so an empty panel on a real error is diagnosable.
-      setError(error?.message ?? null);
-      setReports(((data ?? []) as DailyReport[]).map(row => ({ ...row, narrative: validatedNarrative(row.narrative, "daily") })));
+      setError(null);
+      setReports(((data ?? []) as DailyReport[]).map(row => projectStoredHistoricalReport({ ...row, narrative: validatedNarrative(row.narrative, "daily") }, historical, 'daily')));
       setLoading(false);
     })().catch((e) => {
       if (alive) { setError((e as Error)?.message ?? "read failed"); setLoading(false); }
