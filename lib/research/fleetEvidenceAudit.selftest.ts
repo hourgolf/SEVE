@@ -153,9 +153,9 @@ check("booked coverage", momo.durableLineage.bookedReceiptCoverage, { covered: 4
 check("opportunity coverage uses roots", momo.durableLineage.opportunityCoverage, { covered: 3, eligible: 6, pct: 50 });
 check("entry broker coverage uses roots", momo.durableLineage.entryBrokerResultCoverage, { covered: 3, eligible: 6, pct: 50 });
 check("unlinked entry evidence resolves through opportunity id", momo.durableLineage.entryDecisionCoverage, { covered: 3, eligible: 6, pct: 50 });
-check("exit evidence coverage", momo.durableLineage.exitBrokerResultCoverage, { covered: 4, eligible: 6, pct: 66.67 });
+check("exit evidence coverage excludes reconciliation bookkeeping", momo.durableLineage.exitBrokerResultCoverage, { covered: 4, eligible: 5, pct: 80 });
 check("partial lineage tier", momo.evidenceTier, "durable_lineage_partial");
-check("partial lineage blocker names missing exit evidence", momo.blockers.includes("2 closed row(s) lack auxiliary exit broker-result evidence"), true);
+check("partial lineage blocker names missing exit evidence", momo.blockers.includes("1 broker-exit-eligible row(s) lack auxiliary exit broker-result evidence"), true);
 check("native rows have comparable lineage", momo.nativeOutcomeComparable, true);
 check("manager runs and positions remain distinct", momo.managerObservation, {
   currentFourPlusEligibleRootTrades: 1,
