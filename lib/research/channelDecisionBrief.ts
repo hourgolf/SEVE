@@ -380,9 +380,9 @@ function chooseRecommendation(input: {
       productionChangeAuthorized: false };
   }
   let axis: ChannelDecisionAxis = "collection";
-  let label = "KEEP COLLECTING";
+  let label = "FINITE HOLD";
   let summary = dossier.summary;
-  let nextExperiment = "Collect the next independent sessions without changing entry, exit, manager, or size.";
+  let nextExperiment = "Review after the next five independent sessions or ten scored opportunities, whichever comes first; keep entry, exit, manager, and size fixed until then.";
   if (dossier.disposition === "retire") {
     axis = "retirement"; label = "REVIEW RETIREMENT";
     nextExperiment = "Confirm that the negative evidence is redundant, then prepare a reversible collection pause.";

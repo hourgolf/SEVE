@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { StudioChannelRow, StudioFleetSummary, StudioSort } from "@/lib/studio/deriveStudioView";
@@ -11,6 +12,7 @@ import { useChannelRosterBundleControl } from "@/hooks/useChannelRosterBundleCon
 import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlaneView";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
+import { buildChannelDecisionSummary, decisionLabelForDisplay } from "@/lib/research/channelDecisionSummary";
 
 const SORTS: { value: StudioSort; label: string }[] = [
   { value: "attention", label: "Attention" },
@@ -21,13 +23,15 @@ const SORTS: { value: StudioSort; label: string }[] = [
 
 export type StudioScope = "attention" | "roots" | "dark" | "all";
 
-export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect, onCurrentSession, onNextReview }: {
+export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, globalRoots, globalDark, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect, onCurrentSession, onNextReview }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
   selectedSlug?: string;
   scope: StudioScope;
   sort: StudioSort;
   passports: ChannelWorkspaceModel;
+  globalRoots: number;
+  globalDark: number;
   controlPlane?: ChannelControlPlaneViewRead;
   decisions: Record<string, ChannelDecisionBrief>;
   accountName: string;
@@ -39,6 +43,8 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
   onNextReview?: (slug: string) => void;
 }) {
   const roster = useChannelRosterBundleControl(controlPlane);
+  const decisionSummaries = useMemo(() => Object.fromEntries(Object.entries(decisions)
+    .map(([slug, brief]) => [slug, buildChannelDecisionSummary(brief)])), [decisions]);
   const authorityRootSlugs = passports.release.state === "verified"
     ? passports.release.rootSlugs
     : [];
@@ -53,7 +59,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
         <span title={passports.release.fact}><i /><b>{passports.release.state === "verified" ? "RUNTIME SEALED" : passports.releaseView.label}</b></span>
       </div>
       <CanaryCommandCenter controlPlane={controlPlane} bundles={roster.bundles} compact />
-      <SeveEvidenceContext kind="mixed" scope={accountName} asOf={evidenceAsOf} era="current runtime + latest nightly research" sample={`${summary.total} channels in view`} quality="live" detail="Current session results and nightly channel research remain visibly separate." />
+      <SeveEvidenceContext kind="mixed" scope={accountName} asOf={evidenceAsOf} era="current runtime + latest nightly research" sample={`${summary.total} channels in account view · global ${globalRoots} trading / ${globalDark} observing`} quality="live" detail="The fleet table is account scoped. Global receipt counts are shown separately; current session results and nightly research remain distinct." />
       <header className="fleet-summary">
         <div className="fleet-title">
           <span className="fleet-kicker">STUDIO · FLEET</span>
@@ -103,6 +109,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
             const pnlClass = row.pnl.dayPnl < 0 ? "neg" : row.pnl.dayPnl > 0 ? "pos" : "";
             const decision = channelDecisionState(row.lastSignal);
             const brief = decisions[row.channel.slug];
+            const decisionSummary = decisionSummaries[row.channel.slug] ?? null;
             const liveMode = passport?.lifecycle === "paper-root"
               ? "TRADING"
               : passport?.lifecycle === "dark-evidence"
@@ -118,9 +125,9 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
             const reasonLabel = row.attentionReasons[0]
               ?? (receiptSettingsActive ? "Live settings active" : passport?.database.differsFromRuntime ? "Saved settings differ" : decision.label === "IDLE" ? "Ready" : decision.label);
             const reasonDetail = receiptSettingsActive
-              ? "Collecting clean evidence"
+              ? decisionSummary ? `${decisionSummary.evidenceState} · ${decisionSummary.evidenceStateFact}` : "Evidence cohort has no published review yet"
               : liveMode === "OBSERVING"
-              ? "Collecting only"
+              ? decisionSummary ? `${decisionSummary.evidenceState} · ${decisionSummary.evidenceStateFact}` : "Observe only · no published review yet"
               : row.lastSignal?.signal_type?.replaceAll("_", " ") ?? null;
             return (
               <div
@@ -144,7 +151,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                   {row.pnl.dayPnl !== 0 && <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{signedUsd(row.pnl.dayPnl)}</small>}
                 </button>
                 <button type="button" className="fleet-next fleet-cell-link" role="cell" onClick={() => onNextReview?.(row.channel.slug)} title={brief?.recommendation.summary ?? "Review after more independent evidence."}>
-                  <b>{brief?.recommendation.label ?? "CONTINUE COLLECTING"}</b>
+                  <b>{decisionSummary?.disposition ?? decisionLabelForDisplay(brief?.recommendation.label)}</b>
                 </button>
               </div>
             );

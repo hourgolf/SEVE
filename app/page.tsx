@@ -10,12 +10,11 @@ import { useDeskState } from "@/hooks/useDeskState";
 import { useDeskFeed } from "@/hooks/useDeskFeed";
 import { useDeskWrite } from "@/hooks/useDeskWrite";
 import { useAccounts } from "@/hooks/useAccounts";
-import { useOpsStatus } from "@/hooks/useOpsStatus";
+import { useRuntimeTelemetry } from "@/hooks/useRuntimeTelemetry";
 import { useOpsEvidence } from "@/hooks/useOpsEvidence";
 import { usePositionMarks } from "@/hooks/usePositionMarks";
 import { usePositionPeaks } from "@/hooks/usePositionPeaks";
 import { useSentinelDigest } from "@/hooks/useSentinelDigest";
-import { useWorkerRuns } from "@/hooks/useWorkerRuns";
 import { useKitSounds } from "@/hooks/useKitSounds";
 import { channelPnl } from "@/lib/desk/derive";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -45,7 +44,8 @@ import { usePyramidShadow } from "@/hooks/usePyramidShadow";
 import { useVirtualBench } from "@/hooks/useVirtualBench";
 import { useChannelControlPlaneView } from "@/hooks/useChannelControlPlaneView";
 import { useWindowedPnl, type PnlWindow } from "@/hooks/useWindowedPnl";
-import type { Room } from "@/components/surfaceTypes";
+import type { EvidenceWorkspace, Room } from "@/components/surfaceTypes";
+import type { ReviewSection } from "@/lib/perform/reviewWorkspace";
 import {
   deriveChannelPassports,
   scopeChannelsToAccount,
@@ -94,6 +94,9 @@ function Surface({
   // ledgers can stay dormant outside the OPS workspace. This preserves the
   // single page-owned subscription seam without polling hidden workspaces.
   const [activeRoom, setActiveRoom] = useState<Room>("play");
+  const [evidenceWorkspace, setEvidenceWorkspace] = useState<EvidenceWorkspace>("none");
+  const [activeReviewSection, setActiveReviewSection] = useState<ReviewSection>("tape");
+  const [researchDemand, setResearchDemand] = useState(false);
   useEffect(() => {
     const s = localStorage.getItem("seve-room");
     if (s === "play" || s === "mix" || s === "write" || s === "tape" || s === "ops") setActiveRoom(s);
@@ -118,10 +121,11 @@ function Surface({
 
   // Lifted to the seam — called ONCE here so the persistent shell AND both layouts
   // share one accounts/ops poll + one live-marked P&L derivation (no re-subscribe).
-  const ops = useOpsStatus();
+  const runtimeTelemetry = useRuntimeTelemetry();
+  const ops = runtimeTelemetry.ops;
   const opsEvidence = useOpsEvidence(
     120_000,
-    activeRoom === "ops" || activeRoom === "tape",
+    evidenceWorkspace === "ops" || evidenceWorkspace === "review",
     configuredPaperAccountIds,
   );
   useEffect(() => { if (!acctId && accounts.length) setAcctId(accounts[0].id); }, [accounts, acctId]);
@@ -135,7 +139,7 @@ function Surface({
   // subscribe. sentinel (brief/scan/judge/lens), workerRuns (crash-attribution ledger, wired
   // for the incident banner — not rendered yet, that's slice 3), positionPeaks (ratcheted MFE).
   const sentinel = useSentinelDigest();
-  const workerRuns = useWorkerRuns();
+  const workerRuns = runtimeTelemetry.workerRuns;
   const positionPeaks = usePositionPeaks(feed.positions, liveMarks);
   const studioEvidence = useStudioEvidence(acctId, mode === "studio", configuredPaperAccountIds);
   const channelControlPlane = useChannelControlPlaneView(mode === "studio");
@@ -222,22 +226,23 @@ function Surface({
     atlasState: decisionAtlas.state,
     atlasFreshness: decisionAtlas.freshness,
   });
-  // Keep the bounded prospective ledger warm so channel-level dry-powder
-  // diagnostics are already present when the operator opens an inspector.
-  const shadowResearch = useShadowResearch(!accountsLoading, configuredPaperAccountIds);
-  const managerEvidence = useChannelManagerEvidence(true);
-  const reviewEnabled = activeRoom === "tape";
-  const daily = useDailyReports(8, reviewEnabled);
-  const weekly = useWeeklyReports(6, reviewEnabled);
-  const forensics = useForensicsReport(reviewEnabled);
-  const pyramid = usePyramidShadow(14, reviewEnabled);
-  const virtualBench = useVirtualBench(reviewEnabled);
+  // Historical research is demand-loaded by its visible presenter. Closing an
+  // inspector leaves the last verified result in memory, but stops polling it.
+  const researchEnabled = !accountsLoading && (evidenceWorkspace === "research" || researchDemand);
+  const shadowResearch = useShadowResearch(researchEnabled, configuredPaperAccountIds);
+  const managerEvidence = useChannelManagerEvidence(researchEnabled);
+  const reviewVisible = evidenceWorkspace === "review";
+  const daily = useDailyReports(8, reviewVisible && activeReviewSection !== "counterfactuals");
+  const weekly = useWeeklyReports(6, reviewVisible && activeReviewSection === "autopsy");
+  const forensics = useForensicsReport(reviewVisible && activeReviewSection === "counterfactuals");
+  const pyramid = usePyramidShadow(14, reviewVisible && activeReviewSection === "counterfactuals");
+  const virtualBench = useVirtualBench(reviewVisible && activeReviewSection === "counterfactuals");
   const [pnlWindow, setPnlWindow] = useState<PnlWindow>("today");
   const windowedPnl = useWindowedPnl(
     pnlWindow,
     acctId,
     configuredPaperAccountIds,
-    reviewEnabled && !accountsLoading,
+    reviewVisible && activeReviewSection === "performance" && !accountsLoading,
   );
   const reviewEvidence = {
     daily,
@@ -257,7 +262,7 @@ function Surface({
   // operator returns to the same room/layout. Lifted to the seam (passed down).
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, allChannelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, evidenceWorkspace, setEvidenceWorkspace, activeReviewSection, setActiveReviewSection, researchDemand, setResearchDemand, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, allChannelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
 
   // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
   // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/

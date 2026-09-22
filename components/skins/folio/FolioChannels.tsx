@@ -1,7 +1,7 @@
 "use client";
 
 import "@/app/studio.css";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MobileStudio } from "@/components/mobile2/MobileStudio";
 import { ChannelInspector } from "@/components/studio/ChannelInspector";
 import { StudioModules } from "@/components/studio/StudioModules";
@@ -34,6 +34,10 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
   const selected = rows.find((row) => row.channel.slug === selectedSlug) ?? visible[0] ?? rows[0];
   const summary = summarizeStudioFleet(rows);
   const release = surface.channelWorkspace.releaseView;
+  useEffect(() => {
+    surface.setResearchDemand(Boolean(selected));
+    return () => surface.setResearchDemand(false);
+  }, [selected, surface.setResearchDemand]);
 
   return (
     <div className="folio-channels folio-channels-desktop" data-nav-target="true" tabIndex={-1}>
@@ -79,5 +83,9 @@ export function FolioChannelsMobile({ surface, openSlug, setOpenSlug, onAddChann
   onOpenSettings: () => void;
 }) {
   const channels = surface.accountChannels;
+  useEffect(() => {
+    surface.setResearchDemand(Boolean(openSlug));
+    return () => surface.setResearchDemand(false);
+  }, [openSlug, surface.setResearchDemand]);
   return <div className="folio-channels folio-channels-mobile"><MobileStudio props={surface} channels={channels} livePnl={surface.livePnl} openSlug={openSlug} setOpenSlug={setOpenSlug} onAddChannel={onAddChannel} onOpenSettings={onOpenSettings} /></div>;
 }
