@@ -69,26 +69,49 @@ function FolioMark() {
   return <span className="folio-mark" aria-hidden="true"><i /><i /><i /><i /><i /><i /></span>;
 }
 
+function FolioRuntimeHead({ surface, onHome }: { surface: SurfaceProps; onHome: () => void }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const process = deriveProcessTelemetry(surface.workerRuns, nowMs);
+  const broker = deriveBrokerTelemetry(surface.opsReadiness.evidence.find((item) => item.id === "reconciliation"));
+  const clock = new Date(nowMs).toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" });
+  return <>
+    <button type="button" className={`folio-incident ${surface.incident.severity}`} onClick={onHome}>
+      <i /><span><b>{surface.incident.severity === "normal" ? "SYSTEM NOMINAL" : surface.incident.title}</b><small>{surface.incident.severity === "normal" ? `${process.label.toLowerCase()} · ${broker.label.toLowerCase()}` : surface.incident.facts[0]}</small></span>
+    </button>
+    <div className="folio-clock"><b>{clock}</b><small>PT · {surface.incident.session.replaceAll("_", " ")}</small></div>
+  </>;
+}
+
+function FolioRuntimeState({ surface }: { surface: SurfaceProps }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const process = deriveProcessTelemetry(surface.workerRuns, nowMs);
+  const broker = deriveBrokerTelemetry(surface.opsReadiness.evidence.find((item) => item.id === "reconciliation"));
+  return <article className="folio-state-card"><span><small>PROCESS</small><b className={process.tone}>{process.label}</b></span><span><small>BROKER</small><b className={broker.tone}>{broker.label}</b></span></article>;
+}
+
 function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps, "mobile">) {
   const { mode, setMode, skin, toggleSkin } = useShell();
   const [section, setSection] = useState<PerformSection>("overview");
   const [authOpen, setAuthOpen] = useState(false);
-  const [now, setNow] = useState<Date | null>(null);
 
-  useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const { accounts, acctId, setAcctId, feed, incident, liveFund, livePnl, opsReadiness, view, workerRuns, write } = surface;
+  const { accounts, acctId, setAcctId, feed, incident, liveFund, livePnl, view, write } = surface;
   const exposure = useMemo(() => Object.values(livePnl).reduce((sum, row) => sum + row.exposure, 0), [livePnl]);
   const riskUsed = liveFund.nav != null && liveFund.nav > 0 && ["ok", "recovered"].includes(feed.positionAttribution.state) ? (100 * exposure) / liveFund.nav : null;
-  const process = deriveProcessTelemetry(workerRuns, now?.getTime() ?? 0);
-  const broker = deriveBrokerTelemetry(opsReadiness.evidence.find((item) => item.id === "reconciliation"));
   const selectedAccount = accounts.find((account) => account.id === acctId);
-  const clock = now?.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--:--";
+
+  useEffect(() => {
+    surface.setActiveRoom(mode === "studio" ? "mix" : section === "tape" ? "tape" : section === "ops" ? "ops" : "play");
+    surface.setEvidenceWorkspace(mode === "perform" && section === "tape" ? "review" : mode === "perform" && section === "ops" ? "ops" : "none");
+    if (mode === "perform" && section === "tape") surface.setActiveReviewSection("tape");
+  }, [mode, section, surface.setActiveReviewSection, surface.setActiveRoom, surface.setEvidenceWorkspace]);
 
   const navigate = (item: DesktopItem) => {
     setMode(item.mode);
@@ -99,10 +122,7 @@ function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps,
     <div className="shell-root ws909 folio-shell" data-mode={mode} data-skin={skin} data-incident={incident.severity}>
       <header className="folio-head">
         <a className="folio-brand" href="/skin-lab" aria-label="Folio skin lab home"><FolioMark /><span><b>SEVE</b><small>FOLIO / SKIN 02</small></span></a>
-        <button type="button" className={`folio-incident ${incident.severity}`} onClick={() => { setMode("perform"); setSection("overview"); }}>
-          <i /><span><b>{incident.severity === "normal" ? "SYSTEM NOMINAL" : incident.title}</b><small>{incident.severity === "normal" ? `${process.label.toLowerCase()} · ${broker.label.toLowerCase()}` : incident.facts[0]}</small></span>
-        </button>
-        <div className="folio-clock"><b>{clock}</b><small>PT · {incident.session.replaceAll("_", " ")}</small></div>
+        <FolioRuntimeHead surface={surface} onHome={() => { setMode("perform"); setSection("overview"); }} />
         <nav className="folio-head-actions" aria-label="Skin lab controls">
           <a href="/">909</a>
           <button type="button" onClick={toggleSkin}>{skin === "cream" ? "DARK" : "LIGHT"}</button>
@@ -120,7 +140,7 @@ function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps,
         <article className="folio-account-card"><small>ACCOUNT</small><AccountSwitcher accounts={accounts} selected={acctId} onSelect={setAcctId} /><span>Paper-only routing</span></article>
         <article className="folio-stat coral"><small>OPEN POSITIONS</small><b>{["ok", "recovered"].includes(feed.positionAttribution.state) ? feed.positions.length : "—"}</b><span>{!["ok", "recovered"].includes(feed.positionAttribution.state) ? "Position evidence unavailable" : feed.positions.length === 0 ? "Desk is flat" : "Manager active"}</span></article>
         <article className="folio-stat teal"><small>RISK USED</small><b>{(riskUsed == null ? "—" : riskUsed.toFixed(1))}%</b><span>{usd0(exposure)} desk exposure</span></article>
-        <article className="folio-state-card"><span><small>PROCESS</small><b className={process.tone}>{process.label}</b></span><span><small>BROKER</small><b className={broker.tone}>{broker.label}</b></span></article>
+        <FolioRuntimeState surface={surface} />
       </section>
 
       <nav className="folio-nav" aria-label="Folio workspaces">
@@ -176,6 +196,12 @@ function FolioMobile({ surface }: { surface: SurfaceProps }) {
     const id = window.setInterval(tick, 30_000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    surface.setActiveRoom(room === "studio" ? "mix" : room === "review" ? "tape" : room === "ops" ? "ops" : "play");
+    surface.setEvidenceWorkspace(room === "review" ? "review" : room === "ops" ? "ops" : "none");
+    if (room === "review") surface.setActiveReviewSection("tape");
+  }, [room, surface.setActiveReviewSection, surface.setActiveRoom, surface.setEvidenceWorkspace]);
 
   const channels = surface.accountChannels;
   const clock = now?.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Los_Angeles" }) ?? "--:--";

@@ -76,7 +76,11 @@ export function MobileShell(props: SurfaceProps) {
     props.setActiveRoom(
       room === "studio" ? "mix" : room === "review" ? "tape" : room === "ops" ? "ops" : "play",
     );
-  }, [room, props.setActiveRoom, setMode]);
+    props.setEvidenceWorkspace(room === "review" ? "review" : room === "ops" ? "ops" : "none");
+    if (room === "review") props.setActiveReviewSection(destination.reviewSection ?? "tape");
+    props.setResearchDemand(room === "studio" && Boolean(openSlug));
+    return () => props.setResearchDemand(false);
+  }, [destination.reviewSection, openSlug, props.setActiveReviewSection, props.setActiveRoom, props.setEvidenceWorkspace, props.setResearchDemand, room, setMode]);
 
   const { desk } = view;
   const channels = accountChannels;

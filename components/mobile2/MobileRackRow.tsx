@@ -25,6 +25,7 @@ import type { ChannelControlPlaneViewRead } from "@/hooks/useChannelControlPlane
 import type { ChannelDryPowderCurve as DryPowderCurve, ShadowChannelSummary } from "@/lib/research/shadowResearch";
 import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEvidence";
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
+import { decisionLabelForDisplay } from "@/lib/research/channelDecisionSummary";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
 
@@ -181,7 +182,7 @@ export function MobileRackRow({
     : status === "draft" ? "On the bench"
       : status === "disabled" ? "Entries are disabled"
         : passport?.lifecycle === "dark-evidence" ? "COLLECTING EVIDENCE"
-          : decisionBrief?.recommendation.label ?? "READY";
+          : decisionBrief ? decisionLabelForDisplay(decisionBrief.recommendation.label) : "READY";
 
   return (
     <section id={`m2-channel-${slug}`} className={`m2-rack${runtimeMuted ? " mutedch" : ""}${open ? " open" : ""}`} style={{ ["--pm" as string]: pm }}>
@@ -289,7 +290,7 @@ export function MobileRackRow({
                 <button type="button" disabled={!canTune} onClick={() => stepStop(250)} aria-label="increase stop per day">+</button>
               </div>
             </div>
-            {activeSpec?.fixedContractAdmission ? <div className="m2-riskwrap">4 contracts · broker affordability<br />No fixed dollar risk ceiling</div> : <div className="m2-riskwrap">
+            {activeSpec?.fixedContractAdmission ? <div className="m2-riskwrap">{activeSpec.quantity} contracts · broker affordability<br />No hard premium or dollar risk ceiling</div> : <div className="m2-riskwrap">
               <div
                 ref={faderRef}
                 className="m2-hfader"
@@ -328,7 +329,8 @@ export function MobileRackRow({
                 <span><small>DECISIONS</small><b>{passport?.evidence.recentSignals ?? 0} · {passport?.evidence.censoredSignals ?? 0} censored</b></span>
                 <span><small>OBSERVER</small><b>{passport?.observer.configuredArms ?? 0} arms</b></span>
                 {passport?.rootPolicy && <>
-                  <span><small>SIZE / CAP</small><b>{passport.rootPolicy.quantity} ct · {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
+                  <span><small>SIZE / ADMISSION</small><b>{activeSpec?.fixedContractAdmission ? `${activeSpec.quantity} ct · broker affordability` : `${passport.rootPolicy.quantity} ct · ${usd0(passport.rootPolicy.aggregateDebitCap)}`}</b></span>
+                  <span><small>PREMIUM CAP</small><b>{activeSpec?.fixedContractAdmission ? "NONE · BROKER AFFORDABILITY ONLY" : usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
                   <span><small>MANAGER</small><b>{passport.rootPolicy.managerLabel}</b></span>
                   <span><small>EFFECTIVE EXIT</small><b>{activeRootExitLabel(passport.rootPolicy, true)}</b></span>
                   <span><small>RELEASE IDENTITY</small><code>{passport.release.expectedHash.slice(0, 10)}…</code></span>

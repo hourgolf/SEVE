@@ -22,7 +22,7 @@ import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/works
 // subscriptions.
 // =============================================================================
 
-export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, acctId, accountChannels, symbol, channelWorkspace, channelControlPlane, shadowResearch, managerEvidence, decisionAtlas, destination, onNavigate }: SurfaceProps & { destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
+export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, acctId, accountChannels, symbol, channelWorkspace, allChannelWorkspace, channelControlPlane, shadowResearch, managerEvidence, decisionAtlas, setResearchDemand, destination, onNavigate }: SurfaceProps & { destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   void symbol;
   const { desk } = view;
 
@@ -47,6 +47,10 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, 
     ? rows.find((row) => row.channel.slug === selSlug)
     : undefined;
   useEffect(() => {
+    setResearchDemand(Boolean(selectedRow));
+    return () => setResearchDemand(false);
+  }, [selectedRow, setResearchDemand]);
+  useEffect(() => {
     if (!destination?.channel || !rows.some((row) => row.channel.slug === destination.channel)) return;
     setSelSlug(destination.channel);
     const lifecycle = channelWorkspace.bySlug[destination.channel]?.lifecycle;
@@ -66,6 +70,8 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, 
         scope={scope}
         sort={sort}
         passports={channelWorkspace}
+        globalRoots={allChannelWorkspace.roots}
+        globalDark={allChannelWorkspace.dark}
         controlPlane={channelControlPlane}
         decisions={decisionAtlas.bySlug}
         accountName={accounts.find((account) => account.id === acctId)?.name ?? "selected paper account"}

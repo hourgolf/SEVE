@@ -127,7 +127,7 @@ export function ChannelDecisionCard({ effective, controlPlane, decisionBrief, co
               onClick={() => void activation.createPostureDraft()}
             >
               {activeSpec.executionPosture === "paper"
-                ? "DRAFT PAUSE · KEEP COLLECTING"
+                ? "DRAFT PAUSE · EVIDENCE STAYS ON"
                 : "DRAFT RESUME · PAPER"}
             </button>}
             {!activation.proposal && entryCapReady && <button

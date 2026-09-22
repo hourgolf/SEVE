@@ -149,9 +149,9 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           <span className="ih-stats">state <b>{effectiveStateLabel}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
         </div>
         <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
-        <details className="channel-disclosure"><summary><span><small>REVIEW</small><b>HISTORICAL EXECUTED ECONOMICS</b></span><i>▾</i></summary><HistoricalChannelEvidence channel={slug} /></details>
         <ExecutableShadowStatus slug={slug} />
         <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
+        <details className="channel-disclosure"><summary><span><small>REVIEW</small><b>HISTORICAL EXECUTED ECONOMICS</b></span><i>▾</i></summary><HistoricalChannelEvidence channel={slug} /></details>
         <div className="mixer-deck">
         {passport?.effective && <details className="channel-disclosure operating-context">
           <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS CHANNEL IS IN ITS CURRENT MODE</em><i>▾</i></summary>
@@ -172,7 +172,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         </div></section>
 
         <section className="mix-bank mix-bank--gain"><header>{draft.active ? "LOCAL DRAFT · RISK + SIZE" : receiptSettingsActive ? "ACTIVE RUNTIME · RISK + SIZE" : rootPolicy ? "SEALED RUNTIME · RISK + SIZE" : "DATABASE KNOBS · FUTURE EPOCH"}</header><div className="knob-bank">
-          {activeSpec?.fixedContractAdmission ? <span>4 contracts · broker affordability<br />No fixed dollar risk ceiling</span> : knob(config.capital_pct, 25, 5000, 25, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
+          {activeSpec?.fixedContractAdmission ? <span>{activeSpec.quantity} contracts · broker affordability<br />No hard premium or dollar risk ceiling</span> : knob(config.capital_pct, 25, 5000, 25, "RISK / TRADE", (v) => usd0(v), "capital_pct")}
           {knob(config.daily_stop_usd, 0, 5000, 50, "ENTRY LATCH", (v) => v === 0 ? "OFF" : `−${usd0(v)}/d`, "daily_stop_usd", "#25272a")}
           {knob(premStop, 10, 90, 5, "PREM STOP · POLICY", (v) => `−${v}%`, "premium_stop_pct", "#25272a", false)}
           {knob(config.max_contracts, 1, 12, 1, "HARD CAP", (v) => `${v} ct`, "max_contracts")}
@@ -209,12 +209,12 @@ export function ChannelInspector({ strategist, summary, passport, write, control
             <p>{passport?.lifecycleFact ?? "Runtime lifecycle is not verified."}</p>
             {passport?.rootPolicy ? <>
               <span><small>FAMILY</small><b>{passport.rootPolicy.familyId}</b></span>
-              <span><small>SIZE</small><b>{passport.rootPolicy.quantity} contracts</b></span>
-              <span><small>RISK</small><b>{usd0(passport.rootPolicy.riskBudgetUsd)}</b></span>
-              <span><small>PREMIUM / DEBIT</small><b>${passport.rootPolicy.premiumCap.toFixed(2)} / {usd0(passport.rootPolicy.aggregateDebitCap)}</b></span>
+              <span><small>SIZE</small><b>{activeSpec?.quantity ?? passport.rootPolicy.quantity} contracts</b></span>
+              <span><small>ADMISSION BUDGET</small><b>{activeSpec?.fixedContractAdmission ? "BROKER AFFORDABILITY" : usd0(passport.rootPolicy.riskBudgetUsd)}</b></span>
+              <span><small>PREMIUM / DEBIT</small><b>{activeSpec?.fixedContractAdmission ? "NO HARD PREMIUM CAP" : `$${passport.rootPolicy.premiumCap.toFixed(2)} / ${usd0(passport.rootPolicy.aggregateDebitCap)}`}</b></span>
               <span><small>MANAGER</small><b>{passport.rootPolicy.managerLabel}</b></span>
               <span><small>EXIT</small><b>{activeRootExitLabel(passport.rootPolicy)}</b></span>
-              <span><small>ADMISSION</small><b>priority {passport.rootPolicy.priority} · one/family</b></span>
+              <span><small>ADMISSION</small><b>{activeSpec?.fixedContractAdmission ? `${activeSpec.quantity} ct · broker affordability` : `priority ${passport.rootPolicy.priority} · one/family`}</b></span>
             </> : passport?.lifecycle === "paper-root"
               ? <span className="runtime-wide"><small>RECEIPT-BOUND ROOT</small><b>exact economics are governed by immutable control-plane evidence</b></span>
               : <span className="runtime-wide"><small>RESEARCH PATH</small><b>candidate stamp → exact OCC → T+1 Databento reconstruction</b></span>}

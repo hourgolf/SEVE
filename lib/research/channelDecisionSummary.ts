@@ -9,7 +9,7 @@ export const CHANNEL_DISPOSITIONS = [
   "TEST MANAGER",
   "REVIEW SIZE",
   "TEST ADMISSION",
-  "KEEP COLLECTING",
+  "FINITE HOLD",
   "REVIEW PROMOTION",
   "REVIEW RETIREMENT",
   "REVIEW TRIAL",
@@ -111,7 +111,14 @@ export function dispositionForAxis(axis: ChannelDecisionAxis): ChannelDispositio
   if (axis === "admission") return "TEST ADMISSION";
   if (axis === "promotion") return "REVIEW PROMOTION";
   if (axis === "retirement") return "REVIEW RETIREMENT";
-  return "KEEP COLLECTING";
+  return "FINITE HOLD";
+}
+
+export function decisionLabelForDisplay(label?: string | null): string {
+  if (!label || label === "KEEP COLLECTING" || label === "CONTINUE COLLECTING") {
+    return "FINITE HOLD · REVIEW CHECKPOINT REQUIRED";
+  }
+  return label;
 }
 
 function fixedForAxis(axis: ChannelDecisionAxis): string[] {
@@ -137,7 +144,7 @@ function evidenceState(brief: ChannelDecisionBrief): { state: DecisionEvidenceSt
   if (sessions >= 5 && opportunities >= 10) {
     return { state: "DEVELOPING", fact: `${sessions} sessions and ${opportunities} opportunities are useful, but the decision cohort is not exact-current configuration evidence.` };
   }
-  return { state: "TOO EARLY", fact: `${sessions} sessions and ${opportunities} recorded opportunities; keep collecting before treating the direction as durable.` };
+  return { state: "TOO EARLY", fact: `${sessions} sessions and ${opportunities} recorded opportunities; hold the current policy until a defined evidence checkpoint is reviewed.` };
 }
 
 function metricForAxis(brief: ChannelDecisionBrief): ChannelDecisionMetric {
@@ -290,10 +297,10 @@ export function buildFleetDecisionSummary(bySlug: Readonly<Record<string, Channe
   const summaries = Object.values(bySlug).map(buildChannelDecisionSummary);
   const investigate = summaries.filter((row) => ["TEST ENTRY TIMING", "TEST EXIT", "TEST MANAGER", "REVIEW SIZE", "TEST ADMISSION", "REVIEW TRIAL"].includes(row.disposition)).length;
   const promoteOrRetire = summaries.filter((row) => row.disposition === "REVIEW PROMOTION" || row.disposition === "REVIEW RETIREMENT").length;
-  const collecting = summaries.filter((row) => row.disposition === "KEEP COLLECTING").length;
+  const collecting = summaries.filter((row) => row.disposition === "FINITE HOLD").length;
   const lead = summaries.find((row) => row.disposition === "REVIEW TRIAL")
-    ?? summaries.find((row) => row.evidenceState === "CURRENT COHORT" && row.disposition !== "KEEP COLLECTING")
-    ?? summaries.find((row) => row.disposition !== "KEEP COLLECTING") ?? null;
+    ?? summaries.find((row) => row.evidenceState === "CURRENT COHORT" && row.disposition !== "FINITE HOLD")
+    ?? summaries.find((row) => row.disposition !== "FINITE HOLD") ?? null;
   return { throughSession, reports: summaries.length, investigate, promoteOrRetire, collecting,
     lead: lead ? { channel: lead.channel, disposition: lead.disposition } : null };
 }

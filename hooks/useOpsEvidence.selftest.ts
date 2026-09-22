@@ -21,9 +21,9 @@ assert.match(hook, /\.eq\("account_id", accountId\)\.eq\("status", "active"\)/, 
 assert.match(hook, /\.eq\("session_date_et", todayEt\)/, "capture receipts should use the indexed session key");
 assert.match(hook, /\.eq\("event_kind", eventKind\).*\.gte\("event_at", since\)/s, "outcomes should use the event-kind/time index");
 assert.match(hook, /\[accountScope, deepEnabled, pollMs\]/, "workspace or account activation must restart the effect");
-assert.match(page, /activeRoom === "ops" \|\| activeRoom === "tape"/, "OPS and Review should activate the one page-owned evidence read");
+assert.match(page, /evidenceWorkspace === "ops" \|\| evidenceWorkspace === "review"/, "OPS and Review should activate the one page-owned evidence read");
 assert.match(page, /configuredPaperAccountIds/, "deep evidence should query every configured paper account");
 assert.match(workstation, /performSection === "ops"\s*\?\s*"ops"/s, "the 909 OPS workspace must activate the page-owned evidence seam");
-assert.match(workstation, /performSection === "research" \|\| performSection === "tape"/, "Research and Review should activate their page-owned evidence seams");
+assert.match(workstation, /performSection === "research" \? "research"[\s\S]*performSection === "tape" \? "review"/, "Research and Review should activate separate page-owned evidence seams");
 
 console.log("ops-evidence-read-selftest: 19/19 passed");

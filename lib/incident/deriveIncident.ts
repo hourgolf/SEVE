@@ -48,8 +48,8 @@ export interface Thresholds {
 }
 export const DEFAULT_THRESHOLDS: Thresholds = {
   streamWarnRthSec: 45, streamStaleRthSec: 120, cronStaleRthSec: 180, runProcessStaleSec: 180,
-  opsReadStaleSec: 60,          // useOpsStatus 15s reads
-  workerRunsReadStaleSec: 150,  // useWorkerRuns 60s reads (amendment — 60 would false-alarm on jitter)
+  opsReadStaleSec: 60,          // consolidated runtime telemetry reads every 30s
+  workerRunsReadStaleSec: 150,  // shared 30s runtime read; policy leaves ample jitter margin
   premarketBeatGraceSec: 120, premarketReadyWindowSec: 600,
 };
 
