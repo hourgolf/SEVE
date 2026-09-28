@@ -18,6 +18,7 @@ import { deriveTapeRows } from "@/lib/perform/eventTape";
 import {
   DEFAULT_MOBILE_REVIEW_MODE,
   MOBILE_REVIEW_MODES,
+  mobileReviewEvidenceDemand,
   mobileReviewHas,
   mobileAccountResultRows,
   type MobileReviewMode,
@@ -164,6 +165,11 @@ export function MobileReviewView({ props, channels, livePnl, destination, onNavi
     const nextMode = mobileReviewModeForDestination(destination);
     if (nextMode) setMode(nextMode);
   }, [destination?.reviewSection, destination?.section]);
+  useEffect(() => {
+    const demand = mobileReviewEvidenceDemand(mode, props.reviewEvidence.pnlWindow);
+    props.setEvidenceWorkspace(demand.workspace);
+    props.setActiveReviewSection(demand.reviewSection);
+  }, [mode, props.reviewEvidence.pnlWindow, props.setActiveReviewSection, props.setEvidenceWorkspace]);
 
   return <>
     <nav className="m2-review-modes" aria-label="Review workspace">

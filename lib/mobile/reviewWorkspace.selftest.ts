@@ -5,6 +5,7 @@ import { parseWorkspaceDestination, workspaceDestinationUrl, type WorkspaceSecti
 import {
   DEFAULT_MOBILE_REVIEW_MODE,
   MOBILE_REVIEW_MODES,
+  mobileReviewEvidenceDemand,
   mobileReviewHas,
   mobileAccountResultRows,
   mobileReviewSections,
@@ -80,6 +81,16 @@ check("mobile agent room keeps full research one tap away", () => {
   const source = readFileSync("components/mobile2/MobileDeskSheet.tsx", "utf8");
   assert.match(source, /<ResearchCouncilRoom/);
   assert.match(source, /OPEN FULL CHANNEL RESEARCH/);
+});
+
+check("mobile evidence demand follows the visible review leaf", () => {
+  assert.deepEqual(mobileReviewEvidenceDemand("session", "today"), { workspace: "review", reviewSection: "tape" });
+  assert.deepEqual(mobileReviewEvidenceDemand("session", "week"), { workspace: "review", reviewSection: "performance" });
+  assert.deepEqual(mobileReviewEvidenceDemand("session", "month"), { workspace: "review", reviewSection: "performance" });
+  assert.deepEqual(mobileReviewEvidenceDemand("shadow", "today"), { workspace: "research", reviewSection: "tape" });
+  for (const mode of ["council", "evidence", "sentinel"] as const) {
+    assert.deepEqual(mobileReviewEvidenceDemand(mode, "all"), { workspace: "none", reviewSection: "tape" });
+  }
 });
 
 check("all workspace routes select their intended mobile room, including Next open", () => {

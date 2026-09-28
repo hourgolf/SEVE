@@ -6,6 +6,8 @@ const page = source("app/page.tsx");
 const shell = source("components/shell/WorkstationShell.tsx");
 const studio = source("components/studio/StudioSurface.tsx");
 const research = source("components/perform/ShadowResearchWorkspace.tsx");
+const mobileShell = source("components/mobile2/MobileShell.tsx");
+const mobileReview = source("components/mobile2/MobileDeskSheet.tsx");
 const manager = source("hooks/useChannelManagerEvidence.ts");
 const runtime = source("hooks/useRuntimeTelemetry.ts");
 
@@ -20,6 +22,10 @@ assert.match(page, /activeReviewSection === "counterfactuals"/);
 assert.match(page, /activeReviewSection === "performance"/);
 assert.match(studio, /setResearchDemand\(Boolean\(selectedRow\)\)/,
   "Channels should request deep research only while an inspector is open");
+assert.match(mobileShell, /if \(room !== "review"\) props\.setEvidenceWorkspace/,
+  "the mobile shell must leave review-leaf evidence demand to the visible review panel");
+assert.match(mobileReview, /mobileReviewEvidenceDemand\(mode, props\.reviewEvidence\.pnlWindow\)/,
+  "mobile historical results and Atlas must enable only their own page-owned evidence hooks");
 assert.match(manager, /if \(!enabled\) return;/,
   "closing the presenter must preserve the last authenticated manager result");
 assert.match(shell, /function RuntimeHealthButton/);
