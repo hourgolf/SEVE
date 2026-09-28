@@ -1,26 +1,23 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const ops = readFileSync(new URL("./useOpsStatus.ts", import.meta.url), "utf8");
-const worker = readFileSync(new URL("./useWorkerRuns.ts", import.meta.url), "utf8");
+const runtime = readFileSync(new URL("./useRuntimeTelemetry.ts", import.meta.url), "utf8");
 const route = readFileSync(new URL("../app/api/ops-runtime-telemetry/route.ts", import.meta.url), "utf8");
+const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
-assert.match(ops, /pollHeartbeat/, "worker heartbeat must have an independent read clock");
-assert.match(ops, /pollCron/, "cron freshness must have an independent read clock");
-assert.match(ops, /pollAssignment/, "assignment must have an independent read clock");
-assert.match(ops, /OPS_METADATA_POLL_MS = 45_000/, "metadata reads must stay within the 60-second incident freshness contract");
-assert.equal((ops.match(/startVisibilityPoll\(\(\) => void poll(?:Cron|Assignment)\(\), OPS_METADATA_POLL_MS\)/g) ?? []).length, 2,
-  "cron and assignment must share the bounded metadata cadence");
-assert.match(ops, /startVisibilityPoll/, "ops reads must pause in hidden tabs");
-assert.doesNotMatch(ops, /setInterval/, "ops reads must not run in hidden tabs through a raw interval");
-assert.match(worker, /startVisibilityPoll/, "worker ledger reads must pause in hidden tabs");
-assert.doesNotMatch(worker, /setInterval/, "worker ledger must not use a raw background interval");
-assert.match(ops, /lastArmed\.current/, "assignment errors must preserve the last known counts");
-assert.match(ops, /fetch\(`\/api\/ops-runtime-telemetry\?scope=\$\{scope\}`/, "ops telemetry must use the authenticated server read seam");
-assert.match(worker, /fetch\("\/api\/ops-runtime-telemetry\?scope=worker"/, "worker ledger must use the authenticated server read seam");
-assert.doesNotMatch(ops, /\.from\("(?:worker_heartbeat|equity_snapshots|strategists)"\)/, "browser must not read private ops tables directly");
-assert.doesNotMatch(worker, /\.from\("worker_runs"\)/, "browser must not read the private run ledger directly");
+assert.match(runtime, /scope=summary/, "runtime telemetry must use one compact authenticated response");
+assert.equal((runtime.match(/fetch\(/g) ?? []).length, 1, "the consolidated browser hook must have one fetch seam");
+assert.match(runtime, /startVisibilityPoll/, "runtime reads must pause in hidden tabs");
+assert.doesNotMatch(runtime, /setInterval/, "runtime reads must not run in hidden tabs through a raw interval");
+assert.match(runtime, /lastArmed/, "assignment errors must preserve the last known counts");
+assert.match(runtime, /applyOpsRead/, "per-source ops read health must remain independent");
+assert.match(runtime, /applyWorkerRuns/, "worker crash attribution must share the compact state update");
+assert.doesNotMatch(runtime, /\.from\("(?:worker_heartbeat|equity_snapshots|strategists|worker_runs)"\)/, "browser must not read private ops tables directly");
+assert.match(page, /useRuntimeTelemetry\(\)/, "the page seam must subscribe once to consolidated runtime telemetry");
+assert.doesNotMatch(page, /useOpsStatus\(\)|useWorkerRuns\(\)/, "the page must not retain duplicate runtime subscriptions");
+assert.match(route, /scope === "summary"/, "the authenticated route must expose the compact summary scope");
+assert.match(route, /Promise\.all\(/, "independent server reads should run concurrently");
 assert.match(route, /requireDeskOperator\(req\)/, "runtime telemetry must authenticate the operator before service reads");
 assert.match(route, /private, no-store/, "runtime telemetry must never be shared or cached");
 
-console.log("ops-status-egress-selftest: 16/16 passed");
+console.log("ops-status-egress-selftest: consolidated authenticated telemetry passed");

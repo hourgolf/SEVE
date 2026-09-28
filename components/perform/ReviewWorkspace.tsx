@@ -35,6 +35,9 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
   useEffect(() => {
     if (destination?.section === "tape" && destination.reviewSection) setSection(destination.reviewSection);
   }, [destination?.reviewSection, destination?.section]);
+  useEffect(() => {
+    surface.setActiveReviewSection(section);
+  }, [section, surface.setActiveReviewSection]);
 
   return (
     <section className="rvw" id="perform-tape" tabIndex={-1} aria-label="Review workspace">
@@ -64,7 +67,6 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
       {section === "tape" && latestSessionModel && <SeveEvidenceContext kind="actual" scope={latestSessionModel.scope.replaceAll("_", " ")} asOf={latestSessionModel.reportDate} era="executed session" sample={`${latestSessionModel.observations} ${latestSessionModel.evidenceLabel}`} quality={latestSessionModel.limitation ? "partial" : "complete"} />}
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>
-        {(section === "tape" || section === "performance" || section === "autopsy") && <details className="rvw-system-activity"><summary><span><small>AUDITED HISTORY</small><b>Broker matched channel comparison</b></span><em>June through September · original values and unresolved gaps</em><i>▾</i></summary><HistoricalChannelEvidence channel={destination?.channel} accountId={section === "performance" ? surface.acctId : null} /></details>}
         {section === "tape" && (
           <>
             <ReviewSessionScorecard evidence={reviewEvidence.daily} />
@@ -118,6 +120,7 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
             />
           </>
         )}
+        {(section === "tape" || section === "performance" || section === "autopsy") && <details className="rvw-system-activity"><summary><span><small>AUDITED HISTORY</small><b>Broker matched channel comparison</b></span><em>June through September · original values and unresolved gaps</em><i>▾</i></summary><HistoricalChannelEvidence channel={destination?.channel} accountId={section === "performance" ? surface.acctId : null} /></details>}
       </div>
     </section>
   );

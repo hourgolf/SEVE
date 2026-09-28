@@ -326,7 +326,7 @@ function focusedReview(inputs: FleetResearchInputs, channel: string): FocusedRev
   if (channel === "qqq-thrust-trail") {
     return {
       channel,
-      decision: "EXIT CANDIDATE · KEEP COLLECTING",
+      decision: "EXIT CANDIDATE · FINITE HOLD",
       evidence: `${row.sessions} sessions show a ${row.best ?? "—"}% typical best move but ${row.final ?? "—"}% typical finish. ${candidate?.label ?? "Leading exit"} improved ${(candidate?.improvementFrequency ?? 0) * 100}% of ${candidate?.pairedOpportunities ?? 0} paired paths, with a ${candidate?.typicalBenefitPct ?? "—"}-point typical lift; its uncertainty interval still crosses zero.`,
       nextStep: "Preregister the same bounded exit challenger and collect paired paths; do not change entry or size.",
       productionChangeAuthorized: false,

@@ -32,6 +32,7 @@ const percent = (wins: number, scored: number): string =>
   scored ? `${Math.round((1000 * wins) / scored) / 10}%` : "—";
 const money = (value: number | null): string => value == null ? "—" : signedUsd(value);
 const shortSession = (session: string): string => session.slice(5).replace("-", "/");
+const freshnessLabel = (value: string): string => value === "CURRENT" ? "CURRENT REPORT" : value;
 const RECENT_SESSION_LIMIT = 4;
 const DEFAULT_CHANNEL_LIMIT = 12;
 const DEFAULT_DECISION_LIMIT = 4;
@@ -173,7 +174,7 @@ export function NativeTable({
         <span className="srw-cell-mfe">{row.typicalMfePct == null ? "—" : `${row.typicalMfePct}%`}</span>
         <span className="srw-cell-capture" title={row.captureCoverage ? `${row.captureCoverage.eligible}/${row.captureCoverage.observed} eligible retained-gain ratios; ${row.captureCoverage.excluded} missing, incoherent, non-positive peak or losing outcomes. No executable capture claim.` : "Capture coverage unavailable"}>{row.typicalCapture == null ? "—" : `${Math.round(row.typicalCapture * 100)}%`}</span>
         <span className={`srw-cell-weak ${(row.weakSessionPerContract ?? 0) >= 0 ? "pos" : "neg"}`}>{money(row.weakSessionPerContract)}</span>
-        <span className="srw-cell-through"><b>{shortSession(row.throughSession)}</b><small>{story.freshness}</small></span>
+        <span className="srw-cell-through"><b>{shortSession(row.throughSession)}</b><small>{freshnessLabel(story.freshness)}</small></span>
       </div>; })()}
       {selectedSlug === row.slug && renderDetail ? <div className="srw-inline-detail" aria-label={`${row.slug} channel evidence`}>{renderDetail(row.slug)}</div> : null}
     </Fragment>)}
@@ -199,17 +200,18 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     () => shadowResearch.sessions.find((item) => item.session === session) ?? shadowResearch.sessions[0] ?? null,
     [session, shadowResearch.sessions],
   );
-  const recentSessions = shadowResearch.sessions.slice(0, RECENT_SESSION_LIMIT);
-  const historicalSessions = shadowResearch.sessions.slice(RECENT_SESSION_LIMIT);
+  const recentSessions = useMemo(() => shadowResearch.sessions.slice(0, RECENT_SESSION_LIMIT), [shadowResearch.sessions]);
+  const historicalSessions = useMemo(() => shadowResearch.sessions.slice(RECENT_SESSION_LIMIT), [shadowResearch.sessions]);
   const historicalSession = historicalSessions.some((item) => item.session === selected?.session)
     ? selected?.session ?? ""
     : "";
-  const native = windowMode === "cumulative"
+  const native = useMemo(() => windowMode === "cumulative"
     ? evidenceLens === "all" ? shadowResearch.cumulative : shadowResearch.currentCumulative
-    : selected;
-  const rows = native ? (lane === "vb" ? native.vb : native.dark) : [];
+    : selected, [evidenceLens, selected, shadowResearch.cumulative, shadowResearch.currentCumulative, windowMode]);
+  const rows = useMemo(() => native ? (lane === "vb" ? native.vb : native.dark) : [], [lane, native]);
+  const rowsBySlug = useMemo(() => new Map(rows.map((row) => [row.slug, row])), [rows]);
   const referenceSession = selected?.session ?? shadowResearch.cumulative?.throughSession ?? "";
-  const lineupStories = sortChannelLineup(rows.flatMap((row) => {
+  const lineupStories = useMemo(() => sortChannelLineup(rows.flatMap((row) => {
     const brief = surface.decisionAtlas.bySlug[row.slug];
     if (evidenceLens !== "current" && !brief?.decisionDistribution) return [];
     return [deriveChannelLineupStory({
@@ -217,18 +219,20 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       brief: evidenceLens === "current" ? undefined : brief,
       referenceSession,
     })];
-  }));
-  const lineupBySlug = Object.fromEntries(lineupStories.map((story) => [story.channel, story]));
-  const postureBySlug = Object.fromEntries(rows.map((row): [string, ChannelPosture] => {
+  })), [evidenceLens, referenceSession, rows, surface.decisionAtlas.bySlug]);
+  const lineupBySlug = useMemo(() => Object.fromEntries(lineupStories.map((story) => [story.channel, story])), [lineupStories]);
+  const postureBySlug = useMemo(() => Object.fromEntries(rows.map((row): [string, ChannelPosture] => {
     const lifecycle = surface.allChannelWorkspace.bySlug[row.slug]?.lifecycle;
     const researchBook = surface.decisionAtlas.bySlug[row.slug]?.researchProgram?.book;
     return [row.slug, projectChannelLifecycle({ runtimeLifecycle: lifecycle, researchBook }).execution];
-  }));
-  const filteredRows = windowMode === "cumulative"
+  })), [rows, surface.allChannelWorkspace.bySlug, surface.decisionAtlas.bySlug]);
+  const filteredRows = useMemo(() => windowMode === "cumulative"
     ? rows.filter((row) => !excluded[lane].includes(row.slug))
-    : rows;
-  const totals = laneTotals(filteredRows);
-  const atlasReads = rows.map((row) => ({
+    : rows, [excluded, lane, rows, windowMode]);
+  const totals = useMemo(() => laneTotals(filteredRows), [filteredRows]);
+  const retuneBySlug = useMemo(() => new Map(shadowResearch.boundedRetunes.experiments
+    .map((experiment) => [experiment.definition.channel, experiment.evidence])), [shadowResearch.boundedRetunes.experiments]);
+  const atlasReads = useMemo(() => rows.map((row) => ({
     slug: row.slug,
     label: surface.decisionAtlas.bySlug[row.slug]
       ? dispositionForAxis(surface.decisionAtlas.bySlug[row.slug].recommendation.axis)
@@ -239,20 +243,22 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
         ? shadowResearch.dryPowderBySlug[row.slug]
         : selected ? shadowResearch.dryPowderBySession[selected.session]?.[row.slug] : undefined,
       managerEvidence: surface.managerEvidence.book?.channels[row.slug],
-      retuneEvidence: shadowResearch.boundedRetuneError ? undefined : shadowResearch.boundedRetunes.experiments.find((experiment) => experiment.definition.channel === row.slug)?.evidence,
+      retuneEvidence: shadowResearch.boundedRetuneError ? undefined : retuneBySlug.get(row.slug),
     }),
-  }));
-  const atlasWorking = atlasReads.filter((item) => item.label
-    ? /PROMOTION|SIZE|MANAGER/.test(item.label)
-    : item.read.label === "DARK TEST" || item.read.label === "TEST CAPACITY" || item.read.label === "REVIEW MANAGER");
-  const atlasReview = atlasReads.filter((item) => item.label
-    ? /TEST ENTRY|TEST EXIT|RETIREMENT/.test(item.label)
-    : item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT");
+  })), [retuneBySlug, rows, selected, shadowResearch.boundedRetuneError, shadowResearch.dryPowderBySession, shadowResearch.dryPowderBySlug, surface.decisionAtlas.bySlug, surface.managerEvidence.book?.channels, windowMode]);
+  const { atlasWorking, atlasReview } = useMemo(() => ({
+    atlasWorking: atlasReads.filter((item) => item.label
+      ? /PROMOTION|SIZE|MANAGER/.test(item.label)
+      : item.read.label === "DARK TEST" || item.read.label === "TEST CAPACITY" || item.read.label === "REVIEW MANAGER"),
+    atlasReview: atlasReads.filter((item) => item.label
+      ? /TEST ENTRY|TEST EXIT|RETIREMENT/.test(item.label)
+      : item.read.label === "REVIEW ENTRY" || item.read.label === "REVIEW EXIT"),
+  }), [atlasReads]);
   const atlasNext = [...atlasWorking, ...atlasReview][0] ?? null;
   const atlasNextSlug = atlasNext?.slug;
-  const atlasDecisionRows = [...atlasWorking, ...atlasReview, ...atlasReads.filter((item) =>
+  const atlasDecisionRows = useMemo(() => [...atlasWorking, ...atlasReview, ...atlasReads.filter((item) =>
     !atlasWorking.some((candidate) => candidate.slug === item.slug)
-    && !atlasReview.some((candidate) => candidate.slug === item.slug))];
+    && !atlasReview.some((candidate) => candidate.slug === item.slug))], [atlasReads, atlasReview, atlasWorking]);
   const filteredDecisionRows = decisionFilter === "promising" ? atlasWorking
     : decisionFilter === "review" ? atlasReview
       : decisionFilter === "collecting" ? atlasDecisionRows.filter((item) =>
@@ -266,17 +272,16 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     ? shadowResearch.dryPowderBySlug[focusSlug]
     : selected ? shadowResearch.dryPowderBySession[selected.session]?.[focusSlug] : undefined;
   const focusedPassport = surface.allChannelWorkspace.bySlug[focusSlug];
-  const focusedSummary = rows.find((row) => row.slug === focusSlug);
+  const focusedSummary = rowsBySlug.get(focusSlug);
   const focusedManagerEvidence = surface.managerEvidence.book?.channels[focusSlug];
-  const focusedRetuneEvidence = shadowResearch.boundedRetuneError ? undefined : shadowResearch.boundedRetunes.experiments
-    .find((experiment) => experiment.definition.channel === focusSlug)?.evidence;
+  const focusedRetuneEvidence = shadowResearch.boundedRetuneError ? undefined : retuneBySlug.get(focusSlug);
   const focusedExecuted = shadowResearch.currentExecutedBySlug[focusSlug];
   const focusedComparison = shadowResearch.pairedCurrent.find((item) =>
     item.executedSlug === focusSlug || item.virtualSlug === focusSlug);
   const focusedLead = focusedCurve?.points[0]?.marginalAveragePerPath ?? null;
-  const focusedBestManager = focusedManagerEvidence?.managers
+  const focusedBestManager = useMemo(() => focusedManagerEvidence?.managers
     .filter((manager) => manager.medianDeltaPct != null)
-    .sort((left, right) => (right.medianDeltaPct ?? -Infinity) - (left.medianDeltaPct ?? -Infinity))[0];
+    .sort((left, right) => (right.medianDeltaPct ?? -Infinity) - (left.medianDeltaPct ?? -Infinity))[0], [focusedManagerEvidence]);
   useEffect(() => {
     if (!rows.length) { setFocusSlug(""); return; }
     if (!rows.some((row) => row.slug === focusSlug)) setFocusSlug(atlasNextSlug ?? rows[0].slug);
@@ -307,13 +312,13 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     setShowAllDecisions(false);
   }, [lane, session, windowMode]);
   const runningSource = evidenceLens === "all" ? shadowResearch.cumulative : shadowResearch.currentCumulative;
-  const runningRows = runningSource
+  const runningRows = useMemo(() => runningSource
     ? (lane === "vb" ? runningSource.vb : runningSource.dark)
-    : [];
-  const filteredRunningRows = windowMode === "cumulative"
+    : [], [lane, runningSource]);
+  const filteredRunningRows = useMemo(() => windowMode === "cumulative"
     ? runningRows.filter((row) => !excluded[lane].includes(row.slug))
-    : runningRows;
-  const running = laneTotals(filteredRunningRows);
+    : runningRows, [excluded, lane, runningRows, windowMode]);
+  const running = useMemo(() => laneTotals(filteredRunningRows), [filteredRunningRows]);
   const nativeTitle = windowMode === "cumulative" && shadowResearch.cumulative
     ? `HISTORICAL VIRTUAL PATHS · ${shadowResearch.cumulative.fromSession} → ${shadowResearch.cumulative.throughSession}`
     : `SESSION VIRTUAL PATHS · ${selected?.session ?? "—"}`;
@@ -337,7 +342,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       asOf={selected?.session ?? shadowResearch.cumulative?.throughSession ?? "checking"}
       era="recorded reference-policy paths"
       sample={`${totals.scored} virtual paths`}
-      quality={shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "established" : totals.scored >= 5 ? "building" : "checking"}
+      quality={shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "complete" : totals.scored >= 5 ? "building" : "checking"}
       detail="Virtual opportunities are hypothetical and are never combined with account profit and loss."
     />
     <form className="srw-controls" key={`${shadowResearch.dateRange.from}:${shadowResearch.dateRange.through}`} onSubmit={(event) => {
@@ -376,7 +381,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
         </label> : null}
       </nav>
       <nav className="srw-window" aria-label="research window"><button type="button" className={windowMode === "day" ? "on" : ""} onClick={() => setWindowMode("day")}>DAY</button><button type="button" className={windowMode === "cumulative" ? "on" : ""} onClick={() => setWindowMode("cumulative")}>CUMULATIVE</button></nav>
-      <nav className="srw-lens" aria-label="evidence lens"><button type="button" className={evidenceLens === "current" ? "on" : ""} onClick={() => setEvidenceLens("current")}>CURRENT SETTINGS</button><button type="button" className={evidenceLens === "comparable" ? "on" : ""} onClick={() => setEvidenceLens("comparable")}>COMPARABLE HISTORY</button><button type="button" className={evidenceLens === "all" ? "on" : ""} onClick={() => setEvidenceLens("all")}>ALL RESEARCH</button></nav>
+      <nav className="srw-lens" aria-label="evidence lens"><button type="button" className={evidenceLens === "current" ? "on" : ""} onClick={() => setEvidenceLens("current")}>LATEST VERSIONED VIRTUAL</button><button type="button" className={evidenceLens === "comparable" ? "on" : ""} onClick={() => setEvidenceLens("comparable")}>COMPARABLE HISTORY</button><button type="button" className={evidenceLens === "all" ? "on" : ""} onClick={() => setEvidenceLens("all")}>ALL RESEARCH</button></nav>
       <nav className="srw-lanes" aria-label="research lane"><button type="button" className={lane === "vb" ? "on" : ""} onClick={() => setLane("vb")}>VB SWARM</button><button type="button" className={lane === "all" ? "on" : ""} onClick={() => setLane("all")}>ALL OBSERVE</button></nav>
       <span className={`srw-read ${shadowResearch.state}${shadowResearch.truncated ? " partial" : ""}`}>{shadowResearch.truncated ? "PARTIAL" : shadowResearch.state.toUpperCase()}</span>
     </div>
@@ -403,7 +408,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
             stories={lineupStories}
             selectedSlug={focusSlug}
             postureBySlug={postureBySlug}
-            scopeLabel={evidenceLens === "current" ? "CURRENT SETTINGS" : "COMPARABLE EVIDENCE"}
+            scopeLabel={evidenceLens === "current" ? "LATEST VERSIONED VIRTUAL" : "COMPARABLE EVIDENCE"}
             emptyMessage={evidenceLens === "current"
               ? "No current-setting best-move and finish pairs are available yet."
               : "Comparable fleet view is withheld until the nightly briefs are refreshed with same-cohort session distributions."}
@@ -413,13 +418,13 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
           }} />
           <header><span><small>WHAT DESERVES REVIEW?</small><b>{decisionFilter ? `${decisionFilter.toUpperCase()} CHANNELS` : "What is working, what is not, and what to test next"}</b></span><div><em>{showAllDecisions ? `ALL ${filteredDecisionRows.length}` : `TOP ${Math.min(DEFAULT_DECISION_LIMIT, filteredDecisionRows.length)} OF ${filteredDecisionRows.length}`}</em>{filteredDecisionRows.length > DEFAULT_DECISION_LIMIT ? <button type="button" aria-expanded={showAllDecisions} onClick={() => setShowAllDecisions((current) => !current)}>{showAllDecisions ? `SHOW TOP ${DEFAULT_DECISION_LIMIT}` : `SHOW ALL ${filteredDecisionRows.length}`}</button> : null}</div></header>
           <div className="srw-decision-list">{displayedDecisionRows.map((item) => {
-            const row = rows.find((candidate) => candidate.slug === item.slug);
             const brief = surface.decisionAtlas.bySlug[item.slug];
             const label = item.label ?? item.read.label;
             return <button type="button" key={item.slug} className={focusSlug === item.slug ? "on" : ""} aria-pressed={focusSlug === item.slug} onClick={() => { setFocusSlug(item.slug); onNavigate?.({ section: "research", channel: item.slug, axis: axisForDisposition(brief?.recommendation.axis), researchMode: "decisions", researchFilter: decisionFilter ?? undefined }); }}>
               <span><b>{item.slug}</b><small>{lineupBySlug[item.slug]?.maturity
-                ?? (evidenceLens === "current" ? "NO CURRENT VIRTUAL SAMPLE" : brief ? "BRIEF NEEDS REFRESH" : "NO COMPARABLE BRIEF")} · {lineupBySlug[item.slug]?.freshness
-                ?? (evidenceLens === "current" ? "UNKNOWN" : "COMPARABLE WITHHELD")}</small></span>
+                ?? (evidenceLens === "current" ? "NO CURRENT VIRTUAL SAMPLE" : brief ? "BRIEF NEEDS REFRESH" : "NO COMPARABLE BRIEF")} · {lineupBySlug[item.slug]
+                ? freshnessLabel(lineupBySlug[item.slug].freshness)
+                : (evidenceLens === "current" ? "UNKNOWN" : "COMPARABLE WITHHELD")}</small></span>
               <strong>{lineupBySlug[item.slug]?.group ?? label}</strong>
               <p>{lineupBySlug[item.slug]?.why ?? brief?.recommendation.summary ?? item.read.summary}</p>
             </button>;

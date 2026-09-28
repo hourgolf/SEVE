@@ -78,7 +78,7 @@ assert.match(feedHook, /positionLabel:\s*"live feed positions"/);
 assert.match(feedHook, /positionAttribution/);
 assert.doesNotMatch(feedHook, /byAcct\(sb\.from\("positions"\)/);
 
-assert.match(page, /activeRoom === "ops" \|\| activeRoom === "tape"/);
+assert.match(page, /evidenceWorkspace === "ops" \|\| evidenceWorkspace === "review"/);
 assert.match(component, /todayAttribution=\{feed\.positionAttribution\}/);
 assert.match(mobileReview, /MOBILE_PERIODS/);
 assert.match(mobileReview, /reviewEvidence\.setPnlWindow/);
@@ -91,6 +91,6 @@ assert.match(sentinelWorkspace, /scope="all paper accounts"/);
 assert.match(sentinelWorkspace, /era="next-session packet"/);
 assert.match(sentinelHook, /packet \? operatorPacketToJudge\(packet\) :/);
 
-assert.match(shell, /performSection === "research" \|\| performSection === "tape"/);
+assert.match(shell, /performSection === "research" \? "research"[\s\S]*performSection === "tape" \? "review"/);
 
 console.log("review-workspace-selftest: accuracy contract passed");

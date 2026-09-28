@@ -151,7 +151,7 @@ function EvidenceScopeSummary({ brief, summary }: { brief: ChannelDecisionBrief;
   return <section className="atlas-evidence-scopes" aria-label="Channel evidence scopes">
     <p>Coverage selector only. Headline and charts retain their explicitly named decision cohort.</p>
     <nav aria-label="Coverage only; headline and charts retain their named decision cohort">
-      <button type="button" className={lens === "current" ? "on" : ""} onClick={() => setLens("current")}>CURRENT SETTINGS</button>
+      <button type="button" className={lens === "current" ? "on" : ""} onClick={() => setLens("current")}>LATEST VERSIONED VIRTUAL</button>
       <button type="button" className={lens === "comparable" ? "on" : ""} onClick={() => setLens("comparable")}>COMPARABLE HISTORY</button>
       <button type="button" className={lens === "all" ? "on" : ""} onClick={() => setLens("all")}>ALL RESEARCH</button>
     </nav>
@@ -180,7 +180,7 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
   return <section className={`atlas-preview authoritative decision-first${compact ? " compact" : ""}`} aria-label="Decision Atlas channel evidence report">
     <header>
       <span><small>SELECTED CHANNEL</small><strong>{brief.channel}</strong><b>{story?.group ?? model.disposition}</b></span>
-      <em>{trialAlert ? `TRIAL REVIEW · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · REVIEW REQUIRED` : comparableStoryReady ? `ATLAS · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · ${story ? `${story.freshness} · ${story.maturity}` : model.evidenceState}` : `CURRENT SAMPLE · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · BRIEF NEEDS REFRESH`}</em>
+      <em>{trialAlert ? `TRIAL REVIEW · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · REVIEW REQUIRED` : comparableStoryReady ? `ATLAS · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · ${story ? `${story.freshness === "CURRENT" ? "CURRENT REPORT" : story.freshness} · ${story.maturity}` : model.evidenceState}` : `LATEST SAMPLE · THROUGH ${model.throughSession.slice(5).replace("-", "/")} · BRIEF NEEDS REFRESH`}</em>
     </header>
     <p className="atlas-diagnosis"><small>WHY</small>{story?.why ?? model.diagnosis}</p>
     {!comparableStoryReady && <p className="atlas-scope-warning"><b>CURRENT SAMPLE ONLY</b> This published brief does not contain the comparable session distribution. Refresh the nightly brief before treating this as a channel decision.</p>}

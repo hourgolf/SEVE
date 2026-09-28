@@ -7,7 +7,7 @@ import type { useAccounts } from "@/hooks/useAccounts";
 import type { OpsStatus } from "@/hooks/useOpsStatus";
 import type { usePositionMarks } from "@/hooks/usePositionMarks";
 import type { useSentinelDigest } from "@/hooks/useSentinelDigest";
-import type { useWorkerRuns } from "@/hooks/useWorkerRuns";
+import type { useRuntimeTelemetry } from "@/hooks/useRuntimeTelemetry";
 import type { Incident } from "@/lib/incident/deriveIncident";
 import type { channelPnl, liveFundPnl } from "@/lib/desk/derive";
 import type { StudioEvidence } from "@/hooks/useStudioEvidence";
@@ -25,10 +25,12 @@ import type { useChannelControlPlaneView } from "@/hooks/useChannelControlPlaneV
 import type { ChannelManagerEvidenceRead } from "@/hooks/useChannelManagerEvidence";
 import type { useDecisionAtlasReports } from "@/hooks/useDecisionAtlasReports";
 import type { StrategistState } from "@/lib/desk/types";
+import type { ReviewSection } from "@/lib/perform/reviewWorkspace";
 
 /** The five rooms of the 909 desk (909-redesign slice 4) — one page, stacked:
  *  PLAY (perform) · MIX (tune) · WRITE (compose) · TAPE (review) · OPS (tend). */
 export type Room = "play" | "mix" | "write" | "tape" | "ops";
+export type EvidenceWorkspace = "none" | "research" | "review" | "ops";
 
 export interface ReviewEvidence {
   daily: ReturnType<typeof useDailyReports>;
@@ -76,6 +78,16 @@ export interface SurfaceProps {
   /** Active room (shell tabs) + the market-band collapse state (DESK). */
   activeRoom: Room;
   setActiveRoom: Dispatch<SetStateAction<Room>>;
+  /** Visible evidence workspace and selected Review panel. These gates keep
+   * expensive historical reads dormant until their presenter is visible. */
+  evidenceWorkspace: EvidenceWorkspace;
+  setEvidenceWorkspace: Dispatch<SetStateAction<EvidenceWorkspace>>;
+  activeReviewSection: ReviewSection;
+  setActiveReviewSection: Dispatch<SetStateAction<ReviewSection>>;
+  /** A Channels inspector can request the same bounded research book without
+   * making the whole Channels fleet pay its read and render cost. */
+  researchDemand: boolean;
+  setResearchDemand: Dispatch<SetStateAction<boolean>>;
   collapsedMarket: boolean;
   setCollapsedMarket: Dispatch<SetStateAction<boolean>>;
   /** Sentinel digest (brief/scan/judge/lens) — LIFTED to the seam (P5 slice 1): PERFORM +
@@ -83,7 +95,7 @@ export interface SurfaceProps {
   sentinel: ReturnType<typeof useSentinelDigest>;
   /** Worker crash-attribution ledger — lifted to the seam for the incident banner / system-health.
    *  Instability keys on abrupt16h (NOT boots16h — most boots are graceful redeploys). */
-  workerRuns: ReturnType<typeof useWorkerRuns>;
+  workerRuns: ReturnType<typeof useRuntimeTelemetry>["workerRuns"];
   /** Ratcheted position peaks (usePositionPeaks over feed.positions × liveMarks) — lifted to the
    *  seam; the position rows in PERFORM/mobile consume this instead of re-calling the hook. */
   positionPeaks: Record<string, number>;

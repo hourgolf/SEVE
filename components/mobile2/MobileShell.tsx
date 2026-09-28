@@ -67,8 +67,9 @@ export function MobileShell(props: SurfaceProps) {
     }
   }, [destination, props.setSelected, props.setSymbol]);
 
-  // REVIEW enables the bounded page-owned research ledger. Hidden phone rooms
-  // remain quiet, while every leaf stays subscription-free.
+  // The room owns broad lifecycle. MobileReviewView maps its selected leaf to
+  // the exact page-owned evidence workspace; this parent only clears Review
+  // demand when that room is no longer visible.
   useEffect(() => {
     // Keep the shared shell mode aligned with the phone-native room. Page-owned
     // Studio hooks use this mode as their subscription gate.
@@ -76,7 +77,10 @@ export function MobileShell(props: SurfaceProps) {
     props.setActiveRoom(
       room === "studio" ? "mix" : room === "review" ? "tape" : room === "ops" ? "ops" : "play",
     );
-  }, [room, props.setActiveRoom, setMode]);
+    if (room !== "review") props.setEvidenceWorkspace(room === "ops" ? "ops" : "none");
+    props.setResearchDemand(room === "studio" && Boolean(openSlug));
+    return () => props.setResearchDemand(false);
+  }, [openSlug, props.setActiveRoom, props.setEvidenceWorkspace, props.setResearchDemand, room, setMode]);
 
   const { desk } = view;
   const channels = accountChannels;

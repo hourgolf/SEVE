@@ -10,7 +10,7 @@ export interface DecisionAtlasPreviewMetric {
 }
 
 export interface DecisionAtlasPreview {
-  label: "DARK TEST" | "REVIEW MANAGER" | "TEST CAPACITY" | "REVIEW EXIT" | "REVIEW ENTRY" | "KEEP COLLECTING";
+  label: "DARK TEST" | "REVIEW MANAGER" | "TEST CAPACITY" | "REVIEW EXIT" | "REVIEW ENTRY" | "FINITE HOLD";
   tone: "positive" | "warning" | "neutral";
   summary: string;
   metrics: DecisionAtlasPreviewMetric[];
@@ -35,7 +35,7 @@ export function buildDecisionAtlasPreview(input: {
     && item.terminalPaths >= 10 && item.sessions >= 5
     && item.deltaConfidence95.lower != null && item.deltaConfidence95.lower > 0) ?? null;
   const experiment = input.summary ? boundedRetuneForChannel(input.summary.slug) : null;
-  let label: DecisionAtlasPreview["label"] = "KEEP COLLECTING";
+  let label: DecisionAtlasPreview["label"] = "FINITE HOLD";
   let tone: DecisionAtlasPreview["tone"] = "neutral";
   let summary = "Virtual evidence is not settled enough to prefer a change.";
   if (experiment) {

@@ -61,9 +61,36 @@ const ledCompact = (value: number | null): { value: string; digits: number; unit
   return { value: display, digits: display.replace(".", "").length, unit };
 };
 
+function RuntimeHealthButton({ incident, workerRuns, readiness, onOpen }: {
+  incident: SurfaceProps["incident"];
+  workerRuns: SurfaceProps["workerRuns"];
+  readiness: SurfaceProps["opsReadiness"];
+  onOpen: () => void;
+}) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const processTelemetry = deriveProcessTelemetry(workerRuns, nowMs);
+  const brokerTelemetry = deriveBrokerTelemetry(readiness.evidence.find((item) => item.id === "reconciliation"));
+  const incidentOn = incident.severity !== "normal";
+  const railTone = incidentOn
+    ? incident.severity
+    : processTelemetry.tone === "red" || brokerTelemetry.tone === "red"
+      ? "critical"
+      : processTelemetry.tone === "amber" || processTelemetry.tone === "dim" || brokerTelemetry.tone === "amber" || brokerTelemetry.tone === "dim"
+        ? "checking"
+        : "normal";
+  const railLabel = incidentOn ? incident.title : railTone === "normal" ? "SYSTEM NOMINAL" : "SYSTEM CHECK";
+  const railDetail = `WORKER ${processTelemetry.label} · BROKER ${brokerTelemetry.label} · ${incident.session.replaceAll("_", " ")}`;
+  return <button type="button" className={`ws-health ws-health--${railTone}`} title={incidentOn ? incident.facts.join(" · ") : railDetail} aria-label={`${railLabel}. ${railDetail}.`} onClick={onOpen}>
+    <i aria-hidden="true" /><span><b>{railLabel}</b><small>{railDetail}</small></span>
+  </button>;
+}
+
 export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
   const { mode, setMode, skin, toggleSkin, density } = useShell();
-  const [now, setNow] = useState<Date | null>(null);
   const [performSection, setPerformSection] = useState<PerformSection>("overview");
   const [authOpen, setAuthOpen] = useState(false);
   const { destination, navigate: navigateDestination } = useWorkspaceDestination("overview");
@@ -76,13 +103,6 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
     setMode("perform");
     setPerformSection(destination.section);
   }, [destination.section, setMode]);
-
-  useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, []);
 
   // The 909 shell owns visual workspace navigation, while remote subscriptions
   // remain page-owned. Keep the existing seam room signal aligned with what is
@@ -99,25 +119,26 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
     );
   }, [mode, performSection, surface.setActiveRoom]);
 
-  const { view, feed, liveFund, livePnl, accounts, acctId, setAcctId, incident, workerRuns, write } = surface;
+  useEffect(() => {
+    surface.setEvidenceWorkspace(
+      mode === "studio" ? "none"
+        : performSection === "research" ? "research"
+          : performSection === "tape" ? "review"
+            : performSection === "ops" ? "ops"
+              : "none",
+    );
+    if (mode === "perform" && performSection === "tape") {
+      surface.setActiveReviewSection(destination.reviewSection ?? "tape");
+    }
+  }, [destination.reviewSection, mode, performSection, surface.setActiveReviewSection, surface.setEvidenceWorkspace]);
+
+  const { view, feed, liveFund, livePnl, accounts, acctId, setAcctId, incident, write } = surface;
   const fund = view.desk.fund;
   const exposure = useMemo(() => Object.values(livePnl).reduce((sum, pnl) => sum + pnl.exposure, 0), [livePnl]);
   const deskCapacity = liveFund.nav == null || !["ok", "recovered"].includes(feed.positionAttribution.state) ? null : Math.max(0, liveFund.nav - exposure);
   const riskUsed = liveFund.nav != null && liveFund.nav > 0 && ["ok", "recovered"].includes(feed.positionAttribution.state) ? (exposure / liveFund.nav) * 100 : 0;
   const startOfDayNav = liveFund.nav == null || liveFund.dayPnl == null ? null : liveFund.nav - liveFund.dayPnl;
   const dayPnlPct = startOfDayNav != null && startOfDayNav > 0 && liveFund.dayPnl != null ? (liveFund.dayPnl / startOfDayNav) * 100 : null;
-  const processTelemetry = deriveProcessTelemetry(workerRuns, now?.getTime() ?? 0);
-  const brokerTelemetry = deriveBrokerTelemetry(surface.opsReadiness.evidence.find((item) => item.id === "reconciliation"));
-  const incidentOn = incident.severity !== "normal";
-  const railTone = incidentOn
-    ? incident.severity
-    : processTelemetry.tone === "red" || brokerTelemetry.tone === "red"
-      ? "critical"
-      : processTelemetry.tone === "amber" || processTelemetry.tone === "dim" || brokerTelemetry.tone === "amber" || brokerTelemetry.tone === "dim"
-        ? "checking"
-        : "normal";
-  const railLabel = incidentOn ? incident.title : railTone === "normal" ? "SYSTEM NOMINAL" : "SYSTEM CHECK";
-  const railDetail = `WORKER ${processTelemetry.label} · BROKER ${brokerTelemetry.label} · ${incident.session.replaceAll("_", " ")}`;
   const navLed = ledCompact(liveFund.nav);
   const dayLed = liveFund.dayPnl == null ? { value: "—", digits: 1, unit: "" } : ledCompact(liveFund.dayPnl);
   const dayPctLed = dayPnlPct == null
@@ -196,9 +217,7 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
         <div className="ws-metric ws-metric--led ws-metric--capacity"><small>DESK CAPACITY</small><div className="ws-led-readout neutral" role="img" aria-label={`Desk capacity ${compactUsd(deskCapacity)}`}><span aria-hidden="true">$</span><LedDisplay value={capacityLed.value} digits={capacityLed.digits} color="var(--ws-led-neutral)" unit={capacityLed.unit} /></div></div>
         <div className="ws-metric ws-metric--led ws-metric--positions"><small>OPEN POSITIONS</small><div className="ws-led-readout neutral" role="img" aria-label={positionAttributionBlocked ? "Open positions unavailable while account attribution is checking or unavailable" : `${feed.positions.length} open positions`}>{positionAttributionBlocked ? <span className="ws-led-unknown">—</span> : <LedDisplay value={positionsLed.value} digits={Math.max(2, positionsLed.digits)} color="var(--ws-led-neutral)" />}</div></div>
         <div className="ws-metric ws-metric--led ws-metric--risk"><small>RISK USED</small><div className="ws-led-readout neutral" role="img" aria-label={positionAttributionBlocked ? "Risk used unavailable while account attribution is checking or unavailable" : `Risk used ${riskLedValue} percent`}>{positionAttributionBlocked ? <span className="ws-led-unknown">—</span> : <LedDisplay value={riskLedValue} digits={riskLedValue.replace(".", "").length} color="var(--ws-led-neutral)" unit="%" />}</div></div>
-        <button type="button" className={`ws-health ws-health--${railTone}`} title={incidentOn ? incident.facts.join(" · ") : railDetail} aria-label={`${railLabel}. ${railDetail}.`} onClick={() => { setMode("perform"); setPerformSection("overview"); }}>
-          <i aria-hidden="true" /><span><b>{railLabel}</b><small>{railDetail}</small></span>
-        </button>
+        <RuntimeHealthButton incident={incident} workerRuns={surface.workerRuns} readiness={surface.opsReadiness} onOpen={() => { setMode("perform"); setPerformSection("overview"); navigateDestination({ section: "overview" }); }} />
         <div className="ws-rail-actions">
           <details className="ws-utility-menu">
             <summary aria-label="Open workstation utilities" title="workstation utilities">•••</summary>

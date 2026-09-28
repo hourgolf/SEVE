@@ -19,10 +19,11 @@ export function useChannelManagerEvidence(enabled: boolean): ChannelManagerEvide
   const [state, setState] = useState<ChannelManagerEvidenceRead>(EMPTY);
 
   useEffect(() => {
-    if (!enabled || !session || !operator) {
+    if (!session || !operator) {
       setState(EMPTY);
       return;
     }
+    if (!enabled) return;
     let alive = true;
     const poll = async () => {
       setState((current) => ({ ...current, state: current.book ? current.state : "loading", error: "" }));

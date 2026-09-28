@@ -41,6 +41,27 @@ export const mobileReviewSections = (mode: MobileReviewMode): readonly MobileRev
 export const mobileReviewHas = (mode: MobileReviewMode, section: MobileReviewSection): boolean =>
   SECTIONS[mode].includes(section);
 
+export interface MobileReviewEvidenceDemand {
+  workspace: "none" | "research" | "review";
+  reviewSection: "tape" | "performance";
+}
+
+/** Map the visible phone review panel to the page-owned evidence hooks it
+ * actually renders. Historical account results begin only after a non-Today
+ * window is selected; Atlas owns the bounded research book; the agent room,
+ * trade proof, and next-open brief use already-loaded seam data. */
+export function mobileReviewEvidenceDemand(
+  mode: MobileReviewMode,
+  pnlWindow: "today" | "week" | "month" | "all",
+): MobileReviewEvidenceDemand {
+  if (mode === "shadow") return { workspace: "research", reviewSection: "tape" };
+  if (mode === "session") return {
+    workspace: "review",
+    reviewSection: pnlWindow === "today" ? "tape" : "performance",
+  };
+  return { workspace: "none", reviewSection: "tape" };
+}
+
 /** Stats are already scoped by immutable execution account. Today's roster is
  * display metadata only: moved/retired channels still belong in account history. */
 export function mobileAccountResultRows(

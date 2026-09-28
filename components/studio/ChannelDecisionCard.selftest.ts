@@ -16,7 +16,7 @@ assert.match(card, /Decision evidence layers/);
 assert.match(card, /GOVERNED ACTIVATION LAYER/);
 assert.match(card, /DRAFT → VALIDATE\/PREVIEW → WORKER ACK → EXPLICIT NEXT-SAFE-ENTRY RECEIPT/);
 assert.doesNotMatch(card, /\bfetch\s*\(/);
-assert.match(card, /DRAFT PAUSE · KEEP COLLECTING/);
+assert.match(card, /DRAFT PAUSE · EVIDENCE STAYS ON/);
 assert.match(card, /DRAFT ENTRY CAP/);
 assert.match(card, /createEntryCapDraft/);
 assert.match(card, /APPLY NEXT SAFE ENTRY/);

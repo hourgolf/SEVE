@@ -25,7 +25,7 @@ export interface ChannelBehaviorIdentity {
 }
 
 export interface EvidenceScopeCount {
-  label: "CURRENT SETTINGS" | "COMPARABLE EVIDENCE" | "ALL CHANNEL HISTORY";
+  label: "LATEST VERSIONED VIRTUAL" | "COMPARABLE EVIDENCE" | "ALL CHANNEL HISTORY";
   sessions: number;
   opportunities: number;
   relation: "exact current" | "axis compatible" | "widest single source";
@@ -146,7 +146,7 @@ export function deriveChannelEvidenceScopes(
   const comparableSource = sources.find((source) => source.label.toLowerCase().replaceAll(" ", "_") === brief.evidence.decisionLayer)
     ?? null;
   const current: EvidenceScopeCount = {
-    label: "CURRENT SETTINGS",
+    label: "LATEST VERSIONED VIRTUAL",
     sessions: currentSessions,
     opportunities: currentOpportunities,
     relation: "exact current",

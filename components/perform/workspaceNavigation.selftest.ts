@@ -24,7 +24,7 @@ assert.match(pulse, /researchFilter: "collecting"/);
 assert.match(research, /focusAxis=/);
 assert.match(review, /rvw-channel-context/);
 assert.match(ops, /data-system-check/);
-assert.match(mobile, /roomFor\(destination\)/);
+assert.match(mobile, /mobileRoomForDestination\(destination\)/);
 assert.match(mobile, /m2-context-back/);
 
 console.log("workspace navigation surface selftest passed");

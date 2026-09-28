@@ -20,7 +20,7 @@ assert.match(card, /PROSPECTIVE TEST/);
 assert.match(card, /SELECTED CHANNEL/);
 assert.match(card, /\{brief\.channel\}/,
   "the paired report must keep the selected channel visible after fleet-map navigation");
-assert.match(card, /CURRENT SETTINGS/);
+assert.match(card, /LATEST VERSIONED VIRTUAL/);
 assert.match(card, /COMPARABLE HISTORY/);
 assert.match(card, /ALL RESEARCH/);
 assert.match(card, /WHY COUNTS DIFFER/);
