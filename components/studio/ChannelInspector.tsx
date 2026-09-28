@@ -29,10 +29,11 @@ import type { ChannelManagerEvidence } from "@/lib/research/channelManagerEviden
 import type { ShadowResearch } from "@/hooks/useShadowResearch";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
+import type { DecisionAtlasReportsRead } from "@/hooks/useDecisionAtlasReports";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
-export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, decisionBrief, researchEvidence, decisionAxis, onClose }: {
+export function ChannelInspector({ strategist, summary, passport, write, controlPlane, dryPowder, shadowSummary, managerEvidence, decisionBrief, decisionAtlasReports, researchEvidence, decisionAxis, onClose }: {
   strategist: StrategistState | undefined;
   summary?: StudioChannelRow;
   passport?: ChannelPassport;
@@ -42,6 +43,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   shadowSummary?: ShadowChannelSummary;
   managerEvidence?: ChannelManagerEvidence;
   decisionBrief?: ChannelDecisionBrief;
+  decisionAtlasReports?: DecisionAtlasReportsRead;
   researchEvidence?: ShadowResearch;
   decisionAxis?: EvidenceAxis;
   onClose?: () => void;
@@ -67,6 +69,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [passportOpen, setPassportOpen] = useState(false);
+  const [historicalEvidenceSlug, setHistoricalEvidenceSlug] = useState<string | null>(null);
 
   if (!strategist) return <aside className="inspector mixer-inspector collapsed" aria-label="Channel inspector; select a fleet row to open">
     <div className="inspector-rail" aria-hidden="true"><span>02</span><b>INSPECTOR</b><i>SELECT CHANNEL</i></div>
@@ -150,12 +153,12 @@ export function ChannelInspector({ strategist, summary, passport, write, control
         </div>
         <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
         <ExecutableShadowStatus slug={slug} />
-        <DecisionAtlasPreviewCard brief={decisionBrief} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
-        <details className="channel-disclosure"><summary><span><small>REVIEW</small><b>HISTORICAL EXECUTED ECONOMICS</b></span><i>▾</i></summary><HistoricalChannelEvidence channel={slug} /></details>
+        <DecisionAtlasPreviewCard brief={decisionBrief} reports={decisionAtlasReports} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
+        <details className="channel-disclosure" onToggle={(event) => { if (event.currentTarget.open) setHistoricalEvidenceSlug(slug); }}><summary><span><small>REVIEW</small><b>HISTORICAL EXECUTED ECONOMICS</b></span><i>▾</i></summary>{historicalEvidenceSlug === slug ? <HistoricalChannelEvidence channel={slug} /> : null}</details>
         <div className="mixer-deck">
         {passport?.effective && <details className="channel-disclosure operating-context">
           <summary><span><small>LIVE</small><b>OPERATING CONTEXT</b></span><em>WHY THIS CHANNEL IS IN ITS CURRENT MODE</em><i>▾</i></summary>
-          <div><ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} decisionBrief={decisionBrief} compact /></div>
+          <div><ChannelDecisionCard effective={passport.effective} controlPlane={controlPlane} decisionBrief={decisionBrief} decisionAtlasReports={decisionAtlasReports} compact /></div>
         </details>}
         <details className="channel-disclosure">
           <summary><span><small>ANALYZE</small><b>ENTRY + EXIT EVIDENCE</b></span><em>DRY POWDER · 8 MANAGERS</em><i>▾</i></summary>

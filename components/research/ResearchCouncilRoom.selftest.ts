@@ -12,5 +12,7 @@ assert.match(source, /agent\.voice/);
 assert.match(source, /PUSHING BACK ON/);
 assert.match(source, /rc-replying/);
 assert.match(source, /READ ONLY/);
+assert.match(source, /!truth\.publishedDecisionUsable/);
+assert.match(source, /PUBLISHED RESEARCH ROOM WITHHELD/);
 assert.doesNotMatch(source, /upsert\(|insert\(|update\(|delete\(/);
 console.log("ResearchCouncilRoom.selftest: PASS");

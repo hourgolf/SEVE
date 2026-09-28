@@ -9,6 +9,8 @@ import { useChannelActivationControl } from "@/hooks/useChannelActivationControl
 import { useChannelCollectionControl } from "@/hooks/useChannelCollectionControl";
 import { signedUsd, usd0 } from "@/lib/format";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
+import type { DecisionAtlasReportsRead } from "@/hooks/useDecisionAtlasReports";
+import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
 
 const short = (value: string | null): string => value ? `${value.replace(/^sha256:/, "").slice(0, 10)}…` : "—";
 const comparisonLabel: Record<DecisionEvidenceLayer["comparability"], string> = {
@@ -35,12 +37,19 @@ function EvidenceLayer({ layer }: { layer: DecisionEvidenceLayer }) {
   );
 }
 
-export function ChannelDecisionCard({ effective, controlPlane, decisionBrief, compact = false }: {
+export function ChannelDecisionCard({ effective, controlPlane, decisionBrief, decisionAtlasReports, compact = false }: {
   effective: EffectiveChannelState;
   controlPlane?: ChannelControlPlaneViewRead;
   decisionBrief?: ChannelDecisionBrief | null;
+  decisionAtlasReports?: DecisionAtlasReportsRead | null;
   compact?: boolean;
 }) {
+  const atlasTruth = deriveAtlasReportTruth({ state: decisionAtlasReports?.state ?? "unavailable",
+    freshness: decisionAtlasReports?.freshness ?? "unknown",
+    reportThroughSession: decisionAtlasReports?.throughSession ?? null,
+    evidenceThroughSession: decisionAtlasReports?.evidenceThroughSession ?? null,
+    publicationState: decisionAtlasReports?.publication?.state });
+  const currentDecisionBrief = atlasTruth.publishedDecisionUsable ? decisionBrief : null;
   const todayEt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
   const packet = controlPlane?.decisionPacket ?? null;
   const packetReview = packet?.reviews[effective.slug]
@@ -74,8 +83,8 @@ export function ChannelDecisionCard({ effective, controlPlane, decisionBrief, co
       : activeSpec
         ? "EXISTING ROOT · DRAFT READY"
         : "PROMOTION PREREGISTRATION REQUIRED";
-  const weakLaterEntry = decisionBrief?.recommendation.axis === "entry"
-    ? decisionBrief.entryFrequency.rows.find((row) => row.entryNumber > 1
+  const weakLaterEntry = currentDecisionBrief?.recommendation.axis === "entry"
+    ? currentDecisionBrief.entryFrequency.rows.find((row) => row.entryNumber > 1
       && row.sessions >= 5
       && row.scored >= 5
       && (row.typicalResultPerContractUsd ?? 1) <= 0) ?? null
@@ -135,7 +144,7 @@ export function ChannelDecisionCard({ effective, controlPlane, decisionBrief, co
               disabled={!activation.signedIn || activation.busy || controlPlane?.view?.state !== "receipt-bound"}
               onClick={() => void activation.createEntryCapDraft(
                 proposedEntryCap,
-                [`decision-atlas:${decisionBrief?.throughSession}:${effective.slug}:entry-frequency`],
+                [`decision-atlas:${currentDecisionBrief?.throughSession}:${effective.slug}:entry-frequency`],
               )}
             >
               DRAFT ENTRY CAP {activeSpec.maxEntriesPerSession}→{proposedEntryCap}

@@ -151,7 +151,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
                   {row.pnl.dayPnl !== 0 && <small className={pnlClass} title="Current-session channel attribution from immutable routed positions; not account NAV.">{signedUsd(row.pnl.dayPnl)}</small>}
                 </button>
                 <button type="button" className="fleet-next fleet-cell-link" role="cell" onClick={() => onNextReview?.(row.channel.slug)} title={brief?.recommendation.summary ?? "Review after more independent evidence."}>
-                  <b>{decisionSummary?.disposition ?? decisionLabelForDisplay(brief?.recommendation.label)}</b>
+                  <b>{decisionSummary?.disposition ?? (brief ? decisionLabelForDisplay(brief.recommendation.label) : "RESEARCH ONLY")}</b>
                 </button>
               </div>
             );

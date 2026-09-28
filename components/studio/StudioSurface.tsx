@@ -9,6 +9,7 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort } from "@/lib/studio/deriveStudioView";
 import type { StudioScope } from "@/components/studio/StudioFleet";
 import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
 
 // =============================================================================
 // STUDIO surface (P5 slice 4) — exception-first fleet tuning. The primary pane
@@ -25,6 +26,10 @@ import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/works
 export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, acctId, accountChannels, symbol, channelWorkspace, allChannelWorkspace, channelControlPlane, shadowResearch, managerEvidence, decisionAtlas, setResearchDemand, destination, onNavigate }: SurfaceProps & { destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   void symbol;
   const { desk } = view;
+  const atlasTruth = deriveAtlasReportTruth({ state: decisionAtlas.state, freshness: decisionAtlas.freshness,
+    reportThroughSession: decisionAtlas.throughSession, evidenceThroughSession: decisionAtlas.evidenceThroughSession,
+    publicationState: decisionAtlas.publication?.state });
+  const currentDecisions = atlasTruth.publishedDecisionUsable ? decisionAtlas.bySlug : {};
 
   const channels = accountChannels;
 
@@ -73,17 +78,17 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, 
         globalRoots={allChannelWorkspace.roots}
         globalDark={allChannelWorkspace.dark}
         controlPlane={channelControlPlane}
-        decisions={decisionAtlas.bySlug}
+        decisions={currentDecisions}
         accountName={accounts.find((account) => account.id === acctId)?.name ?? "selected paper account"}
         evidenceAsOf={evidenceAsOf}
         onScope={setScope}
         onSort={setSort}
         onSelect={(slug) => setSelSlug((current) => current === slug ? null : slug)}
         onCurrentSession={(slug) => onNavigate?.({ section: "tape", channel: slug, reviewSection: "tape", session: decisionAtlas.throughSession ?? undefined })}
-        onNextReview={(slug) => onNavigate?.({ section: "research", channel: slug, axis: axisForDisposition(decisionAtlas.bySlug[slug]?.recommendation.axis), researchMode: "decisions" })}
+        onNextReview={(slug) => onNavigate?.({ section: "research", channel: slug, axis: axisForDisposition(currentDecisions[slug]?.recommendation.axis), researchMode: "decisions" })}
       />
 
-      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} controlPlane={channelControlPlane} dryPowder={selectedRow ? shadowResearch.dryPowderBySlug[selectedRow.channel.slug] : undefined} shadowSummary={selectedRow ? shadowResearch.currentCumulative?.dark.find((item) => item.slug === selectedRow.channel.slug) : undefined} managerEvidence={selectedRow ? managerEvidence.book?.channels[selectedRow.channel.slug] : undefined} decisionBrief={selectedRow ? decisionAtlas.bySlug[selectedRow.channel.slug] : undefined} researchEvidence={shadowResearch} decisionAxis={destination?.channel === selectedRow?.channel.slug ? destination?.axis : undefined} onClose={() => setSelSlug(null)} />
+      <ChannelInspector strategist={selectedRow?.channel} summary={selectedRow} passport={selectedRow ? channelWorkspace.bySlug[selectedRow.channel.slug] : undefined} write={write} controlPlane={channelControlPlane} dryPowder={selectedRow ? shadowResearch.dryPowderBySlug[selectedRow.channel.slug] : undefined} shadowSummary={selectedRow ? shadowResearch.currentCumulative?.dark.find((item) => item.slug === selectedRow.channel.slug) : undefined} managerEvidence={selectedRow ? managerEvidence.book?.channels[selectedRow.channel.slug] : undefined} decisionBrief={selectedRow ? decisionAtlas.bySlug[selectedRow.channel.slug] : undefined} decisionAtlasReports={decisionAtlas} researchEvidence={shadowResearch} decisionAxis={destination?.channel === selectedRow?.channel.slug ? destination?.axis : undefined} onClose={() => setSelSlug(null)} />
 
       <StudioBand
         fund={desk.fund}

@@ -76,7 +76,7 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
       </section>
       <section className="decision-home-card attention"><header><small>02</small><b>WHAT NEEDS ATTENTION?</b></header>
         {attention.length ? <ol>{attention.map((item) => <li key={item.label}><button type="button" onClick={() => onNavigate(item.destination)}>{item.label}<span aria-hidden="true">→</span></button></li>)}</ol> : <p className="decision-home-clear">No urgent operator action. Continue collecting channel evidence.</p>}
-        <button type="button" onClick={() => onNavigate(fleet.lead ? { section: "research", channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" } : { section: "sentinel" })}>{fleet.lead ? "OPEN CHANNEL DECISIONS" : "OPEN NEXT-SESSION BRIEF"}</button>
+        <button type="button" onClick={() => onNavigate(researchVerified && fleet.lead ? { section: "research", channel: fleet.lead.channel, axis: axisForDisposition(fleet.lead.disposition), researchMode: "decisions" } : { section: "sentinel" })}>{researchVerified && fleet.lead ? "OPEN CHANNEL DECISIONS" : "OPEN NEXT-SESSION BRIEF"}</button>
       </section>
       <section className="decision-home-card next"><header><small>03</small><b>WHAT SHOULD I DO NEXT?</b></header>
         <strong>{!researchVerified ? "Verify the latest close" : fleet.lead ? `Review ${fleet.lead.channel}` : "Keep the current paper configuration"}</strong>

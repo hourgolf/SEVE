@@ -6,5 +6,5 @@ export function isFixedEntryProtocolObservation(row: { reason?: unknown; payload
   return (payload !== null && typeof payload === "object" && !Array.isArray(payload)
     && (Object.prototype.hasOwnProperty.call(payload, "fixed_entry_protocol")
       || Object.prototype.hasOwnProperty.call(payload, "fixed_entry_admission")))
-    || (typeof row.reason === "string" && row.reason.startsWith("fixed_entry_protocol:"));
+    || (typeof row.reason === "string" && /^(fixed_entry_protocol|fixed_entry_admission):/.test(row.reason));
 }

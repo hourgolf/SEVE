@@ -8,6 +8,8 @@ export interface AtlasReadCoverage {
   uniqueRows: number;
 }
 
+const COUNT_TIMEOUT_MS = 60_000;
+
 export function atlasEvidenceWindow(cohortFrom: string, throughSession: string) {
   const start = new Date(cohortFrom).toISOString();
   const end = etDayRangeUtc(throughSession).end;
@@ -31,12 +33,31 @@ export async function readAtlasEvidenceRows<T>(input: {
     throw new Error(`${input.label}: invalid page size`);
   }
   const count = async (): Promise<number> => {
-    const result = await input.query(true).abortSignal(AbortSignal.timeout(15_000));
-    if (result.error) throw new Error(`${input.label}: count failed — ${result.error.message}`);
-    if (!Number.isSafeInteger(result.count) || result.count < 0) {
-      throw new Error(`${input.label}: exact source count is unavailable`);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const result = await input.query(true).abortSignal(AbortSignal.timeout(COUNT_TIMEOUT_MS));
+        if (result.error) {
+          const detail = String(result.error.message ?? "");
+          if (attempt < 2 && (!detail || /timeout|canceling statement/i.test(detail))) {
+            await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+            continue;
+          }
+          throw new Error(`${input.label}: count failed — ${detail}`);
+        }
+        if (!Number.isSafeInteger(result.count) || result.count < 0) {
+          throw new Error(`${input.label}: exact source count is unavailable`);
+        }
+        return result.count;
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        if (attempt < 2 && /abort|timeout|canceling statement/i.test(detail)) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+          continue;
+        }
+        throw error;
+      }
     }
-    return result.count;
+    throw new Error(`${input.label}: exact source count failed after 3 attempts`);
   };
   const expectedRows = await count();
   // Include a terminal probe when the cohort is an exact page multiple, and

@@ -19,8 +19,10 @@ assert.doesNotMatch(card, /\bfetch\s*\(/);
 assert.match(card, /DRAFT PAUSE · EVIDENCE STAYS ON/);
 assert.match(card, /DRAFT ENTRY CAP/);
 assert.match(card, /createEntryCapDraft/);
+assert.match(card, /atlasTruth\.publishedDecisionUsable \? decisionBrief : null/,
+  "stale or unverified Atlas evidence must not seed an entry-cap draft");
 assert.match(card, /APPLY NEXT SAFE ENTRY/);
 assert.match(inspector, /<ChannelDecisionCard effective=\{passport\.effective\} controlPlane=\{controlPlane\} decisionBrief=\{decisionBrief\}/);
-assert.match(mobile, /<ChannelDecisionCard effective=\{passport\.effective\} controlPlane=\{controlPlane\} decisionBrief=\{decisionBrief\} compact/);
+assert.match(mobile, /<ChannelDecisionCard effective=\{passport\.effective\} controlPlane=\{controlPlane\} decisionBrief=\{decisionBrief\} decisionAtlasReports=\{decisionAtlasReports\} compact/);
 
 console.log("channel-decision-card-selftest: read-only desktop + mobile integration passed");

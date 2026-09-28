@@ -29,7 +29,14 @@ export interface AtlasSignalRow {
   signal_type: string;
   underlying_price: number | string | null;
   direction: string | null;
-  rationale: Record<string, unknown> | null;
+  /** Live snapshots retain full rationale only for scoring-relevant signal IDs.
+   * Older projected snapshots remain replay-compatible through these fields. */
+  rationale?: Record<string, unknown> | null;
+  rationale_opportunity_id?: string | null;
+  rationale_ask?: number | string | null;
+  rationale_occ?: string | null;
+  rationale_bounded_retune_experiment?: unknown;
+  rationale_virtual_path_policy?: unknown;
   acted_on: boolean;
   blocked_reason: string | null;
   created_at: string;
@@ -58,7 +65,15 @@ export interface AtlasExecutionRow {
   broker_status: string | null;
   filled_qty: number | string | null;
   fill_price: number | string | null;
-  payload: Record<string, unknown> | null;
+  /** Older frozen snapshots can carry the complete payload or its projected
+   * lineage markers and remain replay-compatible. Live Atlas collection uses
+   * durable opportunity/position columns and reason-coded protocol rows. */
+  payload?: Record<string, unknown> | null;
+  payload_signal_id?: string | null;
+  payload_signal_id_camel?: string | null;
+  payload_signal_nested_id?: string | null;
+  payload_fixed_entry_protocol?: unknown;
+  payload_fixed_entry_admission?: unknown;
   configuration_epoch_id: string | null;
   source_bar_at?: string | null;
   client_order_id?: string | null;
@@ -104,13 +119,26 @@ export interface AtlasVirtualTradeRow {
   giveback_pct: number | string | null;
 }
 
+function signalRationale(row: AtlasSignalRow): Record<string, unknown> {
+  const rationale = row.rationale && typeof row.rationale === "object" && !Array.isArray(row.rationale)
+    ? { ...row.rationale } : {};
+  if (row.rationale_opportunity_id != null) rationale.opportunity_id = row.rationale_opportunity_id;
+  if (row.rationale_ask != null) rationale.ask = row.rationale_ask;
+  if (row.rationale_occ != null) rationale.occ = row.rationale_occ;
+  if (row.rationale_bounded_retune_experiment != null) {
+    rationale.bounded_retune_experiment = row.rationale_bounded_retune_experiment;
+  }
+  if (row.rationale_virtual_path_policy != null) rationale.virtual_path_policy = row.rationale_virtual_path_policy;
+  return rationale;
+}
+
 /** Policy agreement is not a proof of executable fills or the full native manager. */
 export function virtualPolicyIdentity(signal: AtlasSignalRow, virtual?: AtlasVirtualTradeRow): {
   configurationEra: string; managerVersion: string | null; verified: boolean;
 } {
   if (virtual) {
     try {
-      const { columns, policy } = deriveVirtualTradeProvenance(signal);
+      const { columns, policy } = deriveVirtualTradeProvenance({ ...signal, rationale: signalRationale(signal) });
       const matches = Object.entries(columns).every(([key, value]) =>
         virtual[key as keyof AtlasVirtualTradeRow] === value)
         && virtual.stop_pct != null && Number(virtual.stop_pct) === policy.scoredStopPct
@@ -204,9 +232,18 @@ const object = (value: unknown): Record<string, unknown> | null => value && type
   ? value as Record<string, unknown> : null;
 
 function payloadSignalId(row: AtlasExecutionRow): string | null {
+  const projected = text(row.payload_signal_id) ?? text(row.payload_signal_id_camel)
+    ?? text(row.payload_signal_nested_id);
+  if (projected) return projected;
   const payload = object(row.payload);
   return text(payload?.signal_id) ?? text(payload?.signalId)
     ?? text(object(payload?.signal)?.id);
+}
+
+function isAtlasFixedEntryProtocolObservation(row: AtlasExecutionRow): boolean {
+  return row.payload_fixed_entry_protocol != null
+    || row.payload_fixed_entry_admission != null
+    || isFixedEntryProtocolObservation(row);
 }
 
 function tradeLogicalId(trade: LogicalTrade): string {
@@ -533,7 +570,7 @@ export function adaptDecisionAtlasSnapshot(input: {
   const logicalBySignal = new Map<string, string>();
   const executionByLogical = new Map<string, AtlasExecutionRow[]>();
   for (const row of snapshot.executionObservations) {
-    if (isFixedEntryProtocolObservation(row)) continue;
+    if (isAtlasFixedEntryProtocolObservation(row)) continue;
     const trade = row.position_id ? tradeByPosition.get(row.position_id) : row.opportunity_id
       ? tradeByOpportunity.get(row.opportunity_id) : undefined;
     const signalId = payloadSignalId(row);
@@ -545,7 +582,7 @@ export function adaptDecisionAtlasSnapshot(input: {
   }
   for (const signal of snapshot.signals) {
     if (logicalBySignal.has(signal.id)) continue;
-    const opportunityId = text(object(signal.rationale)?.opportunity_id);
+    const opportunityId = text(signalRationale(signal).opportunity_id);
     if (opportunityId) logicalBySignal.set(signal.id, `opportunity:${opportunityId}`);
   }
   const factsByLogical = new Map([...executionByLogical].map(([id, rows]) => [id, executionFacts(rows)]));
@@ -581,7 +618,7 @@ export function adaptDecisionAtlasSnapshot(input: {
       ?? virtualEpisodeBySignal.get(signal.id)
       ?? `signal:${signal.id}`;
     const facts = factsByLogical.get(logical);
-    const rationale = object(signal.rationale);
+    const rationale = signalRationale(signal);
     const spec = specBySlug.get(slug);
     const virtualPolicy = virtualPolicyIdentity(signal, virtual);
     // A virtual P&L belongs to its own modeled entry. Substituting an exact

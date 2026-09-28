@@ -148,6 +148,17 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
   const sb = createServerSupabaseClient("decision-atlas");
   const timingsMs: Record<string, number> = {};
   const sourceReadCoverage: Record<string, AtlasReadCoverage> = {};
+  let activeEvidenceReads = 0;
+  const evidenceReadWaiters: Array<() => void> = [];
+  const withEvidenceReadSlot = async <T>(read: () => Promise<T>): Promise<T> => {
+    if (activeEvidenceReads >= 2) await new Promise<void>((resolve) => evidenceReadWaiters.push(resolve));
+    activeEvidenceReads++;
+    try { return await read(); }
+    finally {
+      activeEvidenceReads--;
+      evidenceReadWaiters.shift()?.();
+    }
+  };
   const timed = async <T>(label: string, read: () => Promise<T>): Promise<T> => {
     const started = Date.now();
     const value = await read();
@@ -155,14 +166,14 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
     return value;
   };
   const read = <T>(label: string, query: (options: { head: boolean; count?: "exact" }) => any, key = "id") =>
-    timed(label, async () => {
+    timed(label, () => withEvidenceReadSlot(async () => {
       const result = await readAtlasEvidenceRows<T>({ label,
         query: (head) => query(head ? { head, count: "exact" } : { head }),
         key: (row) => String((row as Record<string, unknown>)[key] ?? ""),
       });
       sourceReadCoverage[label] = result.coverage;
       return result.rows;
-    });
+    }));
   const optional = async <T>(read: () => Promise<T[]>): Promise<T[]> => {
     try { return await read(); }
     catch (error) {
@@ -171,6 +182,31 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
       throw error;
     }
   };
+  const readSignalRationales = async (ids: readonly string[]): Promise<Map<string, Partial<AtlasSignalRow>>> =>
+    timed("signal_rationales", async () => {
+      const unique = [...new Set(ids)].sort();
+      const rows: Array<Pick<AtlasSignalRow, "id"> & Partial<AtlasSignalRow>> = [];
+      for (let offset = 0; offset < unique.length; offset += 200) {
+        const batch = unique.slice(offset, offset + 200);
+        let result: Awaited<ReturnType<ReturnType<typeof sb.from>["select"]>> | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          result = await sb.from("signals").select("id,rationale")
+            .in("id", batch).order("id").limit(batch.length).abortSignal(AbortSignal.timeout(15_000));
+          if (!result.error) break;
+          if (attempt === 2 || !/timeout|canceling statement/i.test(result.error.message ?? "")) throw result.error;
+        }
+        if (result?.error) throw result.error;
+        const page = (result?.data ?? []) as unknown as Array<Pick<AtlasSignalRow, "id"> & Partial<AtlasSignalRow>>;
+        if (page.length !== batch.length || new Set(page.map((row) => row.id)).size !== batch.length
+          || page.some((row) => !batch.includes(row.id))) {
+          throw new Error(`signal_rationales: incomplete primary-key batch @${offset}`);
+        }
+        rows.push(...page);
+      }
+      sourceReadCoverage.signal_rationales = { expectedRows: unique.length, returnedRows: rows.length,
+        verifiedRows: rows.length, uniqueRows: new Set(rows.map((row) => row.id)).size };
+      return new Map(rows.map((row) => [row.id, row]));
+    });
   const [strategists, positions, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
     vbCandidateReceipts, vbExactPathReceipts, vbExactManagerPathReceipts, control] = await Promise.all([
     read<AtlasStrategistRow>("strategists", (options) => sb.from("strategists")
@@ -179,12 +215,14 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
       .select("id,runner_of,entry_features,occ_symbol,opened_at", options)
       .gte("opened_at", evidenceWindow.start).lt("opened_at", evidenceWindow.end).order("opened_at").order("id")),
     read<AtlasSignalRow>("signals", (options) => sb.from("signals")
-      .select("id,strategist_id,signal_type,underlying_price,direction,rationale,acted_on,blocked_reason,created_at,configuration_epoch_id,channel_spec_version_id,release_manifest_id", options)
+      .select(options.head ? "id" : ["id", "strategist_id", "signal_type", "underlying_price", "direction",
+        "acted_on", "blocked_reason", "created_at", "configuration_epoch_id",
+        "channel_spec_version_id", "release_manifest_id"].join(","), options)
       .gte("created_at", evidenceWindow.start).lt("created_at", evidenceWindow.end).order("created_at").order("id")),
     read<AtlasExecutionRow>("execution_observations", (options) => sb.from("execution_observations")
-      .select(["id", "trace_id", "event_kind", "event_at", "strategist_id", "account_id", "channel_slug",
+      .select(options.head ? "id" : ["id", "trace_id", "event_kind", "event_at", "strategist_id", "account_id", "channel_slug",
         "opportunity_id", "position_id", "action", "reason", "blocked_reason", "underlying", "occ_symbol",
-        "option_side", "bid", "ask", "requested_qty", "broker_status", "filled_qty", "fill_price", "payload",
+        "option_side", "bid", "ask", "requested_qty", "broker_status", "filled_qty", "fill_price",
         "configuration_epoch_id", "source_bar_at", "client_order_id", "broker_order_id", "source_boot_id"].join(","), options)
       .gte("event_at", evidenceWindow.start).lt("event_at", evidenceWindow.end).order("event_at").order("id")),
     read<AtlasVirtualTradeRow>("virtual_trades", (options) => sb.from("virtual_trades")
@@ -224,12 +262,20 @@ async function collect(ledger: ProfitabilityLedger): Promise<{
     timed("active_control_plane", () => loadStoredReceiptBoundControlPlane(sb)),
   ]);
   if (!control.compiled) throw new Error(`active control plane unavailable: ${control.error ?? control.state}`);
+  const rationaleBySignal = await readSignalRationales([
+    ...virtualTrades.map((row) => row.signal_id),
+    ...signals.filter((row) => row.acted_on).map((row) => row.id),
+  ]);
+  const projectedSignals = signals.map((row): AtlasSignalRow => ({
+    ...row,
+    rationale: rationaleBySignal.get(row.id)?.rationale ?? null,
+  }));
   return {
     snapshot: {
       fixedManagerComparison: await timed("fixed_manager_comparison", () => readFixedManagerComparisonEvidence(
         createFixedEntryServiceClient(process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
           process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""))),
-      ledger, strategists, positions, signals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
+      ledger, strategists, positions, signals: projectedSignals, executionObservations, virtualTrades, managerRuns, equitySnapshots, workerRuns,
       vbCandidateReceipts, vbExactPathReceipts, vbExactManagerPathReceipts,
       activeChannelSpecs: control.compiled.channelSpecs,
       activeChannelSpecDatabaseIdsByVersionKey: control.databaseIdentity?.channelSpecDatabaseIdsByVersionKey ?? {},
