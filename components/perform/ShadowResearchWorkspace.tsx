@@ -361,6 +361,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       era="recorded reference-policy paths"
       sample={`${totals.scored} virtual paths`}
       quality={shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "complete" : totals.scored >= 5 ? "building" : "checking"}
+      authority={shadowResearch.virtualEvidence.authority}
       detail="Virtual opportunities are hypothetical and are never combined with account profit and loss."
     />
     <form className="srw-controls" key={`${shadowResearch.dateRange.from}:${shadowResearch.dateRange.through}`} onSubmit={(event) => {

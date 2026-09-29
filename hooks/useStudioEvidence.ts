@@ -26,7 +26,7 @@ const EMPTY: StudioEvidence = {
   loading: false, error: false, asOf: null, basis: "gross desk attribution",
   evidence: evidenceEnvelope({ layer: "historical_executed", unit: "logical_trade", fromSession: null, throughSession: null,
     configurationEpochId: null, managerVersion: null, scope: { kind: "account", accountIds: [], channelSlugs: [] },
-    completeness: "unavailable", reconciliation: "blocked", source: "positions + immutable execution route", receiptHash: null,
+    completeness: "unavailable", reconciliation: "blocked", authority: "withheld", source: "positions + immutable execution route", receiptHash: null,
     limitations: ["No selected account cohort is available."], asOf: null }),
 };
 
@@ -85,11 +85,12 @@ export function useStudioEvidence(
             configurationEpochId: null, managerVersion: null,
             scope: { kind: "account", accountIds: [acctId], channelSlugs: Object.keys(snapshot.bySlug) },
             completeness: selection.unresolvedTrades || selection.unknownAccountTrades ? "partial" : snapshot.totalTrades ? "complete" : "unavailable", reconciliation: "reconciled",
+            authority: selection.unresolvedTrades || selection.unknownAccountTrades || !snapshot.totalTrades ? "withheld" : "decision_ready",
             source: "positions + immutable execution route", receiptHash: null,
             limitations: ["Historical configurations are pooled in this Studio summary.", historicalCoverageText(selection), ...selection.issues], asOf }) });
       } catch {
         if (alive) setState((prior) => ({ ...prior, loading: false, error: true,
-          evidence: evidenceEnvelope({ ...prior.evidence, completeness: prior.asOf ? "stale" : "unavailable" }) }));
+          evidence: evidenceEnvelope({ ...prior.evidence, completeness: prior.asOf ? "stale" : "unavailable", authority: "withheld" }) }));
       }
     };
     poll();

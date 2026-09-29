@@ -405,6 +405,7 @@ export function deriveChannelManagerEvidenceBook(input: {
       scope: { kind: "portfolio", accountIds: [], channelSlugs: Object.keys(channels) },
       completeness: selected.length ? complete ? "complete" : "partial" : "unavailable",
       reconciliation: "difference_explained", source: "manager_shadow_runs + canonical root/runner position lineage",
+      authority: selected.length ? "research_only" : "withheld",
       receiptHash: null,
       limitations: ["Configuration epochs and manager policy versions remain partitionable per channel; the book-level envelope spans them.", "Account identity is not required for the paired exit counterfactual and is not exposed by this compact book."],
       asOf: input.generatedAt,

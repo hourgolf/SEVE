@@ -41,7 +41,7 @@ export function OpsWorkspace({ surface, destination, onNavigate }: { surface: Su
       subtitle="exceptions first"
       boundary="READ ONLY"
     />
-    <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={localTime(reconciliation?.observedAt ?? release?.createdAt)} era="current sealed release" sample={`${surface.opsReadiness.counts.candidates} candidate decisions`} quality={surface.opsReadiness.summary.tone === "red" ? "partial" : surface.opsReadiness.summary.tone === "yellow" ? "building" : "complete"} detail="Readiness is based on observed broker, process, market, and research evidence." />
+    <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={localTime(reconciliation?.observedAt ?? release?.createdAt)} era="current sealed release" sample={`${surface.opsReadiness.counts.candidates} candidate decisions`} quality={surface.opsReadiness.summary.tone === "red" ? "partial" : surface.opsReadiness.summary.tone === "yellow" ? "building" : "complete"} authority="operational_only" detail="Readiness is based on observed broker, process, market, and research evidence." />
     <section className={`opsw-system-summary ${surface.opsReadiness.summary.tone}`}>
       <span><small>OVERALL</small><b>{surface.opsReadiness.summary.state}</b></span>
       <div><span><small>TRADING</small><b>{laneState(tradingItems, "READY")}</b></span><span><small>DATA</small><b>{laneState(dataItems, "COMPLETE")}</b></span><span><small>RESEARCH</small><b>{surface.decisionAtlas.state === "ready" ? atlasLabel : surface.decisionAtlas.state.toUpperCase()}</b></span></div>

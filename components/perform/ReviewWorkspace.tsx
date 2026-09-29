@@ -64,7 +64,7 @@ export function ReviewWorkspace({ surface, destination, onNavigate }: { surface:
       </header>
       <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="review" onNavigate={onNavigate} />
       {destination?.channel && <section className="rvw-channel-context"><span><small>CURRENT SESSION · {destination.channel}</small><b>{signedUsd(focusedPnl?.dayPnl ?? 0)} ATTRIBUTED · {focusedRows.length} POSITION ROWS · {focusedPnl?.openCount ?? 0} OPEN</b></span><button type="button" onClick={() => onNavigate?.({ section: "research", channel: destination.channel, axis: "sources", researchMode: "decisions" })}>OPEN PAIRED REVIEW →</button></section>}
-      {section === "tape" && latestSessionModel && <SeveEvidenceContext kind="actual" scope={latestSessionModel.scope.replaceAll("_", " ")} asOf={latestSessionModel.reportDate} era="executed session" sample={`${latestSessionModel.observations} ${latestSessionModel.evidenceLabel}`} quality={latestSessionModel.limitation ? "partial" : "complete"} />}
+      {section === "tape" && latestSessionModel && <SeveEvidenceContext kind="actual" scope={latestSessionModel.scope.replaceAll("_", " ")} asOf={latestSessionModel.reportDate} era="executed session" sample={`${latestSessionModel.observations} ${latestSessionModel.evidenceLabel}`} quality={latestSessionModel.limitation ? "partial" : "complete"} authority={latestSessionModel.limitation ? "withheld" : "operational_only"} />}
 
       <div className="rvw-body" role="tabpanel" data-review-section={section}>
         {section === "tape" && (

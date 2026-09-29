@@ -54,9 +54,10 @@ assert.equal(weekly.executed[0].totalResultUsd, 980, "total remains visible but 
 const partial = evidenceEnvelope({
   layer: "current_executed", unit: "logical_trade", fromSession: "2026-08-07", throughSession: "2026-08-07",
   configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: ["account-a", "account-b"], channelSlugs: ["channel-a", "channel-b"] },
-  completeness: "partial", reconciliation: "blocked", source: "fixture", receiptHash: null,
+  completeness: "partial", reconciliation: "blocked", authority: "withheld", source: "fixture", receiptHash: null,
   limitations: ["one route read failed"], asOf: "2026-08-07T21:00:00Z",
 });
 assert.equal(partial.completeness, "partial");
 assert.equal(partial.reconciliation, "blocked");
+assert.equal(partial.authority, "withheld");
 console.log("evidence-trust-matrix-selftest: PASS");

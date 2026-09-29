@@ -79,6 +79,8 @@ export function StudioSurface({ view, feed, write, livePnl, liveFund, accounts, 
         globalDark={allChannelWorkspace.dark}
         controlPlane={channelControlPlane}
         decisions={currentDecisions}
+        decisionReady={atlasTruth.publishedDecisionUsable && channelWorkspace.release.state === "verified" && ["ok", "recovered"].includes(feed.positionAttribution.state)}
+        decisionFact={atlasTruth.fact}
         accountName={accounts.find((account) => account.id === acctId)?.name ?? "selected paper account"}
         evidenceAsOf={evidenceAsOf}
         onScope={setScope}

@@ -23,7 +23,7 @@ const SORTS: { value: StudioSort; label: string }[] = [
 
 export type StudioScope = "attention" | "roots" | "dark" | "all";
 
-export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, globalRoots, globalDark, controlPlane, decisions, accountName, evidenceAsOf, onScope, onSort, onSelect, onCurrentSession, onNextReview }: {
+export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passports, globalRoots, globalDark, controlPlane, decisions, decisionReady, decisionFact, accountName, evidenceAsOf, onScope, onSort, onSelect, onCurrentSession, onNextReview }: {
   rows: StudioChannelRow[];
   summary: StudioFleetSummary;
   selectedSlug?: string;
@@ -34,6 +34,8 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
   globalDark: number;
   controlPlane?: ChannelControlPlaneViewRead;
   decisions: Record<string, ChannelDecisionBrief>;
+  decisionReady: boolean;
+  decisionFact: string;
   accountName: string;
   evidenceAsOf: string;
   onScope: (scope: StudioScope) => void;
@@ -59,7 +61,7 @@ export function StudioFleet({ rows, summary, selectedSlug, scope, sort, passport
         <span title={passports.release.fact}><i /><b>{passports.release.state === "verified" ? "RUNTIME SEALED" : passports.releaseView.label}</b></span>
       </div>
       <CanaryCommandCenter controlPlane={controlPlane} bundles={roster.bundles} compact />
-      <SeveEvidenceContext kind="mixed" scope={accountName} asOf={evidenceAsOf} era="current runtime + latest nightly research" sample={`${summary.total} channels in account view · global ${globalRoots} trading / ${globalDark} observing`} quality="live" detail="The fleet table is account scoped. Global receipt counts are shown separately; current session results and nightly research remain distinct." />
+      <SeveEvidenceContext kind="mixed" scope={accountName} asOf={evidenceAsOf} era="current runtime + latest nightly research" sample={`${summary.total} channels in account view · global ${globalRoots} trading / ${globalDark} observing`} quality={decisionReady ? "complete" : "partial"} authority={decisionReady ? "decision_ready" : "withheld"} detail={`${decisionFact} The fleet table is account scoped; current session results and nightly research remain separate.`} />
       <header className="fleet-summary">
         <div className="fleet-title">
           <span className="fleet-kicker">STUDIO · FLEET</span>

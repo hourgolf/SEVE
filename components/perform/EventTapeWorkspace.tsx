@@ -12,6 +12,7 @@ import {
 } from "@/lib/perform/eventTape";
 import type { OpsReadinessModel } from "@/lib/ops/readiness";
 import { PositionEvidenceChains } from "@/components/ops/OpsReadinessPanel";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 const FILTERS: { id: EventTapeFilter; label: string }[] = [
   { id: "all", label: "ALL" }, { id: "execution", label: "EXECUTION" },
@@ -54,9 +55,11 @@ export function EventTapeWorkspace({ events, health, strategists, readiness, emb
   const counts = useMemo(() => Object.fromEntries(FILTERS.map(({ id }) => [id, filterTapeRows(rows, id).length])), [rows]);
   const evidenceStatus = deriveAfterActionStatus(readiness);
   const latestAttention = rows.find((row) => row.category === "risk");
+  const tapeStatus = deriveEventTapeStatus(health, events);
 
   return <section className="etw" id="perform-tape" tabIndex={-1} aria-label="Event Tape evidence workspace">
     <header className={`etw-head${embedded ? " embedded" : ""}`}>{!embedded && <span><b>SESSION REVIEW</b><small>what happened first; technical evidence on demand</small></span>}<nav aria-label="review view"><button type="button" className={view === "live" ? "on" : ""} onClick={() => setView("live")}>SESSION SUMMARY</button><button type="button" className={view === "evidence" ? "on" : ""} onClick={() => setView("evidence")}>POSITION EVIDENCE</button></nav></header>
+    {!embedded && <SeveEvidenceContext kind="system" scope="retained operational event window" asOf={localTime(tapeStatus.latestAt)} era="current process history" sample={`${rows.length} deduplicated events`} quality={tapeStatus.tone === "green" ? "live" : "partial"} authority={tapeStatus.tone === "green" ? "operational_only" : "withheld"} detail="Events describe system activity and diagnostics. They are not trade-performance evidence and do not establish channel profitability." />}
     {view === "live" ? <TapeReadStrip health={health} events={events} /> : <div className={`tape-read-strip evidence ${evidenceStatus.tone}`} role="status"><i /><span><b>{evidenceStatus.label}</b><small>{evidenceStatus.detail}</small></span></div>}
     {view === "live" ? <>
       <section className="etw-summary" aria-label="Plain-language session summary">

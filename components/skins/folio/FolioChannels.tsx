@@ -10,6 +10,8 @@ import { pmVar } from "@/lib/desk/colors";
 import { signedUsd, usd0 } from "@/lib/format";
 import { channelDecisionState } from "@/lib/studio/channelDecision";
 import { deriveStudioRows, sortStudioRows, summarizeStudioFleet, type StudioSort } from "@/lib/studio/deriveStudioView";
+import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 const SORTS: Array<{ value: StudioSort; label: string }> = [
   { value: "attention", label: "Attention" },
@@ -34,6 +36,12 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
   const selected = rows.find((row) => row.channel.slug === selectedSlug) ?? visible[0] ?? rows[0];
   const summary = summarizeStudioFleet(rows);
   const release = surface.channelWorkspace.releaseView;
+  const atlasTruth = deriveAtlasReportTruth({ state: surface.decisionAtlas.state, freshness: surface.decisionAtlas.freshness,
+    reportThroughSession: surface.decisionAtlas.throughSession, evidenceThroughSession: surface.decisionAtlas.evidenceThroughSession,
+    publicationState: surface.decisionAtlas.publication?.state });
+  const decisionReady = atlasTruth.publishedDecisionUsable
+    && surface.channelWorkspace.release.state === "verified"
+    && ["ok", "recovered"].includes(surface.feed.positionAttribution.state);
   useEffect(() => {
     surface.setResearchDemand(Boolean(selected));
     return () => surface.setResearchDemand(false);
@@ -50,6 +58,7 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
           <span><small>SESSION ATTRIB</small><b className={summary.dayPnl < 0 ? "neg" : summary.dayPnl > 0 ? "pos" : ""}>{signedUsd(summary.dayPnl)}</b></span>
         </div>
       </header>
+      <SeveEvidenceContext kind="mixed" scope={surface.accounts.find((row) => row.id === surface.acctId)?.name ?? "selected paper account"} asOf={surface.feed.updatedAt ?? surface.decisionAtlas.throughSession ?? "checking"} era="current runtime + latest nightly research" sample={`${summary.total} channels · ${Object.keys(surface.decisionAtlas.bySlug).length} published reports`} quality={decisionReady ? "complete" : "partial"} authority={decisionReady ? "decision_ready" : "withheld"} detail={`${atlasTruth.fact} Current-session attribution remains separate from nightly research.`} />
 
       <div className="folio-channel-grid">
         <section className="folio-channel-list">
