@@ -2,7 +2,7 @@
 
 import { readHistoricalAttribution } from '@/lib/reporting/readHistoricalAttribution';
 import { type HistoricalTrade } from '@/supabase/functions/_shared/historicalAttribution';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
 import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
@@ -41,6 +41,7 @@ const MAX_EXECUTED_ROWS = 2_000;
 const ROUTE_BATCH_SIZE = 50;
 const ROUTE_PAGE_SIZE = 1_000;
 const MAX_ROUTE_ROWS_PER_BATCH = 10_000;
+const RESEARCH_REOPEN_CACHE_MS = 10 * 60_000;
 
 export interface ShadowResearch {
   state: "idle" | "loading" | "ok" | "empty" | "error";
@@ -115,13 +116,21 @@ const message = (error: unknown): string =>
  */
 export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: readonly string[]): ShadowResearch {
   const [state, setState] = useState<ShadowResearch>(EMPTY);
+  const stateRef = useRef<ShadowResearch>(state);
   const [dateRange, setRange] = useState(() => ({ from: COHORT_START, through: shadowSessionDate(new Date().toISOString()) }));
   const configuredKey = [...configuredPaperAccountIds].sort().join(",");
+  useEffect(() => { stateRef.current = state; }, [state]);
 
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
     let reading = false;
+    const cached = stateRef.current;
+    const reusable = (cached.state === "ok" || cached.state === "empty")
+      && cached.asOf != null
+      && cached.dateRange.from === dateRange.from
+      && cached.dateRange.through === dateRange.through
+      && Date.now() - Date.parse(cached.asOf) < RESEARCH_REOPEN_CACHE_MS;
     const poll = async () => {
       if (reading) return;
       reading = true;
@@ -388,8 +397,14 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
         }));
       } finally { reading = false; }
     };
-    setState({ ...EMPTY, state: "loading", dateRange });
-    void poll();
+    if (!reusable) {
+      setState((previous) => previous.asOf
+        && previous.dateRange.from === dateRange.from
+        && previous.dateRange.through === dateRange.through
+        ? previous
+        : { ...EMPTY, state: "loading", dateRange });
+      void poll();
+    }
     const stop = startVisibilityPoll(() => void poll(), 10 * 60_000);
     return () => { alive = false; stop(); };
   }, [configuredKey, enabled, dateRange.from, dateRange.through]);

@@ -10,6 +10,7 @@ const mobileShell = source("components/mobile2/MobileShell.tsx");
 const mobileReview = source("components/mobile2/MobileDeskSheet.tsx");
 const manager = source("hooks/useChannelManagerEvidence.ts");
 const runtime = source("hooks/useRuntimeTelemetry.ts");
+const shadow = source("hooks/useShadowResearch.ts");
 
 assert.match(page, /evidenceWorkspace === "research" \|\| researchDemand/,
   "the bounded research book must run only for visible Research or an open inspector");
@@ -35,6 +36,10 @@ assert.match(research, /const rowsBySlug = useMemo/,
   "research rows must be indexed once per result rather than rescanned for every card");
 assert.match(research, /const atlasReads = useMemo/,
   "expensive Atlas derivations must be memoized");
+assert.match(research, /historicalEvidenceSlug === focusSlug \? <HistoricalChannelEvidence/,
+  "closed Atlas disclosures must not mount the historical attribution reader");
+assert.match(shadow, /RESEARCH_REOPEN_CACHE_MS = 10 \* 60_000/,
+  "reopening Atlas must reuse its recent complete evidence read");
 assert.match(runtime, /pollMs = 30_000/,
   "the compact four-source response must stay inside the 60-second incident contract without increasing browser churn");
 

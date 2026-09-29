@@ -157,13 +157,32 @@ assert.equal(bounded.sourceNormalization?.rawSignalRows, 1,
 assert.equal(bounded.opportunities.find((row) => row.id === "prospective_virtual:included")?.sourceRefs
   .includes("execution_observations:execution-included"), true,
   "signal rationale opportunity_id must join the durable execution trail even when observation payloads omit signal_id");
+const projectedInput = { ...boundedInput, snapshot: { ...boundedInput.snapshot,
+  signals: boundedInput.snapshot.signals.map((row) => row.id === "included" ? { ...row, rationale: {} } : row),
+  executionObservations: boundedInput.snapshot.executionObservations.map((row) => ({ ...row,
+    opportunity_id: null, payload: undefined, payload_signal_id: "included" })),
+} } as Parameters<typeof adaptDecisionAtlasSnapshot>[0];
+assert.equal(adaptDecisionAtlasSnapshot(projectedInput).opportunities
+  .find((row) => row.id === "prospective_virtual:included")?.sourceRefs
+  .includes("execution_observations:execution-included"), true,
+  "projected payload lineage must retain the execution-to-signal join without copying the full payload");
+const projectedProtocolEvidence = { ...originalExecution, id: "projected-recovery-protocol",
+  account_id: "wrong-account", reason: "reconcile", action: "reconcile", payload: undefined,
+  payload_fixed_entry_protocol: "fixed-entry-intent-v1" };
+assert.deepEqual(adaptDecisionAtlasSnapshot({ ...boundedInput, snapshot: { ...boundedInput.snapshot,
+  executionObservations: [...boundedInput.snapshot.executionObservations, projectedProtocolEvidence] } }), bounded,
+  "projected recovery markers must remain quarantined from ordinary Atlas execution facts");
 
-const stampedSignal = { configuration_epoch_id: null, rationale: { virtual_path_policy: virtualPathPolicyStamp({
+const policyStamp = virtualPathPolicyStamp({
   channel: { premium_stop_pct: 30, take_profit_pct: 12 }, defaultPremiumStopPct: 50, managerVersion: null,
-}) } } as never;
+});
+const stampedSignal = { configuration_epoch_id: null, rationale: { virtual_path_policy: policyStamp } } as never;
 const stampedVirtual = { ...virtual("policy", "2026-09-04T14:30:00Z", "2026-09-04T15:00:00Z"),
   ...deriveVirtualTradeProvenance(stampedSignal).columns, stop_pct: 30, tp_pct: 12 };
 assert.equal(virtualPolicyIdentity(stampedSignal, stampedVirtual).verified, true);
+const projectedPolicySignal = { configuration_epoch_id: null, rationale_virtual_path_policy: policyStamp } as never;
+assert.equal(virtualPolicyIdentity(projectedPolicySignal, stampedVirtual).verified, true,
+  "projected virtual policy stamps must preserve policy verification without the full rationale");
 assert.equal(virtualPolicyIdentity(stampedSignal, { ...stampedVirtual, tp_pct: 10 }).verified, false,
   "a source12% target cannot lend authority to a stored10% exit");
 assert.equal(virtualPolicyIdentity(stampedSignal, virtual("legacy", "2026-09-04T14:30:00Z", null)).verified, false);

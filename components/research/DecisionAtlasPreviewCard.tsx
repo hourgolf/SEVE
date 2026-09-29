@@ -9,6 +9,8 @@ import type { ChannelDryPowderCurve, ShadowChannelSummary } from "@/lib/research
 import type { BoundedRetuneEvidence } from "@/lib/research/boundedRetuneExperiments";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
+import type { DecisionAtlasReportsRead } from "@/hooks/useDecisionAtlasReports";
+import { deriveAtlasReportTruth, type AtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
 import { deriveChannelEvidenceScopes } from "@/lib/research/channelEvidenceScope";
 import { deriveChannelLineupStory } from "@/lib/research/channelLineup";
 import { ChannelEntryFinishMini, SessionDistributionStrip } from "./ChannelDecisionVisuals";
@@ -218,8 +220,39 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
   </section>;
 }
 
-export function DecisionAtlasPreviewCard({ brief, summary, dryPowder, managerEvidence, retuneEvidence, focusAxis, onAxisChange, compact = false }: {
+function WithheldPublishedDecision({ brief, model, truth, summary, evidenceThroughSession, compact }: {
+  brief: ChannelDecisionBrief;
+  model: ReturnType<typeof buildDecisionAtlasPreview>;
+  truth: AtlasReportTruth;
+  summary?: ShadowChannelSummary | null;
+  evidenceThroughSession?: string | null;
+  compact: boolean;
+}) {
+  const published = buildChannelDecisionSummary(brief);
+  const refreshTarget = evidenceThroughSession ?? "the newest retained evidence";
+  return <section className={`atlas-preview ${model.tone}${compact ? " compact" : ""}`} aria-label="Decision Atlas channel diagnostic">
+    <header>
+      <span><small>SELECTED CHANNEL</small><strong>{brief.channel}</strong><b>{model.label}</b></span>
+      <em>PUBLISHED BRIEF WITHHELD · {truth.label}</em>
+    </header>
+    <p className="atlas-scope-warning"><b>NO CURRENT PUBLISHED DECISION</b> {truth.fact}</p>
+    <p>{model.summary}</p>
+    <div className="atlas-preview-metrics">{model.metrics.slice(0, 5).map((metric) => <span key={metric.label} title={metric.fact}><small>{metric.label}</small><b>{metric.value}</b></span>)}</div>
+    <div className="atlas-plan">
+      <span><small>NEXT</small><b>REBUILD AND VERIFY THE NIGHTLY ATLAS THROUGH {refreshTarget}</b></span>
+      <span><small>KEEP FIXED</small><b>entry · exit · manager · size · roster</b></span>
+    </div>
+    <details><summary>See the historical published brief</summary>
+      <p><b>PUBLISHED THROUGH {published.throughSession}</b> · {published.disposition}</p>
+      <p>{brief.recommendation.summary}</p>
+      <p>This stored brief remains useful historical context. It is not the current queue basis and cannot support a roster, manager, size, entry, or exit change until refreshed.</p>
+    </details>
+  </section>;
+}
+
+export function DecisionAtlasPreviewCard({ brief, reports, summary, dryPowder, managerEvidence, retuneEvidence, focusAxis, onAxisChange, compact = false }: {
   brief?: ChannelDecisionBrief | null;
+  reports?: DecisionAtlasReportsRead | null;
   summary?: ShadowChannelSummary | null;
   dryPowder?: ChannelDryPowderCurve | null;
   managerEvidence?: ChannelManagerEvidence | null;
@@ -229,7 +262,15 @@ export function DecisionAtlasPreviewCard({ brief, summary, dryPowder, managerEvi
   compact?: boolean;
 }) {
   const model = buildDecisionAtlasPreview({ summary, dryPowder, managerEvidence, retuneEvidence });
-  if (brief) return <AuthoritativeDecision brief={brief} summary={summary} compact={compact} focusAxis={focusAxis} onAxisChange={onAxisChange} />;
+  const truth = deriveAtlasReportTruth({
+    state: reports?.state ?? "unavailable",
+    freshness: reports?.freshness ?? "unknown",
+    reportThroughSession: reports?.throughSession ?? null,
+    evidenceThroughSession: reports?.evidenceThroughSession ?? null,
+    publicationState: reports?.publication?.state,
+  });
+  if (brief && truth.publishedDecisionUsable) return <AuthoritativeDecision brief={brief} summary={summary} compact={compact} focusAxis={focusAxis} onAxisChange={onAxisChange} />;
+  if (brief) return <WithheldPublishedDecision brief={brief} model={model} truth={truth} summary={summary} evidenceThroughSession={reports?.evidenceThroughSession} compact={compact} />;
   return <section className={`atlas-preview ${model.tone}${compact ? " compact" : ""}`} aria-label="Decision Atlas channel summary">
     <header><span><small>{model.experiment ? "PROSPECTIVE TEST" : "HISTORICAL VIRTUAL"}</small><b>{model.label}</b></span><em>{model.experiment ? retuneEvidence?.status.replaceAll("_", " ").toUpperCase() ?? "CONTROL UNCHANGED" : "NOT EXECUTED"}</em></header>
     <p>{model.summary}</p>

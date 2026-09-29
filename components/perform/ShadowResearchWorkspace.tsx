@@ -27,6 +27,7 @@ import { signedUsd } from "@/lib/format";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
 import { axisForDisposition, type WorkspaceDestination, type ResearchFilter } from "@/lib/shell/workspaceDestination";
 import { projectChannelLifecycle } from "@/lib/channels/channelLifecycleProjection";
+import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
 
 const percent = (wins: number, scored: number): string =>
   scored ? `${Math.round((1000 * wins) / scored) / 10}%` : "—";
@@ -186,13 +187,24 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   const { shadowResearch } = surface;
   const [session, setSession] = useState("");
   const [lane, setLane] = useState<ResearchLane>("vb");
-  const [windowMode, setWindowMode] = useState<"day" | "cumulative">("day");
+  const [windowMode, setWindowMode] = useState<"day" | "cumulative">("cumulative");
   const [excluded, setExcluded] = useState<Record<ResearchLane, string[]>>({ vb: [], all: [] });
   const [focusSlug, setFocusSlug] = useState("");
   const [viewMode, setViewMode] = useState<"decisions" | "data">("decisions");
-  const [evidenceLens, setEvidenceLens] = useState<"current" | "comparable" | "all">("comparable");
+  // Open on the newest observed channel specification. Comparable history is
+  // useful only after the operator deliberately asks for its broader cohort.
+  const [evidenceLens, setEvidenceLens] = useState<"current" | "comparable" | "all">("current");
   const [showAllDecisions, setShowAllDecisions] = useState(false);
   const [decisionFilter, setDecisionFilter] = useState<ResearchFilter | null>(null);
+  const [historicalEvidenceSlug, setHistoricalEvidenceSlug] = useState<string | null>(null);
+  const atlasTruth = deriveAtlasReportTruth({
+    state: surface.decisionAtlas.state,
+    freshness: surface.decisionAtlas.freshness,
+    reportThroughSession: surface.decisionAtlas.throughSession,
+    evidenceThroughSession: surface.decisionAtlas.evidenceThroughSession,
+    publicationState: surface.decisionAtlas.publication?.state,
+  });
+  const publishedDecisionUsable = atlasTruth.publishedDecisionUsable;
   useEffect(() => {
     if (!session && shadowResearch.sessions.length) setSession(shadowResearch.sessions[0].session);
   }, [session, shadowResearch.sessions]);
@@ -208,18 +220,22 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   const native = useMemo(() => windowMode === "cumulative"
     ? evidenceLens === "all" ? shadowResearch.cumulative : shadowResearch.currentCumulative
     : selected, [evidenceLens, selected, shadowResearch.cumulative, shadowResearch.currentCumulative, windowMode]);
+  const nativeFromSession = windowMode === "cumulative" && native && "fromSession" in native
+    ? native.fromSession : selected?.session ?? null;
+  const nativeThroughSession = windowMode === "cumulative" && native && "throughSession" in native
+    ? native.throughSession : selected?.session ?? null;
   const rows = useMemo(() => native ? (lane === "vb" ? native.vb : native.dark) : [], [lane, native]);
   const rowsBySlug = useMemo(() => new Map(rows.map((row) => [row.slug, row])), [rows]);
-  const referenceSession = selected?.session ?? shadowResearch.cumulative?.throughSession ?? "";
+  const referenceSession = nativeThroughSession ?? shadowResearch.cumulative?.throughSession ?? "";
   const lineupStories = useMemo(() => sortChannelLineup(rows.flatMap((row) => {
     const brief = surface.decisionAtlas.bySlug[row.slug];
-    if (evidenceLens !== "current" && !brief?.decisionDistribution) return [];
+    if (evidenceLens !== "current" && (!publishedDecisionUsable || !brief?.decisionDistribution)) return [];
     return [deriveChannelLineupStory({
       summary: row,
       brief: evidenceLens === "current" ? undefined : brief,
       referenceSession,
     })];
-  })), [evidenceLens, referenceSession, rows, surface.decisionAtlas.bySlug]);
+  })), [evidenceLens, publishedDecisionUsable, referenceSession, rows, surface.decisionAtlas.bySlug]);
   const lineupBySlug = useMemo(() => Object.fromEntries(lineupStories.map((story) => [story.channel, story])), [lineupStories]);
   const postureBySlug = useMemo(() => Object.fromEntries(rows.map((row): [string, ChannelPosture] => {
     const lifecycle = surface.allChannelWorkspace.bySlug[row.slug]?.lifecycle;
@@ -234,7 +250,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     .map((experiment) => [experiment.definition.channel, experiment.evidence])), [shadowResearch.boundedRetunes.experiments]);
   const atlasReads = useMemo(() => rows.map((row) => ({
     slug: row.slug,
-    label: surface.decisionAtlas.bySlug[row.slug]
+    label: publishedDecisionUsable && surface.decisionAtlas.bySlug[row.slug]
       ? dispositionForAxis(surface.decisionAtlas.bySlug[row.slug].recommendation.axis)
       : null,
     read: buildDecisionAtlasPreview({
@@ -245,7 +261,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       managerEvidence: surface.managerEvidence.book?.channels[row.slug],
       retuneEvidence: shadowResearch.boundedRetuneError ? undefined : retuneBySlug.get(row.slug),
     }),
-  })), [retuneBySlug, rows, selected, shadowResearch.boundedRetuneError, shadowResearch.dryPowderBySession, shadowResearch.dryPowderBySlug, surface.decisionAtlas.bySlug, surface.managerEvidence.book?.channels, windowMode]);
+  })), [publishedDecisionUsable, retuneBySlug, rows, selected, shadowResearch.boundedRetuneError, shadowResearch.dryPowderBySession, shadowResearch.dryPowderBySlug, surface.decisionAtlas.bySlug, surface.managerEvidence.book?.channels, windowMode]);
   const { atlasWorking, atlasReview } = useMemo(() => ({
     atlasWorking: atlasReads.filter((item) => item.label
       ? /PROMOTION|SIZE|MANAGER/.test(item.label)
@@ -319,8 +335,8 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     ? runningRows.filter((row) => !excluded[lane].includes(row.slug))
     : runningRows, [excluded, lane, runningRows, windowMode]);
   const running = useMemo(() => laneTotals(filteredRunningRows), [filteredRunningRows]);
-  const nativeTitle = windowMode === "cumulative" && shadowResearch.cumulative
-    ? `HISTORICAL VIRTUAL PATHS · ${shadowResearch.cumulative.fromSession} → ${shadowResearch.cumulative.throughSession}`
+  const nativeTitle = windowMode === "cumulative" && native
+    ? `${evidenceLens === "all" ? "ALL HISTORICAL" : "LATEST-VERSION"} VIRTUAL PATHS · ${nativeFromSession} → ${nativeThroughSession}`
     : `SESSION VIRTUAL PATHS · ${selected?.session ?? "—"}`;
   const toggleStrategy = (slug: string) => setExcluded((previous) => ({
     ...previous,
@@ -339,7 +355,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     <SeveEvidenceContext
       kind="virtual"
       scope={`all paper · ${lane === "vb" ? "VB channels" : "all observed channels"}`}
-      asOf={selected?.session ?? shadowResearch.cumulative?.throughSession ?? "checking"}
+      asOf={nativeThroughSession ?? shadowResearch.cumulative?.throughSession ?? "checking"}
       era="recorded reference-policy paths"
       sample={`${totals.scored} virtual paths`}
       quality={shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "complete" : totals.scored >= 5 ? "building" : "checking"}
@@ -361,7 +377,12 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     {shadowResearch.boundedRetuneError ? <div className="srw-empty error" role="status">Experiment comparisons unavailable · {shadowResearch.boundedRetuneError}. Other research evidence remains separate.</div>
       : shadowResearch.sourceCounts.retuneSignals != null ? <p>{shadowResearch.sourceCounts.retuneSignals.toLocaleString()} experiment signals · source count verified · selected range only</p> : null}
     <p>Complete row counts do not establish quote-path quality. Missing, stale or sampled quotes can still limit entry and exit comparisons.</p>
-    {focusSlug && <details className="rvw-system-activity"><summary><span><small>EXECUTED HISTORY</small><b>Audited broker results for {focusSlug}</b></span><i>▾</i></summary><HistoricalChannelEvidence channel={focusSlug} /></details>}
+    <section className={`srw-truth authority-${atlasTruth.authority}`} aria-label="Atlas evidence authority">
+      <header><span><small>PUBLISHED DECISION BOOK</small><b>{atlasTruth.label}</b></span><em>{publishedDecisionUsable ? "DECISIONS CURRENT" : "RESEARCH ONLY"}</em></header>
+      <div><span><small>PUBLISHED THROUGH</small><b>{surface.decisionAtlas.throughSession ?? "—"}</b></span><span><small>VIRTUAL DATA THROUGH</small><b>{surface.decisionAtlas.evidenceThroughSession ?? shadowResearch.cumulative?.throughSession ?? "—"}</b></span><span><small>QUEUE BASIS</small><b>{publishedDecisionUsable ? "VERIFIED PUBLISHED BOOK" : "LATEST-VERSION VIRTUAL DIAGNOSTIC"}</b></span></div>
+      <p>{atlasTruth.fact}</p>
+    </section>
+    {focusSlug && <details className="rvw-system-activity" onToggle={(event) => { if (event.currentTarget.open) setHistoricalEvidenceSlug(focusSlug); }}><summary><span><small>EXECUTED HISTORY</small><b>Audited broker results for {focusSlug}</b></span><i>▾</i></summary>{historicalEvidenceSlug === focusSlug ? <HistoricalChannelEvidence channel={focusSlug} /> : null}</details>}
     <nav className="srw-view-mode" aria-label="Research presentation">
       <button type="button" className={viewMode === "decisions" ? "on" : ""} aria-pressed={viewMode === "decisions"} onClick={() => setViewMode("decisions")}><b>DECISIONS</b><small>what the evidence suggests</small></button>
       <button type="button" className={viewMode === "data" ? "on" : ""} aria-pressed={viewMode === "data"} onClick={() => setViewMode("data")}><b>DATA</b><small>full virtual ledger</small></button>
@@ -390,17 +411,17 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       : !selected ? <div className="srw-empty">no reconstructed virtual paths in the selected date range</div>
       : <>
         <section className="srw-atlas-brief" aria-label="Decision Atlas research summary">
-          <span><small>DECISION ATLAS</small><b>WHERE SHOULD WE LOOK NEXT?</b></span>
-          <button type="button" className={decisionFilter === "promising" ? "on" : ""} onClick={() => { const next = decisionFilter === "promising" ? undefined : "promising"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>PROMISING</small><b>{atlasWorking.length}</b></button>
-          <button type="button" className={decisionFilter === "review" ? "on" : ""} onClick={() => { const next = decisionFilter === "review" ? undefined : "review"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>NEEDS REVIEW</small><b>{atlasReview.length}</b></button>
+          <span><small>{publishedDecisionUsable ? "VERIFIED DECISION ATLAS" : "LIVE RESEARCH TRIAGE"}</small><b>{publishedDecisionUsable ? "WHERE SHOULD WE LOOK NEXT?" : "NO ROSTER OR MANAGER AUTHORITY"}</b></span>
+          <button type="button" className={decisionFilter === "promising" ? "on" : ""} onClick={() => { const next = decisionFilter === "promising" ? undefined : "promising"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>{publishedDecisionUsable ? "PROMISING" : "TEST LEADS"}</small><b>{atlasWorking.length}</b></button>
+          <button type="button" className={decisionFilter === "review" ? "on" : ""} onClick={() => { const next = decisionFilter === "review" ? undefined : "review"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>{publishedDecisionUsable ? "NEEDS REVIEW" : "RISKS TO REVIEW"}</small><b>{atlasReview.length}</b></button>
           <button type="button" className={decisionFilter === "collecting" ? "on" : ""} onClick={() => { const next = decisionFilter === "collecting" ? undefined : "collecting"; setDecisionFilter(next ?? null); onNavigate?.({ section: "research", researchMode: "decisions", researchFilter: next }); }}><small>COLLECTING</small><b>{atlasReads.length - atlasWorking.length - atlasReview.length}</b></button>
-          <button type="button" onClick={() => atlasNext && onNavigate?.({ section: "research", channel: atlasNext.slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[atlasNext.slug]?.recommendation.axis), researchMode: "decisions" })}><small>INVESTIGATE NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></button>
+          <button type="button" onClick={() => atlasNext && onNavigate?.({ section: "research", channel: atlasNext.slug, axis: axisForDisposition(publishedDecisionUsable ? surface.decisionAtlas.bySlug[atlasNext.slug]?.recommendation.axis : undefined), researchMode: "decisions" })}><small>RESEARCH NEXT</small><b>{atlasNext ? `${atlasNext.slug} · ${atlasNext.label ?? atlasNext.read.label}` : "NO CLEAR LEAD"}</b></button>
         </section>
         {viewMode === "decisions" && <section className="srw-decisions" aria-label="Channel research decisions">
           <ResearchBookBoard reports={surface.decisionAtlas} onSelect={(slug) => {
             setFocusSlug(slug);
             onNavigate?.({ section: "research", channel: slug,
-              axis: axisForDisposition(surface.decisionAtlas.bySlug[slug]?.recommendation.axis),
+              axis: axisForDisposition(publishedDecisionUsable ? surface.decisionAtlas.bySlug[slug]?.recommendation.axis : undefined),
               researchMode: "decisions" });
           }} />
           <ResearchCouncilRoom reports={surface.decisionAtlas} onNavigate={onNavigate} />
@@ -414,23 +435,24 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
               : "Comparable fleet view is withheld until the nightly briefs are refreshed with same-cohort session distributions."}
             onSelect={(slug) => {
             setFocusSlug(slug);
-            onNavigate?.({ section: "research", channel: slug, axis: axisForDisposition(surface.decisionAtlas.bySlug[slug]?.recommendation.axis), researchMode: "decisions", researchFilter: decisionFilter ?? undefined });
+            onNavigate?.({ section: "research", channel: slug, axis: axisForDisposition(publishedDecisionUsable ? surface.decisionAtlas.bySlug[slug]?.recommendation.axis : undefined), researchMode: "decisions", researchFilter: decisionFilter ?? undefined });
           }} />
           <header><span><small>WHAT DESERVES REVIEW?</small><b>{decisionFilter ? `${decisionFilter.toUpperCase()} CHANNELS` : "What is working, what is not, and what to test next"}</b></span><div><em>{showAllDecisions ? `ALL ${filteredDecisionRows.length}` : `TOP ${Math.min(DEFAULT_DECISION_LIMIT, filteredDecisionRows.length)} OF ${filteredDecisionRows.length}`}</em>{filteredDecisionRows.length > DEFAULT_DECISION_LIMIT ? <button type="button" aria-expanded={showAllDecisions} onClick={() => setShowAllDecisions((current) => !current)}>{showAllDecisions ? `SHOW TOP ${DEFAULT_DECISION_LIMIT}` : `SHOW ALL ${filteredDecisionRows.length}`}</button> : null}</div></header>
           <div className="srw-decision-list">{displayedDecisionRows.map((item) => {
             const brief = surface.decisionAtlas.bySlug[item.slug];
+            const decisionBrief = publishedDecisionUsable ? brief : undefined;
             const label = item.label ?? item.read.label;
-            return <button type="button" key={item.slug} className={focusSlug === item.slug ? "on" : ""} aria-pressed={focusSlug === item.slug} onClick={() => { setFocusSlug(item.slug); onNavigate?.({ section: "research", channel: item.slug, axis: axisForDisposition(brief?.recommendation.axis), researchMode: "decisions", researchFilter: decisionFilter ?? undefined }); }}>
+            return <button type="button" key={item.slug} className={focusSlug === item.slug ? "on" : ""} aria-pressed={focusSlug === item.slug} onClick={() => { setFocusSlug(item.slug); onNavigate?.({ section: "research", channel: item.slug, axis: axisForDisposition(decisionBrief?.recommendation.axis), researchMode: "decisions", researchFilter: decisionFilter ?? undefined }); }}>
               <span><b>{item.slug}</b><small>{lineupBySlug[item.slug]?.maturity
-                ?? (evidenceLens === "current" ? "NO CURRENT VIRTUAL SAMPLE" : brief ? "BRIEF NEEDS REFRESH" : "NO COMPARABLE BRIEF")} · {lineupBySlug[item.slug]
+                ?? (evidenceLens === "current" ? "CURRENT VIRTUAL DIAGNOSTIC" : brief && !publishedDecisionUsable ? "PUBLISHED BRIEF WITHHELD" : brief ? "BRIEF NEEDS REFRESH" : "NO COMPARABLE BRIEF")} · {lineupBySlug[item.slug]
                 ? freshnessLabel(lineupBySlug[item.slug].freshness)
                 : (evidenceLens === "current" ? "UNKNOWN" : "COMPARABLE WITHHELD")}</small></span>
               <strong>{lineupBySlug[item.slug]?.group ?? label}</strong>
-              <p>{lineupBySlug[item.slug]?.why ?? brief?.recommendation.summary ?? item.read.summary}</p>
+              <p>{lineupBySlug[item.slug]?.why ?? decisionBrief?.recommendation.summary ?? item.read.summary}</p>
             </button>;
           })}</div>
           {focusSlug && <div id="research-channel-decision" className="srw-decision-detail">
-            <DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} focusAxis={destination?.channel === focusSlug ? destination.axis : undefined} onAxisChange={(axis) => onNavigate?.({ section: "research", channel: focusSlug, axis, researchMode: "decisions", researchFilter: decisionFilter ?? undefined })} />
+            <DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} reports={surface.decisionAtlas} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} focusAxis={destination?.channel === focusSlug ? destination.axis : undefined} onAxisChange={(axis) => onNavigate?.({ section: "research", channel: focusSlug, axis, researchMode: "decisions", researchFilter: decisionFilter ?? undefined })} />
             <details className="srw-channel-analysis"><summary><span><small>SUPPORTING EVIDENCE</small><b>Current execution, capacity, and managers</b></span><em>OPEN COMPARISON</em><i>▾</i></summary><div>
               <CurrentEvidenceCard selectedSlug={focusSlug} executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted} comparison={focusedComparison} state={shadowResearch.currentExecutedState} error={shadowResearch.currentExecutedError} truncated={shadowResearch.currentExecutedTruncated} />
               <ChannelDryPowderCurve curve={focusedCurve} />
@@ -464,7 +486,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
             evidenceLabel={windowMode === "cumulative" ? "HISTORICAL VIRTUAL" : "SESSION VIRTUAL"}
             referenceSession={referenceSession}
             briefs={surface.decisionAtlas.bySlug}
-            renderDetail={() => <><DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
+            renderDetail={() => <><DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} reports={surface.decisionAtlas} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} />
               <details className="srw-channel-analysis"><summary><span><small>SELECTED CHANNEL</small><b>ENTRY + MANAGER ANALYSIS</b></span><em>{focusedLead == null ? "first signal collecting" : `${signedUsd(focusedLead)}/ct first signal`}{focusedBestManager?.medianDeltaPct == null ? " · manager collecting" : ` · ${focusedBestManager.managerId} ${focusedBestManager.medianDeltaPct >= 0 ? "+" : ""}${focusedBestManager.medianDeltaPct}% typical uplift`}</em><i>▾</i></summary><div>
               <CurrentEvidenceCard
                 selectedSlug={focusSlug}

@@ -44,6 +44,8 @@ assert.equal(terminal.trace_id,decision.trace_id); assert.equal(terminal.opportu
 assert.notEqual(terminal.id,decision.id); assert.equal(terminal.id,buildFixedAdmissionObservation(input,result)!.id);
 assert.equal(terminal.action,"reconcile"); assert.equal(terminal.broker_order_id,null); assert.equal(terminal.filled_qty,null);
 assert.equal(isFixedEntryProtocolObservation(terminal),true,"supplemental admission evidence is excluded from ordinary candidate/fill totals");
+assert.equal(isFixedEntryProtocolObservation({ reason: terminal.reason, payload: null }), true,
+  "durable admission reasons quarantine supplemental evidence without reading the payload");
 assert.equal(readDecisionStageEvidence(terminal).state,"admission-observed");
 assert.equal((terminal.payload.fixed_entry_admission as any).sourceDecisionId,decision.id);
 console.log("PASS: crossed quote retains three records and fill facts, clean/zero/missing/invalid quotes, deterministic candidate-linked admission without false submission");

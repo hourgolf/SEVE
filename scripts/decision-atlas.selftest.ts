@@ -22,6 +22,20 @@ assert.match(runner, /arg\("generated-at"\) \?\? etSessionCloseUtc\(throughSessi
 assert.match(runner, /scheduleActivationAuthorized:\s*false/);
 assert.match(runner, /activeChannelSpecDatabaseIdsByVersionKey/,
   "nightly snapshot must preserve the active database spec identity per channel");
+assert.doesNotMatch(runner, /payload->|"payload"/,
+  "live Atlas snapshots must use durable execution columns instead of copying or projecting payload JSON");
+assert.match(runner, /readSignalRationales/,
+  "live Atlas reads must fetch decision-bearing rationale by exact signal identity");
+assert.match(runner, /select\("id,rationale"\)/,
+  "targeted primary-key reads must preserve the signal structure used by downstream entry research");
+assert.match(runner, /offset \+= 200/,
+  "rationale projection must stay in bounded primary-key batches");
+assert.match(runner, /rationale: rationaleBySignal\.get\(row\.id\)\?\.rationale \?\? null/,
+  "bounded rationale reads must retain the frozen snapshot contract for downstream replay");
+assert.match(runner, /activeEvidenceReads >= 2/,
+  "large Atlas evidence reads must bound database concurrency");
+assert.doesNotMatch(runner, /direction,rationale,acted_on/,
+  "live Atlas snapshots must not copy unbounded signal rationales into every report artifact");
 assert.match(runner, /read-only-select-audit/,
   "a final Atlas may overlay only a frozen zero-write catch-up manifest");
 assert.match(runner, /virtual catch-up manifest is stale/,

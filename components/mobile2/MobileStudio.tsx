@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
 
 // =============================================================================
 // MOBILE · STUDIO (S5) — the tune surface (the gallery mock's studio frame):
@@ -31,6 +32,9 @@ export function MobileStudio({
   onOpenSettings: () => void;
 }) {
   const { view, feed } = props;
+  const atlasTruth = deriveAtlasReportTruth({ state: props.decisionAtlas.state, freshness: props.decisionAtlas.freshness,
+    reportThroughSession: props.decisionAtlas.throughSession, evidenceThroughSession: props.decisionAtlas.evidenceThroughSession,
+    publicationState: props.decisionAtlas.publication?.state });
   const { desk, anySolo, isActive } = view;
   const { canWrite, canDirectConfigure } = props.write;
   const passports = props.channelWorkspace;
@@ -80,11 +84,12 @@ export function MobileStudio({
             shadowSummary={props.shadowResearch.currentCumulative?.dark.find((item) => item.slug === s.slug)}
             managerEvidence={props.managerEvidence.book?.channels[s.slug]}
             decisionBrief={props.decisionAtlas.bySlug[s.slug]}
+            decisionAtlasReports={props.decisionAtlas}
             researchEvidence={props.shadowResearch}
             controlPlane={props.channelControlPlane}
             focusAxis={destination?.channel === s.slug ? destination.axis : undefined}
             onCurrentSession={() => onNavigate?.({ section: "tape", channel: s.slug, reviewSection: "tape", session: props.decisionAtlas.throughSession ?? undefined })}
-            onNextReview={() => onNavigate?.({ section: "research", channel: s.slug, axis: axisForDisposition(props.decisionAtlas.bySlug[s.slug]?.recommendation.axis), researchMode: "decisions" })}
+            onNextReview={() => onNavigate?.({ section: "research", channel: s.slug, axis: axisForDisposition(atlasTruth.publishedDecisionUsable ? props.decisionAtlas.bySlug[s.slug]?.recommendation.axis : undefined), researchMode: "decisions" })}
             open={openSlug === s.slug}
             onToggle={() => setOpenSlug(openSlug === s.slug ? null : s.slug)}
           />

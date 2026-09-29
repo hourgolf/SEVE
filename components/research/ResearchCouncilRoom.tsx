@@ -10,6 +10,7 @@ import {
   type ResearchDispatch,
 } from "@/lib/research/researchCouncil";
 import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
+import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
 
 const MAX_BRIEF_DISPATCHES = 5;
 type RoomFilter = "brief" | "conflicts" | "all";
@@ -56,6 +57,9 @@ export function ResearchCouncilRoom({ reports, onNavigate }: {
 }) {
   const [filter, setFilter] = useState<RoomFilter>("brief");
   const [expanded, setExpanded] = useState(false);
+  const truth = deriveAtlasReportTruth({ state: reports.state, freshness: reports.freshness,
+    reportThroughSession: reports.throughSession, evidenceThroughSession: reports.evidenceThroughSession,
+    publicationState: reports.publication?.state });
   const packet = useMemo(() => reports.throughSession && Object.keys(reports.bySlug).length
     ? buildResearchCouncil({
       throughSession: reports.throughSession,
@@ -63,6 +67,10 @@ export function ResearchCouncilRoom({ reports, onNavigate }: {
       briefs: reports.bySlug,
     }) : null, [reports.bySlug, reports.throughSession]);
   if (!packet) return null;
+  if (!truth.publishedDecisionUsable) return <section className="research-council" aria-label="Nightly research agent room">
+    <header className="rc-head"><span><small>PUBLISHED RESEARCH ROOM WITHHELD</small><b>{truth.label}</b></span><em>RESEARCH ONLY</em></header>
+    <p className="rc-quiet">{truth.fact}</p>
+  </section>;
   const brief = selectResearchCouncilBrief(packet, MAX_BRIEF_DISPATCHES);
   const filtered = filter === "conflicts"
     ? packet.dispatches.filter((row) => row.kind === "challenge")

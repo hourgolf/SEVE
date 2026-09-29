@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), "utf8");
 const card = read("./DecisionAtlasPreviewCard.tsx");
 const pulse = read("./DecisionAtlasFleetPulse.tsx");
+const council = read("./ResearchCouncilRoom.tsx");
 const css = read("../../app/decision-atlas.css");
 const research = read("../perform/ShadowResearchWorkspace.tsx");
 const inspector = read("../studio/ChannelInspector.tsx");
@@ -14,7 +15,7 @@ const review = read("../perform/ReviewWorkspace.tsx");
 const ops = read("../perform/OpsWorkspace.tsx");
 const mobile = read("../mobile2/MobileDeskSheet.tsx");
 
-const authoritative = card.slice(card.indexOf("function AuthoritativeDecision"), card.indexOf("export function DecisionAtlasPreviewCard"));
+const authoritative = card.slice(card.indexOf("function AuthoritativeDecision"), card.indexOf("function WithheldPublishedDecision"));
 assert.equal((authoritative.match(/<details/g) ?? []).length, 1, "the decision card must use one progressive-disclosure panel");
 assert.match(authoritative, /model\.metrics\.map/);
 assert.doesNotMatch(authoritative, /brief\.metrics\.map/, "the legacy five-metric wall must not return");
@@ -33,6 +34,10 @@ assert(research.indexOf("<CurrentEvidenceCard") > research.indexOf("<details cla
 for (const surface of [dashboard, positions, review, ops, mobile]) assert.match(surface, /DecisionAtlasFleetPulse/);
 assert.match(pulse, /purpose === "operations"/);
 assert.match(pulse, /purpose === "positions"/);
+assert.match(pulse, /!truth\.publishedDecisionUsable/,
+  "cross-workspace Atlas pulses must withhold stale or unverified decisions");
+assert.match(council, /PUBLISHED RESEARCH ROOM WITHHELD/,
+  "the research council must not present stale dispatches as a current room");
 assert.doesNotMatch(`${card}\n${pulse}\n${research}`, /recommendation\.label/, "all visible dispositions must use the shared canonical wording");
 
 assert.match(css, /data-skin="blackout"/);

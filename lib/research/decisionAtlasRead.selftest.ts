@@ -66,6 +66,8 @@ async function main() {
   assert.match(runner, /\.gte\("entry_quote_at", evidenceWindow.start\)\.lt\("entry_quote_at", evidenceWindow.end\)/);
   assert.doesNotMatch(runner, /\.gte\("completed_at", cohortFrom\)/);
   assert.doesNotMatch(runner, /max: 50_000/);
+  assert.match(readFileSync(new URL("./decisionAtlasRead.ts", import.meta.url), "utf8"), /COUNT_TIMEOUT_MS = 60_000/,
+    "exact membership counts must tolerate the current durable evidence volume");
   console.log("decisionAtlasRead: PASS — >50k, tied clocks, exact boundaries, count/identity/partial failures, session and DST bounds");
 }
 void main().catch((error) => { console.error(error); process.exitCode = 1; });
