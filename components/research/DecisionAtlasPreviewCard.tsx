@@ -220,15 +220,16 @@ function AuthoritativeDecision({ brief, summary, compact, focusAxis, onAxisChang
   </section>;
 }
 
-function WithheldPublishedDecision({ brief, model, truth, summary, compact }: {
+function WithheldPublishedDecision({ brief, model, truth, summary, evidenceThroughSession, compact }: {
   brief: ChannelDecisionBrief;
   model: ReturnType<typeof buildDecisionAtlasPreview>;
   truth: AtlasReportTruth;
   summary?: ShadowChannelSummary | null;
+  evidenceThroughSession?: string | null;
   compact: boolean;
 }) {
   const published = buildChannelDecisionSummary(brief);
-  const refreshTarget = summary?.throughSession ?? "the newest retained evidence";
+  const refreshTarget = evidenceThroughSession ?? "the newest retained evidence";
   return <section className={`atlas-preview ${model.tone}${compact ? " compact" : ""}`} aria-label="Decision Atlas channel diagnostic">
     <header>
       <span><small>SELECTED CHANNEL</small><strong>{brief.channel}</strong><b>{model.label}</b></span>
@@ -269,7 +270,7 @@ export function DecisionAtlasPreviewCard({ brief, reports, summary, dryPowder, m
     publicationState: reports?.publication?.state,
   });
   if (brief && truth.publishedDecisionUsable) return <AuthoritativeDecision brief={brief} summary={summary} compact={compact} focusAxis={focusAxis} onAxisChange={onAxisChange} />;
-  if (brief) return <WithheldPublishedDecision brief={brief} model={model} truth={truth} summary={summary} compact={compact} />;
+  if (brief) return <WithheldPublishedDecision brief={brief} model={model} truth={truth} summary={summary} evidenceThroughSession={reports?.evidenceThroughSession} compact={compact} />;
   return <section className={`atlas-preview ${model.tone}${compact ? " compact" : ""}`} aria-label="Decision Atlas channel summary">
     <header><span><small>{model.experiment ? "PROSPECTIVE TEST" : "HISTORICAL VIRTUAL"}</small><b>{model.label}</b></span><em>{model.experiment ? retuneEvidence?.status.replaceAll("_", " ").toUpperCase() ?? "CONTROL UNCHANGED" : "NOT EXECUTED"}</em></header>
     <p>{model.summary}</p>

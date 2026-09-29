@@ -191,7 +191,9 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   const [excluded, setExcluded] = useState<Record<ResearchLane, string[]>>({ vb: [], all: [] });
   const [focusSlug, setFocusSlug] = useState("");
   const [viewMode, setViewMode] = useState<"decisions" | "data">("decisions");
-  const [evidenceLens, setEvidenceLens] = useState<"current" | "comparable" | "all">("comparable");
+  // Open on the newest observed channel specification. Comparable history is
+  // useful only after the operator deliberately asks for its broader cohort.
+  const [evidenceLens, setEvidenceLens] = useState<"current" | "comparable" | "all">("current");
   const [showAllDecisions, setShowAllDecisions] = useState(false);
   const [decisionFilter, setDecisionFilter] = useState<ResearchFilter | null>(null);
   const [historicalEvidenceSlug, setHistoricalEvidenceSlug] = useState<string | null>(null);

@@ -72,6 +72,10 @@ assert.match(finishMap, /selection-ring/,
   "the selected channel must remain visually identifiable in a crowded fleet map");
 assert.match(research, /Comparable fleet view is withheld until the nightly briefs are refreshed/,
   "old published briefs must not masquerade as comparable fleet evidence");
+assert.match(research, /useState<"current" \| "comparable" \| "all">\("current"\)/,
+  "Atlas must open on the newest observed channel specification");
+assert.match(card, /const refreshTarget = evidenceThroughSession \?\? "the newest retained evidence"/,
+  "a withheld brief must request a rebuild through the newest retained evidence, not one channel's last observation");
 assert.match(research, /srw-atlas-brief/);
 assert.match(research, /WHAT DESERVES REVIEW\?/);
 assert.match(research, /DEFAULT_DECISION_LIMIT = 4/);
