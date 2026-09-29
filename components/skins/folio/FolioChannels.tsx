@@ -33,7 +33,7 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
     const lifecycle = surface.channelWorkspace.bySlug[row.channel.slug]?.lifecycle;
     return scope === "all" || (scope === "roots" ? lifecycle === "paper-root" : lifecycle === "dark-evidence");
   }), sort), [rows, scope, sort, surface.channelWorkspace.bySlug]);
-  const selected = rows.find((row) => row.channel.slug === selectedSlug) ?? visible[0] ?? rows[0];
+  const selected = selectedSlug ? rows.find((row) => row.channel.slug === selectedSlug) : undefined;
   const summary = summarizeStudioFleet(rows);
   const release = surface.channelWorkspace.releaseView;
   const atlasTruth = deriveAtlasReportTruth({ state: surface.decisionAtlas.state, freshness: surface.decisionAtlas.freshness,
@@ -43,9 +43,9 @@ export function FolioChannelsDesktop({ surface }: { surface: SurfaceProps }) {
     && surface.channelWorkspace.release.state === "verified"
     && ["ok", "recovered"].includes(surface.feed.positionAttribution.state);
   useEffect(() => {
-    surface.setResearchDemand(Boolean(selected));
+    surface.setResearchDemand(Boolean(selectedSlug));
     return () => surface.setResearchDemand(false);
-  }, [selected, surface.setResearchDemand]);
+  }, [selectedSlug, surface.setResearchDemand]);
 
   return (
     <div className="folio-channels folio-channels-desktop" data-nav-target="true" tabIndex={-1}>

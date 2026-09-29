@@ -25,11 +25,15 @@ export function CurrentEvidenceCard({
   selectedSlug: string;
   executed?: CurrentExecutedSummary;
   comparison?: PairedCurrentComparison;
-  state: "ok" | "empty" | "error";
+  state: "idle" | "loading" | "ok" | "empty" | "error";
   error: string;
   truncated: boolean;
   compact?: boolean;
 }) {
+  if (state === "idle" || state === "loading") return <section className={`srw-current-evidence empty${compact ? " compact" : ""}`} aria-busy="true">
+    <header><span><small>CURRENT EXECUTED</small><b>{selectedSlug}</b></span><em>LOADING INDEPENDENTLY</em></header>
+    <p>The complete virtual ledger is available. Executed lineage is still being reconciled and will appear without blocking Atlas.</p>
+  </section>;
   if (state === "error") return <section className={`srw-current-evidence unavailable${compact ? " compact" : ""}`}>
     <header><span><small>CURRENT EXECUTED</small><b>COMPARISON UNAVAILABLE</b></span><em>READ FAILED</em></header>
     <p>{unavailableSummary(error)}</p>

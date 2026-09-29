@@ -52,10 +52,11 @@ export interface ShadowResearch {
   dryPowderBySession: Record<string, Record<string, ChannelDryPowderCurve>>;
   currentExecutedBySlug: Record<string, CurrentExecutedSummary>;
   pairedCurrent: PairedCurrentComparison[];
-  currentExecutedState: "ok" | "empty" | "error";
+  currentExecutedState: "idle" | "loading" | "ok" | "empty" | "error";
   currentExecutedError: string;
   currentExecutedTruncated: boolean;
   boundedRetunes: BoundedRetuneBook;
+  boundedRetuneState: "idle" | "loading" | "ok" | "empty" | "error";
   boundedRetuneError: string;
   sourceCounts: { virtual: number; retuneSignals: number | null };
   dateRange: { from: string; through: string };
@@ -77,10 +78,11 @@ const EMPTY: ShadowResearch = {
   dryPowderBySession: {},
   currentExecutedBySlug: {},
   pairedCurrent: [],
-  currentExecutedState: "empty",
+  currentExecutedState: "idle",
   currentExecutedError: "",
   currentExecutedTruncated: false,
   boundedRetuneError: "",
+  boundedRetuneState: "idle",
   sourceCounts: { virtual: 0, retuneSignals: null },
   dateRange: { from: COHORT_START, through: "" },
   setDateRange: () => {},
@@ -109,6 +111,120 @@ const message = (error: unknown): string =>
     ? String((error as { message?: unknown }).message ?? "read rejected")
     : String(error ?? "read rejected");
 
+async function readRetuneSignals(input: {
+  from: string;
+  until: string;
+  alive: () => boolean;
+}): Promise<Record<string, unknown>[]> {
+  const retuneStrategistIds = PRIORITY_A_BOUNDED_RETUNES.map((row) => row.strategistId);
+  const retuneFrom = input.from > `${PRIORITY_A_RETUNE_COHORT_START}T04:00:00.000Z`
+    ? input.from
+    : `${PRIORITY_A_RETUNE_COHORT_START}T04:00:00.000Z`;
+  return completeResearchRead<Record<string, unknown>>({
+    key: "id",
+    alive: input.alive,
+    count: async () => {
+      const result = await getSupabase().from("signals").select("id", { count: "exact", head: true })
+        .in("strategist_id", retuneStrategistIds).gte("created_at", retuneFrom).lt("created_at", input.until);
+      if (result.error) throw result.error;
+      return result.count;
+    },
+    page: async (after, size) => {
+      let query = getSupabase().from("signals")
+        .select("id,strategist_id,created_at,rationale_epoch:rationale->>configuration_epoch_id,experiment:rationale->bounded_retune_experiment")
+        .in("strategist_id", retuneStrategistIds).gte("created_at", retuneFrom).lt("created_at", input.until).order("id").limit(size);
+      if (after) query = query.gt("id", after);
+      const result = await query;
+      if (result.error) throw result.error;
+      return (result.data ?? []) as Record<string, unknown>[];
+    },
+  });
+}
+
+async function readCurrentExecutedEvidence(input: {
+  from: string;
+  until: string;
+  configuredKey: string;
+}) {
+  const executedRead = await getSupabase().from("positions")
+    .select("id,qty,realized_pnl,opened_at,closed_at,runner_of,channel_spec_version_id,release_manifest_id,configuration_epoch_id,strategists(slug)", { count: "exact" })
+    .eq("status", "closed")
+    .gte("opened_at", input.from > "2026-07-20T04:00:00.000Z" ? input.from : "2026-07-20T04:00:00.000Z")
+    .lt("opened_at", input.until)
+    .order("opened_at", { ascending: true })
+    .limit(MAX_EXECUTED_ROWS);
+  if (executedRead.error) throw executedRead.error;
+  const rawExecutedRows = ((executedRead.data ?? []) as Record<string, unknown>[]).flatMap((row) => {
+    const relation = Array.isArray(row.strategists) ? row.strategists[0] : row.strategists;
+    const slug = relation && typeof relation === "object" && "slug" in relation
+      ? String((relation as { slug?: unknown }).slug ?? "")
+      : "";
+    if (!slug || !row.id || !row.opened_at || row.realized_pnl == null) return [];
+    return [{
+      id: String(row.id),
+      slug,
+      quantity: Number(row.qty ?? 0),
+      realizedPnl: Number(row.realized_pnl),
+      openedAt: String(row.opened_at),
+      closedAt: row.closed_at == null ? null : String(row.closed_at),
+      runnerOf: row.runner_of == null ? null : String(row.runner_of),
+      configurationEpochId: row.configuration_epoch_id == null ? null : String(row.configuration_epoch_id),
+      channelSpecVersionId: row.channel_spec_version_id == null ? null : String(row.channel_spec_version_id),
+      releaseManifestId: row.release_manifest_id == null ? null : String(row.release_manifest_id),
+    }];
+  });
+  const observations: ExecutionAccountObservation[] = [];
+  // A single `.in(...)` read silently stops at PostgREST's row ceiling.
+  // Page every bounded position batch and retain only immutable routes.
+  for (let batchStart = 0; batchStart < rawExecutedRows.length; batchStart += ROUTE_BATCH_SIZE) {
+    const positionIds = rawExecutedRows.slice(batchStart, batchStart + ROUTE_BATCH_SIZE).map((row) => row.id);
+    for (let offset = 0; offset < MAX_ROUTE_ROWS_PER_BATCH; offset += ROUTE_PAGE_SIZE) {
+      const routeRead = await getSupabase().from("execution_observations")
+        .select("id,position_id,account_id,event_at")
+        .in("position_id", positionIds)
+        .not("account_id", "is", null)
+        .order("event_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + ROUTE_PAGE_SIZE - 1);
+      if (routeRead.error) throw routeRead.error;
+      const page = (routeRead.data ?? []) as ExecutionAccountObservation[];
+      observations.push(...page);
+      if (page.length < ROUTE_PAGE_SIZE) break;
+      if (offset + ROUTE_PAGE_SIZE >= MAX_ROUTE_ROWS_PER_BATCH) {
+        throw new Error(`immutable route read exceeded ${MAX_ROUTE_ROWS_PER_BATCH} rows for ${positionIds.length} positions`);
+      }
+    }
+  }
+  const attribution = attributePositionsByImmutableExecutionAccount({
+    positions: rawExecutedRows,
+    observations,
+    configuredPaperAccountIds: new Set(input.configuredKey.split(",").filter(Boolean)),
+    positionLabel: "current executed research positions",
+  });
+  if (!attribution.ok) throw new Error(attribution.issues.join("; "));
+  const historical = await readHistoricalAttribution();
+  const byId = new Map<string, HistoricalTrade>(historical.records.flatMap((trade) =>
+    trade.positionIds.map((id) => [id, trade] as const)));
+  const missingChannels = new Set(historical.brokerOnly.map((trade) => trade.slug));
+  let historicalExecutedWithheld = 0;
+  const executedRows: ExecutedResearchRow[] = [...attribution.byAccount.entries()].flatMap(([accountId, accountRows]) =>
+    accountRows.map((row) => ({ ...row, accountId }))).filter((row) => {
+      const trade = byId.get(row.id);
+      const eligible = !missingChannels.has(row.slug)
+        && (!trade || trade.state === "broker_reconstructed"
+          && Math.abs(Math.round((trade.reconstructedGross! - trade.ledgerGross) * 100)) === 0);
+      if (!eligible) historicalExecutedWithheld += 1;
+      return eligible;
+    });
+  const current = deriveCurrentExecutedEvidence(executedRows);
+  return {
+    current,
+    historicalExecutedWithheld,
+    historicalMissingChannels: [...missingChannels].sort(),
+    truncated: (executedRead.count ?? executedRows.length) > MAX_EXECUTED_ROWS,
+  };
+}
+
 /**
  * Page-owned and caller-gated. Fixed date bounds, UUID keysets and source-count
  * reconciliation prevent silently truncated datasets. Experiment read failures
@@ -128,6 +244,8 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
     const cached = stateRef.current;
     const reusable = (cached.state === "ok" || cached.state === "empty")
       && cached.asOf != null
+      && cached.boundedRetuneState !== "loading"
+      && cached.currentExecutedState !== "loading"
       && cached.dateRange.from === dateRange.from
       && cached.dateRange.through === dateRange.through
       && Date.now() - Date.parse(cached.asOf) < RESEARCH_REOPEN_CACHE_MS;
@@ -139,21 +257,30 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
         const bounds = researchDateBounds(dateRange.from, dateRange.through);
         // Freeze the upper bound so new signals do not move this read's cohort.
         const until = bounds.until < new Date().toISOString() ? bounds.until : new Date().toISOString();
+
+        // These datasets are independent. Start them together, then publish the
+        // complete virtual ledger as soon as it reconciles instead of making the
+        // primary Atlas wait for slower supplemental comparisons.
+        const retuneRead = readRetuneSignals({ from: bounds.from, until, alive: () => alive })
+          .then((rows) => ({ rows, error: "" }), (error) => ({ rows: null, error: message(error) }));
+        const executedRead = readCurrentExecutedEvidence({ from: bounds.from, until, configuredKey })
+          .then((value) => ({ value, error: "" }), (error) => ({ value: null, error: message(error) }));
+
         const virtualScope = () => getSupabase().from("virtual_trades");
         const rawRows = await completeResearchRead<Record<string, unknown>>({
           key: "signal_id", alive: () => alive,
           count: async () => {
-            const r = await virtualScope().select("signal_id", { count: "exact", head: true }).gte("signal_at", bounds.from).lt("signal_at", until);
-            if (r.error) throw r.error;
-            return r.count;
+            const result = await virtualScope().select("signal_id", { count: "exact", head: true }).gte("signal_at", bounds.from).lt("signal_at", until);
+            if (result.error) throw result.error;
+            return result.count;
           },
           page: async (after, size) => {
-            let q = virtualScope().select("signal_id,slug,blocked,exit_reason,pnl_per_contract,signal_at,exit_at,occ,entry_px,mfe_pct,giveback_pct,channel_spec_version_id,release_manifest_id,configuration_epoch_id,native_manager_policy_version,research_publisher_version")
+            let query = virtualScope().select("signal_id,slug,blocked,exit_reason,pnl_per_contract,signal_at,exit_at,occ,entry_px,mfe_pct,giveback_pct,channel_spec_version_id,release_manifest_id,configuration_epoch_id,native_manager_policy_version,research_publisher_version")
               .gte("signal_at", bounds.from).lt("signal_at", until).order("signal_id").limit(size);
-            if (after) q = q.gt("signal_id", after);
-            const r = await q;
-            if (r.error) throw r.error;
-            return (r.data ?? []) as Record<string, unknown>[];
+            if (after) query = query.gt("signal_id", after);
+            const result = await query;
+            if (result.error) throw result.error;
+            return (result.data ?? []) as Record<string, unknown>[];
           },
         });
         const rows = rawRows.map((row) => ({
@@ -180,39 +307,61 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
         const dryPowderBySlug = deriveChannelDryPowderCurves(rows);
         const dryPowderBySession = deriveSessionDryPowderCurves(rows);
         const virtualBySignal = new Map(rows.map((row) => [row.signalId ?? "", row]));
-        let boundedRetuneError = "";
-        let retuneCount: number | null = null;
-        let boundedRetunes = buildBoundedRetuneBook({ generatedAt: new Date().toISOString(), throughSession: dateRange.through, opportunities: [] });
-        try {
-          const retuneStrategistIds = PRIORITY_A_BOUNDED_RETUNES.map((row) => row.strategistId);
-          const retuneFrom = bounds.from > `${PRIORITY_A_RETUNE_COHORT_START}T04:00:00.000Z` ? bounds.from : `${PRIORITY_A_RETUNE_COHORT_START}T04:00:00.000Z`;
-          const retuneSignals = await completeResearchRead<Record<string, unknown>>({
-            key: "id", alive: () => alive,
-            count: async () => {
-              const r = await getSupabase().from("signals").select("id", { count: "exact", head: true })
-                .in("strategist_id", retuneStrategistIds).gte("created_at", retuneFrom).lt("created_at", until);
-              if (r.error) throw r.error;
-              return r.count;
-            },
-            page: async (after, size) => {
-              let q = getSupabase().from("signals")
-                .select("id,strategist_id,created_at,rationale_epoch:rationale->>configuration_epoch_id,experiment:rationale->bounded_retune_experiment")
-                .in("strategist_id", retuneStrategistIds).gte("created_at", retuneFrom).lt("created_at", until).order("id").limit(size);
-              if (after) q = q.gt("id", after);
-              const r = await q;
-              if (r.error) throw r.error;
-              return (r.data ?? []) as Record<string, unknown>[];
-            },
-          });
-          retuneCount = retuneSignals.length;
-          const retuneDefinitionByStrategist = new Map(PRIORITY_A_BOUNDED_RETUNES
+        if (!alive) return;
+        const asOf = new Date().toISOString();
+        setState({
+          state: sessions.length ? "ok" : "empty",
+          sessions,
+          cumulative,
+          currentCumulative,
+          dryPowderBySlug,
+          dryPowderBySession,
+          currentExecutedBySlug: {},
+          pairedCurrent: [],
+          currentExecutedState: "loading",
+          currentExecutedError: "",
+          currentExecutedTruncated: false,
+          boundedRetunes: buildBoundedRetuneBook({ generatedAt: asOf, throughSession: dateRange.through, opportunities: [] }),
+          boundedRetuneState: "loading",
+          boundedRetuneError: "",
+          sourceCounts: { virtual: rows.length, retuneSignals: null },
+          dateRange,
+          setDateRange: () => {},
+          virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity",
+            fromSession: cumulative?.fromSession ?? null, throughSession: cumulative?.throughSession ?? null,
+            configurationEpochId: null, managerVersion: null,
+            scope: { kind: "portfolio", accountIds: [], channelSlugs: [...new Set(rows.map((row) => row.slug))] },
+            completeness: sessions.length ? "complete" : "unavailable",
+            reconciliation: "unverified", authority: sessions.length ? "research_only" : "withheld", source: "virtual_trades · native hypothetical paths", receiptHash: null,
+            limitations: [
+              ...(rows.some((row) => !row.channelSpecVersionId) ? ["Some legacy virtual rows are unstamped and remain labeled as all-history context."] : []),
+              "Source row counts reconciled before and after complete pagination. Quote-path quality is a separate requirement.",
+            ], asOf }),
+          currentExecutedEvidence: evidenceEnvelope({ ...EMPTY.currentExecutedEvidence, fromSession: dateRange.from,
+            throughSession: dateRange.through, limitations: ["Current executed comparison is loading independently of the complete virtual ledger."], asOf: null }),
+          cohortStart: dateRange.from,
+          truncated: false,
+          error: "",
+          asOf,
+          basis: "native virtual paths in selected date range",
+        });
+
+        const retuneCompletion = retuneRead.then((result) => {
+          if (!alive) return;
+          if (!result.rows) {
+            setState((previous) => previous.dateRange.from !== dateRange.from || previous.dateRange.through !== dateRange.through
+              ? previous : { ...previous, boundedRetuneState: "error", boundedRetuneError: result.error,
+                sourceCounts: { ...previous.sourceCounts, retuneSignals: null } });
+            return;
+          }
+          const definitionByStrategist = new Map(PRIORITY_A_BOUNDED_RETUNES
             .map((definition) => [definition.strategistId, definition]));
-          const retuneOpportunities = retuneSignals.flatMap((signal): AtlasOpportunity[] => {
-            const definition = retuneDefinitionByStrategist.get(String(signal.strategist_id));
+          const opportunities = result.rows.flatMap((signal): AtlasOpportunity[] => {
+            const definition = definitionByStrategist.get(String(signal.strategist_id));
             if (!definition) return [];
             const virtual = virtualBySignal.get(String(signal.id));
             const entryPrice = virtual?.entryPrice ?? null;
-            const result = virtual?.pnlPerContract ?? null;
+            const outcome = virtual?.pnlPerContract ?? null;
             const configurationEpochId = typeof signal.rationale_epoch === "string" ? signal.rationale_epoch : null;
             return [{
               logicalOpportunityId: `signal:${signal.id}`,
@@ -236,8 +385,8 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
               blockedReason: virtual?.blocked ?? null,
               quantity: null,
               entryPrice,
-              resultPerContractUsd: result,
-              returnPct: result != null && entryPrice != null && entryPrice > 0 ? result / entryPrice : null,
+              resultPerContractUsd: outcome,
+              returnPct: outcome != null && entryPrice != null && entryPrice > 0 ? outcome / entryPrice : null,
               mfePct: virtual?.mfePct ?? null,
               maePct: null,
               captureRatio: null,
@@ -246,146 +395,61 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
               sourceRefs: [`signals:${signal.id}`, ...(virtual ? [`virtual_trades:${signal.id}`] : [])],
             }];
           });
-          boundedRetunes = buildBoundedRetuneBook({
+          const boundedRetunes = buildBoundedRetuneBook({
             generatedAt: new Date().toISOString(),
             throughSession: cumulative?.throughSession ?? PRIORITY_A_RETUNE_COHORT_START,
-            opportunities: retuneOpportunities,
+            opportunities,
           });
-        } catch (error) { boundedRetuneError = message(error); retuneCount = null; }
-        let historicalExecutedWithheld = 0;
-        let historicalMissingChannels: string[] = [];
-        let currentExecutedBySlug: Record<string, CurrentExecutedSummary> = {};
-        let pairedCurrent: PairedCurrentComparison[] = [];
-        let currentExecutedState: ShadowResearch["currentExecutedState"] = "empty";
-        let currentExecutedError = "";
-        let currentExecutedTruncated = false;
-        try {
-          const executedRead = await getSupabase().from("positions")
-            .select("id,qty,realized_pnl,opened_at,closed_at,runner_of,channel_spec_version_id,release_manifest_id,configuration_epoch_id,strategists(slug)", { count: "exact" })
-            .eq("status", "closed")
-            .gte("opened_at", bounds.from > "2026-07-20T04:00:00.000Z" ? bounds.from : "2026-07-20T04:00:00.000Z")
-            .lt("opened_at", until)
-            .order("opened_at", { ascending: true })
-            .limit(MAX_EXECUTED_ROWS);
-          if (executedRead.error) throw executedRead.error;
-          const rawExecutedRows = ((executedRead.data ?? []) as Record<string, unknown>[]).flatMap((row) => {
-            const relation = Array.isArray(row.strategists) ? row.strategists[0] : row.strategists;
-            const slug = relation && typeof relation === "object" && "slug" in relation
-              ? String((relation as { slug?: unknown }).slug ?? "")
-              : "";
-            if (!slug || !row.id || !row.opened_at || row.realized_pnl == null) return [];
-            return [{
-              id: String(row.id),
-              slug,
-              quantity: Number(row.qty ?? 0),
-              realizedPnl: Number(row.realized_pnl),
-              openedAt: String(row.opened_at),
-              closedAt: row.closed_at == null ? null : String(row.closed_at),
-              runnerOf: row.runner_of == null ? null : String(row.runner_of),
-              configurationEpochId: row.configuration_epoch_id == null ? null : String(row.configuration_epoch_id),
-              channelSpecVersionId: row.channel_spec_version_id == null ? null : String(row.channel_spec_version_id),
-              releaseManifestId: row.release_manifest_id == null ? null : String(row.release_manifest_id),
-            }];
-          });
-          const observations: ExecutionAccountObservation[] = [];
-          // A single `.in(...)` read silently stops at PostgREST's row ceiling.
-          // Current positions can have many observations each, so the old
-          // unpaged query returned 1,000 rows and made the remaining positions
-          // look unrouted. Read only immutable account-bearing observations and
-          // page every bounded position batch to completion.
-          for (let batchStart = 0; batchStart < rawExecutedRows.length; batchStart += ROUTE_BATCH_SIZE) {
-            const positionIds = rawExecutedRows
-              .slice(batchStart, batchStart + ROUTE_BATCH_SIZE)
-              .map((row) => row.id);
-            for (let offset = 0; offset < MAX_ROUTE_ROWS_PER_BATCH; offset += ROUTE_PAGE_SIZE) {
-              const routeRead = await getSupabase().from("execution_observations")
-                .select("id,position_id,account_id,event_at")
-                .in("position_id", positionIds)
-                .not("account_id", "is", null)
-                .order("event_at", { ascending: true })
-                .order("id", { ascending: true })
-                .range(offset, offset + ROUTE_PAGE_SIZE - 1);
-              if (routeRead.error) throw routeRead.error;
-              const page = (routeRead.data ?? []) as ExecutionAccountObservation[];
-              observations.push(...page);
-              if (page.length < ROUTE_PAGE_SIZE) break;
-              if (offset + ROUTE_PAGE_SIZE >= MAX_ROUTE_ROWS_PER_BATCH) {
-                throw new Error(`immutable route read exceeded ${MAX_ROUTE_ROWS_PER_BATCH} rows for ${positionIds.length} positions`);
-              }
-            }
-          }
-          const attribution = attributePositionsByImmutableExecutionAccount({
-            positions: rawExecutedRows,
-            observations,
-            configuredPaperAccountIds: new Set(configuredKey.split(",").filter(Boolean)),
-            positionLabel: "current executed research positions",
-          });
-          if (!attribution.ok) throw new Error(attribution.issues.join("; "));
-          const historical = await readHistoricalAttribution();
-          const byId = new Map<string,HistoricalTrade>(historical.records.flatMap(t=>t.positionIds.map(id=>[id,t] as const)));
-          const missingChannels = new Set(historical.brokerOnly.map(t=>t.slug));
-          historicalMissingChannels=[...missingChannels].sort();
-          const executedRows: ExecutedResearchRow[] = [...attribution.byAccount.entries()].flatMap(([accountId, accountRows]) =>
-            accountRows.map((row) => ({ ...row, accountId }))).filter(row=>{
-              const trade=byId.get(row.id);
-              const eligible=!missingChannels.has(row.slug)&&(!trade||trade.state==='broker_reconstructed'&&Math.abs(Math.round((trade.reconstructedGross!-trade.ledgerGross)*100))===0);
-              if(!eligible)historicalExecutedWithheld++;
-              return eligible;
-            });
-          const current = deriveCurrentExecutedEvidence(executedRows);
-          currentExecutedBySlug = current.bySlug;
-          pairedCurrent = derivePairedCurrentComparisons(current.opportunities, rows);
-          currentExecutedState = current.opportunities.length ? "ok" : "empty";
-          currentExecutedTruncated = (executedRead.count ?? executedRows.length) > MAX_EXECUTED_ROWS;
-        } catch (error) {
-          currentExecutedState = "error";
-          currentExecutedError = message(error);
-        }
-        if (!alive) return;
-        const asOf = new Date().toISOString();
-        const currentSessions = Object.values(currentExecutedBySlug).flatMap((summary) => [summary.fromSession, summary.throughSession]).filter(Boolean).sort();
-        setState({
-          state: sessions.length ? "ok" : "empty",
-          sessions,
-          cumulative,
-          currentCumulative,
-          dryPowderBySlug,
-          dryPowderBySession,
-          currentExecutedBySlug,
-          pairedCurrent,
-          currentExecutedState,
-          currentExecutedError,
-          currentExecutedTruncated,
-          boundedRetunes,
-          boundedRetuneError,
-          sourceCounts: { virtual: rows.length, retuneSignals: retuneCount },
-          dateRange,
-          setDateRange: () => {},
-          virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity",
-            fromSession: cumulative?.fromSession ?? null, throughSession: cumulative?.throughSession ?? null,
-            configurationEpochId: null, managerVersion: null,
-            scope: { kind: "portfolio", accountIds: [], channelSlugs: [...new Set(rows.map((row) => row.slug))] },
-            completeness: sessions.length ? "complete" : "unavailable",
-            reconciliation: "unverified", authority: sessions.length ? "research_only" : "withheld", source: "virtual_trades · native hypothetical paths", receiptHash: null,
-            limitations: [
-              ...(rows.some((row) => !row.channelSpecVersionId) ? ["Some legacy virtual rows are unstamped and remain labeled as all-history context."] : []),
-              "Source row counts reconciled before and after complete pagination. Quote-path quality is a separate requirement.",
-            ], asOf }),
-          currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade",
-            fromSession: currentSessions[0] ?? null, throughSession: currentSessions.at(-1) ?? null,
-            configurationEpochId: null, managerVersion: null,
-            scope: { kind: "portfolio", accountIds: [...new Set(Object.values(currentExecutedBySlug).flatMap((summary) => summary.accountIds))], channelSlugs: Object.keys(currentExecutedBySlug) },
-            completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated || historicalExecutedWithheld || historicalMissingChannels.length ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
-            reconciliation: currentExecutedState === "ok" ? "reconciled" : "blocked",
-            authority: currentExecutedState === "ok" && !currentExecutedTruncated && !historicalExecutedWithheld && !historicalMissingChannels.length ? "decision_ready" : "withheld",
-            source: "positions lineage + immutable execution route · latest channel behavior spec", receiptHash: null,
-            limitations: ["Current execution cohort begins July 20; earlier virtual history remains separately available.", "Channel behavior specifications are selected independently; receipt-only portfolio epoch changes do not reset unchanged channel evidence.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : []), ...(historicalExecutedWithheld ? [`${historicalExecutedWithheld} position rows withheld from current behavior comparisons because their broker result or inventory does not match the recorded ledger.`] : []), ...(historicalMissingChannels.length ? [`Broker-only historical fills prevent complete executed comparisons for ${historicalMissingChannels.join(", ")}. See Review for their audited economic subtotals.`] : [])], asOf }),
-          cohortStart: dateRange.from,
-          truncated: false,
-          error: "",
-          asOf,
-          basis: "native virtual paths in selected date range",
+          setState((previous) => previous.dateRange.from !== dateRange.from || previous.dateRange.through !== dateRange.through
+            ? previous : { ...previous, boundedRetunes, boundedRetuneState: result.rows.length ? "ok" : "empty",
+              boundedRetuneError: "", sourceCounts: { ...previous.sourceCounts, retuneSignals: result.rows.length } });
+        }).catch((error) => {
+          if (alive) setState((previous) => previous.dateRange.from !== dateRange.from || previous.dateRange.through !== dateRange.through
+            ? previous : { ...previous, boundedRetuneState: "error", boundedRetuneError: message(error),
+              sourceCounts: { ...previous.sourceCounts, retuneSignals: null } });
         });
+
+        const executedCompletion = executedRead.then((result) => {
+          if (!alive) return;
+          if (!result.value) {
+            setState((previous) => previous.dateRange.from !== dateRange.from || previous.dateRange.through !== dateRange.through
+              ? previous : { ...previous, currentExecutedState: "error", currentExecutedError: result.error,
+                currentExecutedEvidence: evidenceEnvelope({ ...previous.currentExecutedEvidence,
+                  completeness: "unavailable", reconciliation: "blocked", authority: "withheld",
+                  limitations: ["Executed evidence could not be reconciled; the virtual ledger remains independently complete."], asOf: new Date().toISOString() }) });
+            return;
+          }
+          const { current, historicalExecutedWithheld, historicalMissingChannels, truncated } = result.value;
+          const currentExecutedState: ShadowResearch["currentExecutedState"] = current.opportunities.length ? "ok" : "empty";
+          const currentSessions = Object.values(current.bySlug)
+            .flatMap((summary) => [summary.fromSession, summary.throughSession]).filter(Boolean).sort();
+          const supplementalAsOf = new Date().toISOString();
+          setState((previous) => previous.dateRange.from !== dateRange.from || previous.dateRange.through !== dateRange.through
+            ? previous : {
+              ...previous,
+              currentExecutedBySlug: current.bySlug,
+              pairedCurrent: derivePairedCurrentComparisons(current.opportunities, rows),
+              currentExecutedState,
+              currentExecutedError: "",
+              currentExecutedTruncated: truncated,
+              currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade",
+                fromSession: currentSessions[0] ?? null, throughSession: currentSessions.at(-1) ?? null,
+                configurationEpochId: null, managerVersion: null,
+                scope: { kind: "portfolio", accountIds: [...new Set(Object.values(current.bySlug).flatMap((summary) => summary.accountIds))], channelSlugs: Object.keys(current.bySlug) },
+                completeness: truncated || historicalExecutedWithheld || historicalMissingChannels.length ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
+                reconciliation: currentExecutedState === "ok" ? "reconciled" : "blocked",
+                authority: currentExecutedState === "ok" && !truncated && !historicalExecutedWithheld && !historicalMissingChannels.length ? "decision_ready" : "withheld",
+                source: "positions lineage + immutable execution route · latest channel behavior spec", receiptHash: null,
+                limitations: ["Current execution cohort begins July 20; earlier virtual history remains separately available.", "Channel behavior specifications are selected independently; receipt-only portfolio epoch changes do not reset unchanged channel evidence.", ...(truncated ? ["Read reached its bounded row cap."] : []), ...(historicalExecutedWithheld ? [`${historicalExecutedWithheld} position rows withheld from current behavior comparisons because their broker result or inventory does not match the recorded ledger.`] : []), ...(historicalMissingChannels.length ? [`Broker-only historical fills prevent complete executed comparisons for ${historicalMissingChannels.join(", ")}. See Review for their audited economic subtotals.`] : [])], asOf: supplementalAsOf }),
+            });
+        }).catch((error) => {
+          if (alive) setState((previous) => previous.dateRange.from !== dateRange.from || previous.dateRange.through !== dateRange.through
+            ? previous : { ...previous, currentExecutedState: "error", currentExecutedError: message(error),
+              currentExecutedEvidence: evidenceEnvelope({ ...previous.currentExecutedEvidence,
+                completeness: "unavailable", reconciliation: "blocked", authority: "withheld",
+                limitations: ["Executed evidence derivation failed; the virtual ledger remains independently complete."], asOf: new Date().toISOString() }) });
+        });
+        await Promise.all([retuneCompletion, executedCompletion]);
       } catch (error) {
         if (alive) setState((previous) => ({
           ...previous,
