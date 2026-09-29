@@ -74,6 +74,10 @@ assert.match(research, /Comparable fleet view is withheld until the nightly brie
   "old published briefs must not masquerade as comparable fleet evidence");
 assert.match(research, /useState<"current" \| "comparable" \| "all">\("current"\)/,
   "Atlas must open on the newest observed channel specification");
+assert.match(research, /value === "CURRENT" \? "CURRENT SAMPLE"/,
+  "live virtual diagnostics must not call themselves a current published report");
+assert.doesNotMatch(research, /value === "CURRENT" \? "CURRENT REPORT"/,
+  "current-report wording is reserved for a verified published Atlas bundle");
 assert.match(card, /const refreshTarget = evidenceThroughSession \?\? "the newest retained evidence"/,
   "a withheld brief must request a rebuild through the newest retained evidence, not one channel's last observation");
 assert.match(research, /srw-atlas-brief/);
