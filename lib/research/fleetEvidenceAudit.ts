@@ -279,6 +279,7 @@ function tier(input: {
   entryDecisionCovered: number;
   entryBrokerCovered: number;
   exitBrokerCovered: number;
+  exitBrokerEligible: number;
   rootTrades: number;
 }): EvidenceTier {
   if (input.positions === 0) return input.signals > 0 ? "signals_only" : "no_observations";
@@ -286,7 +287,7 @@ function tier(input: {
   return input.bookedCovered === input.closed
     && input.entryDecisionCovered === input.rootTrades
     && input.entryBrokerCovered === input.rootTrades
-    && input.exitBrokerCovered === input.closed
+    && input.exitBrokerCovered === input.exitBrokerEligible
     ? "durable_lineage_complete"
     : "durable_lineage_partial";
 }
@@ -384,13 +385,19 @@ export function buildFleetEvidenceAudit(input: {
 
     const rootIds = new Set(roots.map((position) => position.id));
     const closedIds = new Set(closed.map((position) => position.id));
+    // Reconciliation rows correct the ledger after the physical order path has
+    // already completed. Requiring another exit receipt for the correction
+    // invents a sell that never occurred, so only actual exit rows are eligible.
+    const exitBrokerEligibleIds = new Set(closed
+      .filter((position) => classifyFleetOutcome(position, mode, annotations) !== "execution_correction")
+      .map((position) => position.id));
     const countIn = (set: ReadonlySet<string>, eligible: ReadonlySet<string>): number => [...set].filter((id) => eligible.has(id)).length;
     const openedCovered = countIn(openedIds, positionIds);
     const bookedCovered = countIn(bookedIds, closedIds);
     const opportunityCovered = countIn(opportunityIds, rootIds);
     const entryDecisionCovered = countIn(entryDecisionIds, rootIds);
     const entryBrokerCovered = countIn(entryBrokerIds, rootIds);
-    const exitBrokerCovered = countIn(exitBrokerIds, closedIds);
+    const exitBrokerCovered = countIn(exitBrokerIds, exitBrokerEligibleIds);
     const lineageRows = positions.reduce((sum, position) => sum + (outcomeByPosition.get(position.id)?.length ?? 0), 0) + executions.length;
 
     const eligibleManagerRoots = entryResearchRoots.filter((position) => Math.abs(position.quantity ?? 0) >= 4);
@@ -414,6 +421,7 @@ export function buildFleetEvidenceAudit(input: {
       entryDecisionCovered,
       entryBrokerCovered,
       exitBrokerCovered,
+      exitBrokerEligible: exitBrokerEligibleIds.size,
       rootTrades: roots.length,
     });
 
@@ -427,7 +435,7 @@ export function buildFleetEvidenceAudit(input: {
     if (bookedCovered < closed.length) blockers.push(`${closed.length - bookedCovered} closed row(s) lack durable booked-outcome receipts`);
     if (entryDecisionCovered < roots.length) blockers.push(`${roots.length - entryDecisionCovered} root trade(s) lack linked entry-decision evidence`);
     if (entryBrokerCovered < roots.length) blockers.push(`${roots.length - entryBrokerCovered} root trade(s) lack linked entry broker-result evidence`);
-    if (exitBrokerCovered < closed.length) blockers.push(`${closed.length - exitBrokerCovered} closed row(s) lack auxiliary exit broker-result evidence`);
+    if (exitBrokerCovered < exitBrokerEligibleIds.size) blockers.push(`${exitBrokerEligibleIds.size - exitBrokerCovered} broker-exit-eligible row(s) lack auxiliary exit broker-result evidence`);
     if (mode === "operator_twin") blockers.push("operator-twin evidence is a separate human-management experiment");
 
     passports.push({
@@ -493,7 +501,7 @@ export function buildFleetEvidenceAudit(input: {
         opportunityCoverage: coverage(opportunityCovered, roots.length),
         entryDecisionCoverage: coverage(entryDecisionCovered, roots.length),
         entryBrokerResultCoverage: coverage(entryBrokerCovered, roots.length),
-        exitBrokerResultCoverage: coverage(exitBrokerCovered, closed.length),
+        exitBrokerResultCoverage: coverage(exitBrokerCovered, exitBrokerEligibleIds.size),
       },
       managerObservation: {
         currentFourPlusEligibleRootTrades: eligibleManagerRoots.length,
