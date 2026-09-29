@@ -88,6 +88,10 @@ export interface SurfaceProps {
    * making the whole Channels fleet pay its read and render cost. */
   researchDemand: boolean;
   setResearchDemand: Dispatch<SetStateAction<boolean>>;
+  /** The Atlas requests raw historical evidence only after the operator opens
+   * DATA or its deep comparison. Decisions use the verified nightly bundle. */
+  researchDetailDemand: boolean;
+  setResearchDetailDemand: Dispatch<SetStateAction<boolean>>;
   collapsedMarket: boolean;
   setCollapsedMarket: Dispatch<SetStateAction<boolean>>;
   /** Sentinel digest (brief/scan/judge/lens) — LIFTED to the seam (P5 slice 1): PERFORM +

@@ -139,15 +139,16 @@ function EvidenceSources({ model }: { model: ChannelDecisionSummary }) {
 
 function EvidenceScopeSummary({ brief, summary }: { brief: ChannelDecisionBrief; summary?: ShadowChannelSummary | null }) {
   const [lens, setLens] = useState<EvidenceLens>("comparable");
-  const scopes = deriveChannelEvidenceScopes(brief, summary ? {
-    sessions: summary.sessions,
-    opportunities: summary.scored,
-    fromSession: summary.fromSession,
-    throughSession: summary.throughSession,
+  const ledgerSummary = summary?.evidenceBasis === "published_decision_cohort" ? null : summary;
+  const scopes = deriveChannelEvidenceScopes(brief, ledgerSummary ? {
+    sessions: ledgerSummary.sessions,
+    opportunities: ledgerSummary.scored,
+    fromSession: ledgerSummary.fromSession,
+    throughSession: ledgerSummary.throughSession,
   } : null);
   const active = scopes[lens];
   const executedSign = brief.executed.typicalResultUsd == null ? null : Math.sign(brief.executed.typicalResultUsd);
-  const virtualSign = summary?.typicalPerPath == null ? null : Math.sign(summary.typicalPerPath);
+  const virtualSign = ledgerSummary?.typicalPerPath == null ? null : Math.sign(ledgerSummary.typicalPerPath);
   const agreement = executedSign == null || virtualSign == null ? "PARTIAL SOURCES"
     : executedSign === virtualSign ? "MEDIAN SIGNS MATCH" : "MEDIAN SIGNS DIFFER";
   return <section className="atlas-evidence-scopes" aria-label="Channel evidence scopes">

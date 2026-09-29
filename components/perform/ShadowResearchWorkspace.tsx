@@ -20,9 +20,10 @@ import type {
   ShadowChannelSortKey,
   ShadowSessionSummary,
 } from "@/lib/research/shadowResearch";
-import { shadowSessionDate, sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
+import { isVirtualBenchSlug, shadowSessionDate, sortShadowChannelSummaries } from "@/lib/research/shadowResearch";
 import { deriveChannelLineupStory, evidenceMaturity, sortChannelLineup } from "@/lib/research/channelLineup";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
+import { publishedDecisionCohortSummary } from "@/lib/research/publishedDecisionCohort";
 import { signedUsd } from "@/lib/format";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
 import { axisForDisposition, type WorkspaceDestination, type ResearchFilter } from "@/lib/shell/workspaceDestination";
@@ -192,13 +193,16 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   const [windowMode, setWindowMode] = useState<"day" | "cumulative">("cumulative");
   const [excluded, setExcluded] = useState<Record<ResearchLane, string[]>>({ vb: [], all: [] });
   const [focusSlug, setFocusSlug] = useState("");
-  const [viewMode, setViewMode] = useState<"decisions" | "data">("decisions");
+  const [viewMode, setViewMode] = useState<"decisions" | "data">(
+    destination?.session ? "data" : destination?.researchMode ?? "decisions",
+  );
   // Open on the newest observed channel specification. Comparable history is
   // useful only after the operator deliberately asks for its broader cohort.
   const [evidenceLens, setEvidenceLens] = useState<"current" | "comparable" | "all">("current");
   const [showAllDecisions, setShowAllDecisions] = useState(false);
   const [decisionFilter, setDecisionFilter] = useState<ResearchFilter | null>(null);
   const [historicalEvidenceSlug, setHistoricalEvidenceSlug] = useState<string | null>(null);
+  const [supportingEvidenceOpen, setSupportingEvidenceOpen] = useState(false);
   const atlasTruth = deriveAtlasReportTruth({
     state: surface.decisionAtlas.state,
     freshness: surface.decisionAtlas.freshness,
@@ -207,6 +211,10 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     publicationState: surface.decisionAtlas.publication?.state,
   });
   const publishedDecisionUsable = atlasTruth.publishedDecisionUsable;
+  useEffect(() => {
+    surface.setResearchDetailDemand(viewMode === "data" || supportingEvidenceOpen);
+    return () => surface.setResearchDetailDemand(false);
+  }, [supportingEvidenceOpen, surface.setResearchDetailDemand, viewMode]);
   useEffect(() => {
     if (!session && shadowResearch.sessions.length) setSession(shadowResearch.sessions[0].session);
   }, [session, shadowResearch.sessions]);
@@ -226,18 +234,26 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     ? native.fromSession : selected?.session ?? null;
   const nativeThroughSession = windowMode === "cumulative" && native && "throughSession" in native
     ? native.throughSession : selected?.session ?? null;
-  const rows = useMemo(() => native ? (lane === "vb" ? native.vb : native.dark) : [], [lane, native]);
+  const publishedRows = useMemo(() => publishedDecisionUsable
+    ? Object.values(surface.decisionAtlas.bySlug).map(publishedDecisionCohortSummary)
+    : [], [publishedDecisionUsable, surface.decisionAtlas.bySlug]);
+  const rows = useMemo(() => viewMode === "decisions"
+    ? publishedRows.filter((row) => lane === "all" || isVirtualBenchSlug(row.slug))
+    : native ? (lane === "vb" ? native.vb : native.dark) : [], [lane, native, publishedRows, viewMode]);
   const rowsBySlug = useMemo(() => new Map(rows.map((row) => [row.slug, row])), [rows]);
-  const referenceSession = nativeThroughSession ?? shadowResearch.cumulative?.throughSession ?? "";
+  const referenceSession = viewMode === "decisions"
+    ? surface.decisionAtlas.throughSession ?? ""
+    : nativeThroughSession ?? shadowResearch.cumulative?.throughSession ?? "";
   const lineupStories = useMemo(() => sortChannelLineup(rows.flatMap((row) => {
     const brief = surface.decisionAtlas.bySlug[row.slug];
-    if (evidenceLens !== "current" && (!publishedDecisionUsable || !brief?.decisionDistribution)) return [];
+    if (viewMode === "decisions" && !brief?.decisionDistribution) return [];
+    if (viewMode === "data" && evidenceLens !== "current" && (!publishedDecisionUsable || !brief?.decisionDistribution)) return [];
     return [deriveChannelLineupStory({
       summary: row,
-      brief: evidenceLens === "current" ? undefined : brief,
+      brief: viewMode === "decisions" ? brief : evidenceLens === "current" ? undefined : brief,
       referenceSession,
     })];
-  })), [evidenceLens, publishedDecisionUsable, referenceSession, rows, surface.decisionAtlas.bySlug]);
+  })), [evidenceLens, publishedDecisionUsable, referenceSession, rows, surface.decisionAtlas.bySlug, viewMode]);
   const lineupBySlug = useMemo(() => Object.fromEntries(lineupStories.map((story) => [story.channel, story])), [lineupStories]);
   const postureBySlug = useMemo(() => Object.fromEntries(rows.map((row): [string, ChannelPosture] => {
     const lifecycle = surface.allChannelWorkspace.bySlug[row.slug]?.lifecycle;
@@ -309,16 +325,13 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
   }, [atlasNextSlug, focusSlug, rows]);
   useEffect(() => {
     if (destination?.section !== "research") return;
-    if (destination.session && shadowResearch.sessions.some((item) => item.session === destination.session)) {
-      setSession(destination.session);
+    if (destination.session) {
+      if (shadowResearch.sessions.some((item) => item.session === destination.session)) setSession(destination.session);
       setWindowMode("day");
+      setViewMode("data");
     }
     if (destination.channel) {
-      const cumulativeLane = shadowResearch.cumulative?.vb.some((row) => row.slug === destination.channel)
-        ? "vb"
-        : shadowResearch.cumulative?.dark.some((row) => row.slug === destination.channel)
-          ? "all"
-          : null;
+      const cumulativeLane = isVirtualBenchSlug(destination.channel) ? "vb" : "all";
       if (!destination.session && cumulativeLane) {
         setLane(cumulativeLane);
         setWindowMode("cumulative");
@@ -353,21 +366,25 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     ...previous,
     [lane]: rows.length > 0 && filteredRows.length === rows.length ? rows.map((row) => row.slug) : [],
   }));
+  const decisionBookLoading = viewMode === "decisions"
+    && (surface.decisionAtlas.state === "idle" || surface.decisionAtlas.state === "loading");
+  const decisionBookUnavailable = viewMode === "decisions" && !decisionBookLoading && !publishedDecisionUsable;
+  const dataLoading = viewMode === "data" && (shadowResearch.state === "loading" || shadowResearch.state === "idle");
 
   return <section className={`srw${compact ? " compact" : ""}`} id="perform-research" tabIndex={-1} aria-label="Shadow research workspace">
     <header className="srw-head"><span><b>DECISION ATLAS</b><small>CHANNEL DECISIONS · VIRTUAL PATHS</small></span>
       <em>READ ONLY</em></header>
     <SeveEvidenceContext
-      kind="virtual"
+      kind={viewMode === "decisions" ? "mixed" : "virtual"}
       scope={`all paper · ${lane === "vb" ? "VB channels" : "all observed channels"}`}
-      asOf={nativeThroughSession ?? shadowResearch.cumulative?.throughSession ?? "checking"}
-      era="recorded reference-policy paths"
-      sample={`${totals.scored} virtual paths`}
-      quality={shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "complete" : totals.scored >= 5 ? "building" : "checking"}
-      authority={shadowResearch.virtualEvidence.authority}
-      detail="Virtual opportunities are hypothetical and are never combined with account profit and loss."
+      asOf={viewMode === "decisions" ? surface.decisionAtlas.throughSession ?? "checking" : nativeThroughSession ?? shadowResearch.cumulative?.throughSession ?? "checking"}
+      era={viewMode === "decisions" ? "verified nightly decision cohorts" : "recorded reference-policy paths"}
+      sample={viewMode === "decisions" ? `${rows.length} published channel reports · ${totals.scored} decision opportunities` : `${totals.scored} virtual paths`}
+      quality={viewMode === "decisions" ? publishedDecisionUsable ? "complete" : "checking" : shadowResearch.truncated ? "partial" : totals.scored >= 10 ? "complete" : totals.scored >= 5 ? "building" : "checking"}
+      authority={viewMode === "decisions" ? publishedDecisionUsable ? "decision_ready" : "withheld" : shadowResearch.virtualEvidence.authority}
+      detail={viewMode === "decisions" ? "Verified nightly briefs keep executed, virtual, manager, and capacity evidence explicitly separated." : "Virtual opportunities are hypothetical and are never combined with account profit and loss."}
     />
-    <form className="srw-controls" key={`${shadowResearch.dateRange.from}:${shadowResearch.dateRange.through}`} onSubmit={(event) => {
+    {viewMode === "data" ? <><form className="srw-controls" key={`${shadowResearch.dateRange.from}:${shadowResearch.dateRange.through}`} onSubmit={(event) => {
       event.preventDefault();
       const form = event.currentTarget;
       const values = new FormData(form);
@@ -383,7 +400,8 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     {shadowResearch.boundedRetuneState === "loading" || shadowResearch.boundedRetuneState === "idle" ? <p aria-live="polite">Experiment comparisons are loading independently; the verified virtual ledger is available now.</p>
       : shadowResearch.boundedRetuneError ? <div className="srw-empty error" role="status">Experiment comparisons unavailable · {shadowResearch.boundedRetuneError}. Other research evidence remains separate.</div>
       : shadowResearch.sourceCounts.retuneSignals != null ? <p>{shadowResearch.sourceCounts.retuneSignals.toLocaleString()} experiment signals · source count verified · selected range only</p> : null}
-    <p>Complete row counts do not establish quote-path quality. Missing, stale or sampled quotes can still limit entry and exit comparisons.</p>
+    <p>Complete row counts do not establish quote-path quality. Missing, stale or sampled quotes can still limit entry and exit comparisons.</p></>
+      : <div className="srw-controls" aria-label="Published decision source"><span>{Object.keys(surface.decisionAtlas.bySlug).length.toLocaleString()} published reports · receipt and cohort hashes verified</span><em>RAW LEDGER LOADS UNDER DATA</em></div>}
     <section className={`srw-truth authority-${atlasTruth.authority}`} aria-label="Atlas evidence authority">
       <header><span><small>PUBLISHED DECISION BOOK</small><b>{atlasTruth.label}</b></span><em>{publishedDecisionUsable ? "DECISIONS CURRENT" : "RESEARCH ONLY"}</em></header>
       <div><span><small>PUBLISHED THROUGH</small><b>{surface.decisionAtlas.throughSession ?? "—"}</b></span><span><small>VIRTUAL DATA THROUGH</small><b>{surface.decisionAtlas.evidenceThroughSession ?? shadowResearch.cumulative?.throughSession ?? "—"}</b></span><span><small>QUEUE BASIS</small><b>{publishedDecisionUsable ? "VERIFIED PUBLISHED BOOK" : "LATEST-VERSION VIRTUAL DIAGNOSTIC"}</b></span></div>
@@ -391,10 +409,10 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     </section>
     {focusSlug && <details className="rvw-system-activity" onToggle={(event) => { if (event.currentTarget.open) setHistoricalEvidenceSlug(focusSlug); }}><summary><span><small>EXECUTED HISTORY</small><b>Audited broker results for {focusSlug}</b></span><i>▾</i></summary>{historicalEvidenceSlug === focusSlug ? <HistoricalChannelEvidence channel={focusSlug} /> : null}</details>}
     <nav className="srw-view-mode" aria-label="Research presentation">
-      <button type="button" className={viewMode === "decisions" ? "on" : ""} aria-pressed={viewMode === "decisions"} onClick={() => setViewMode("decisions")}><b>DECISIONS</b><small>what the evidence suggests</small></button>
-      <button type="button" className={viewMode === "data" ? "on" : ""} aria-pressed={viewMode === "data"} onClick={() => setViewMode("data")}><b>DATA</b><small>full virtual ledger</small></button>
+      <button type="button" className={viewMode === "decisions" ? "on" : ""} aria-pressed={viewMode === "decisions"} onClick={() => { setViewMode("decisions"); onNavigate?.({ section: "research", researchMode: "decisions" }); }}><b>DECISIONS</b><small>verified nightly publication</small></button>
+      <button type="button" className={viewMode === "data" ? "on" : ""} aria-pressed={viewMode === "data"} onClick={() => { setViewMode("data"); onNavigate?.({ section: "research", researchMode: "data" }); }}><b>DATA</b><small>full virtual ledger</small></button>
     </nav>
-    <div className="srw-controls">
+    {viewMode === "data" ? <div className="srw-controls">
       <nav className="srw-sessions" aria-label="research session">
         {recentSessions.map((item) => <button type="button" key={item.session} className={windowMode === "day" && selected?.session === item.session ? "on" : ""} onClick={() => { setSession(item.session); setWindowMode("day"); }}>{shortSession(item.session)}</button>)}
         {historicalSessions.length ? <label className={`srw-history${windowMode === "day" && historicalSession ? " on" : ""}`}>
@@ -412,10 +430,13 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       <nav className="srw-lens" aria-label="evidence lens"><button type="button" className={evidenceLens === "current" ? "on" : ""} onClick={() => setEvidenceLens("current")}>LATEST VERSIONED VIRTUAL</button><button type="button" className={evidenceLens === "comparable" ? "on" : ""} onClick={() => setEvidenceLens("comparable")}>COMPARABLE HISTORY</button><button type="button" className={evidenceLens === "all" ? "on" : ""} onClick={() => setEvidenceLens("all")}>ALL RESEARCH</button></nav>
       <nav className="srw-lanes" aria-label="research lane"><button type="button" className={lane === "vb" ? "on" : ""} onClick={() => setLane("vb")}>VB SWARM</button><button type="button" className={lane === "all" ? "on" : ""} onClick={() => setLane("all")}>ALL OBSERVE</button></nav>
       <span className={`srw-read ${shadowResearch.state}${shadowResearch.truncated ? " partial" : ""}`}>{shadowResearch.truncated ? "PARTIAL" : shadowResearch.state.toUpperCase()}</span>
-    </div>
-    {shadowResearch.state === "loading" || shadowResearch.state === "idle" ? <div className="srw-empty">loading bounded research ledger…</div>
-      : shadowResearch.state === "error" ? <div className="srw-empty error">research read failed · {shadowResearch.error}</div>
-      : !selected ? <div className="srw-empty">no reconstructed virtual paths in the selected date range</div>
+    </div> : <div className="srw-controls"><nav className="srw-lanes" aria-label="published research lane"><button type="button" className={lane === "vb" ? "on" : ""} onClick={() => setLane("vb")}>VB SWARM</button><button type="button" className={lane === "all" ? "on" : ""} onClick={() => setLane("all")}>ALL OBSERVE</button></nav><span className={`srw-read ${publishedDecisionUsable ? "ok" : surface.decisionAtlas.state}`}>{publishedDecisionUsable ? "BOOK VERIFIED" : surface.decisionAtlas.state.toUpperCase()}</span></div>}
+    {decisionBookLoading ? <div className="srw-empty">loading verified decision publication…</div>
+      : decisionBookUnavailable ? <div className="srw-empty error">published decision book unavailable · {atlasTruth.fact} Raw research remains available under Data.</div>
+      : viewMode === "decisions" && !rows.length ? <div className="srw-empty">no published channel cohorts are available in this lane</div>
+      : dataLoading ? <div className="srw-empty">loading bounded research ledger…</div>
+      : viewMode === "data" && shadowResearch.state === "error" ? <div className="srw-empty error">research read failed · {shadowResearch.error}</div>
+      : viewMode === "data" && !selected ? <div className="srw-empty">no reconstructed virtual paths in the selected date range</div>
       : <>
         <section className="srw-atlas-brief" aria-label="Decision Atlas research summary">
           <span><small>{publishedDecisionUsable ? "VERIFIED DECISION ATLAS" : "LIVE RESEARCH TRIAGE"}</small><b>{publishedDecisionUsable ? "WHERE SHOULD WE LOOK NEXT?" : "NO ROSTER OR MANAGER AUTHORITY"}</b></span>
@@ -460,7 +481,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
           })}</div>
           {focusSlug && <div id="research-channel-decision" className="srw-decision-detail">
             <DecisionAtlasPreviewCard brief={surface.decisionAtlas.bySlug[focusSlug]} reports={surface.decisionAtlas} summary={focusedSummary} dryPowder={focusedCurve} managerEvidence={focusedManagerEvidence} retuneEvidence={focusedRetuneEvidence} focusAxis={destination?.channel === focusSlug ? destination.axis : undefined} onAxisChange={(axis) => onNavigate?.({ section: "research", channel: focusSlug, axis, researchMode: "decisions", researchFilter: decisionFilter ?? undefined })} />
-            <details className="srw-channel-analysis"><summary><span><small>SUPPORTING EVIDENCE</small><b>Current execution, capacity, and managers</b></span><em>OPEN COMPARISON</em><i>▾</i></summary><div>
+            <details className="srw-channel-analysis" onToggle={(event) => setSupportingEvidenceOpen(event.currentTarget.open)}><summary><span><small>SUPPORTING EVIDENCE</small><b>Current execution, capacity, and managers</b></span><em>LOAD COMPARISON</em><i>▾</i></summary><div>
               <CurrentEvidenceCard selectedSlug={focusSlug} executed={focusedComparison ? shadowResearch.currentExecutedBySlug[focusedComparison.executedSlug] : focusedExecuted} comparison={focusedComparison} state={shadowResearch.currentExecutedState} error={shadowResearch.currentExecutedError} truncated={shadowResearch.currentExecutedTruncated} />
               <ChannelDryPowderCurve curve={focusedCurve} />
               <ChannelManagerEvidencePanel evidence={focusedManagerEvidence} currentManagerLabel={focusedPassport?.rootPolicy?.managerLabel} currentConfigurationEpochId={surface.channelControlPlane.view?.configurationEpochId} />
@@ -514,7 +535,7 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
           <footer>{windowMode === "cumulative" ? "CHECKED ROWS DRIVE THIS SUMMARY · " : ""}CORRELATED SIMULATION · NOT PORTFOLIO P&amp;L{shadowResearch.truncated ? ` · PARTIAL ${(10_000).toLocaleString()}-ROW CAP` : ""}</footer>
         </section>
         <details className="srw-deep-dive"><summary><span><small>DEEP RESEARCH</small><b>EXACT REPLAY + MANAGER MAP</b></span><em>OPEN COMPARISON</em><i>▾</i></summary><div>
-          <ExactStatus surface={surface} session={selected.session} />
+          {selected ? <ExactStatus surface={surface} session={selected.session} /> : null}
           <ManagerFleetHeatmap book={surface.managerEvidence.book} channelSlugs={surface.view.desk.strategists.map((channel) => channel.slug)} selectedSlug={focusSlug} onSelect={setFocusSlug} />
         </div></details>
         </>}
