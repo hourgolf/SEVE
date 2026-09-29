@@ -30,6 +30,7 @@ import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 import type { PnlWindow } from "@/hooks/useWindowedPnl";
 import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
 import { mobileReviewDestination, mobileReviewModeForDestination } from "@/lib/mobile/workspaceRouting";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -68,6 +69,7 @@ export function MobileBookView({ props, onViewMarket, onNavigate }: { props: Sur
 
   return <>
     <div className="m2-book-nav"><span><b>BOOK</b><small>POSITIONS · EXPOSURE · EXITS</small></span>{onViewMarket && <div><button type="button" onClick={() => onViewMarket("chart")}>CHART</button><button type="button" onClick={() => onViewMarket("chain")}>CHAIN</button></div>}</div>
+    <SeveEvidenceContext kind="actual" scope={props.accounts.find((row) => row.id === props.acctId)?.name ?? "selected account"} asOf={props.feed.updatedAt ?? "checking"} era="current routed positions" sample={`${props.feed.positions.length} open · ${recentExits.logicalTrades} closed logical trades`} quality={attributionBlocked ? "partial" : "live"} authority={attributionBlocked ? "withheld" : "operational_only"} />
     <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="positions" channelSlugs={feed.positions.map((position) => position.strategist_slug)} onNavigate={onNavigate} />
     {reconciliation?.tone !== "green" && <BrokerReconciliationStrip model={props.opsReadiness} compact />}
     {attributionBlocked ? <div className="m2-book-empty" role="status"><b>POSITION EVIDENCE UNAVAILABLE</b><p>Loading or unresolved account attribution does not establish a flat account.</p></div> : isQuietBook ? <div className="m2-book-empty" role="status"><b>DESK FLAT</b><p>There are no open positions or current-session exits for this account.</p><ul><li>No capital is deployed</li><li>The next position will appear here</li><li>{reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is checking"}</li></ul></div> : <>
@@ -144,10 +146,16 @@ function MobilePeriodResults({ props, channels, livePnl }: {
   const issue = !today && historical?.attributionIssues[0]
     ? summarizePerformanceIssue(historical.attributionIssues[0])
     : null;
+  const historicalDecisionReady = !today
+    && historical?.navEvidenceState === "ok"
+    && historical.attributionEvidenceState === "ok"
+    && historical.withheldPositionRows === 0;
   return <Section title="ACCOUNT RESULTS" meta="selected paper account">
     <div className="m2-period-results">
+      <SeveEvidenceContext kind="actual" scope="selected paper account" asOf={today ? props.feed.updatedAt ?? "current session" : historical?.through ?? "checking"} era={today ? "current exchange session" : `${MOBILE_PERIODS.find((item) => item.id === period)?.label} executed window`} sample={today ? `${rows.reduce((total, row) => total + row.result.trades, 0)} attributed outcomes` : `${historical?.attributedClosedLogicalTrades ?? 0} closed logical trades · ${historical?.withheldPositionRows ?? 0} withheld rows`} quality={historicalDecisionReady ? "complete" : coverageBlocked ? "partial" : today ? "live" : "partial"} authority={historicalDecisionReady ? "decision_ready" : today && !coverageBlocked ? "operational_only" : "withheld"} detail="Broker NAV and immutable channel attribution are separate evidence layers." />
       <nav aria-label="Results period">{MOBILE_PERIODS.map((item) => <button type="button" key={item.id} className={period === item.id ? "on" : ""} onClick={() => props.reviewEvidence.setPnlWindow(item.id)}>{item.label}</button>)}</nav>
       <div className="m2-period-hero"><span><small>{period === "today" ? "SESSION NAV CHANGE" : `${MOBILE_PERIODS.find((item) => item.id === period)?.label} NAV CHANGE`}</small><b className={(fundValue ?? 0) < 0 ? "neg" : "pos"}>{loading ? "…" : fundValue == null ? "UNAVAILABLE" : signedUsd(fundValue)}</b></span><span><small>CHANNELS THAT TRADED</small><b>{loading || coverageBlocked ? "—" : rows.length}</b></span><span><small>LOGICAL TRADES</small><b>{loading || coverageBlocked ? "—" : rows.reduce((total, row) => total + row.result.trades, 0)}</b></span></div>
+      {!today && <div className="m2-period-coverage" role="status"><b>SEPARATE ECONOMIC LAYERS</b><span>Account NAV {historical?.fundPnl == null ? "unavailable" : signedUsd(historical.fundPnl)} · channel attribution {historical?.attributedPnl == null ? "unavailable" : signedUsd(historical.attributedPnl)}</span></div>}
       {coveragePartial || coverageBlocked ? <div className="m2-period-coverage" role="status"><b>{coverageBlocked ? "CHANNEL HISTORY UNAVAILABLE" : "CHANNEL HISTORY PARTIAL"}</b><span>{issue ?? "Some older channel rows do not have a verified account route."}</span>{coveragePartial ? <small>{historical?.attributedPositionRows ?? 0} verified rows shown · {historical?.withheldPositionRows ?? 0} rows withheld to keep trades whole. Account NAV is complete.</small> : null}</div> : null}
       {curve.length >= 2 ? <LineChart values={curve} height={92} id={`m2-results-${period}`} baseline={curve[0]} format={usd0} formatDelta={signedUsd} labels={labels} /> : <div className="m2-desk-empty">{loading ? "Loading account history…" : "No account curve in this period."}</div>}
       {!loading && !coverageBlocked ? <div className="m2-review-rows">{rows.map(({ slug, color, result }) => <div key={slug} style={{ ["--pm" as string]: pmVar(color) }}><i /><b>{slug}</b><span className={result.pnl < 0 ? "neg" : result.pnl > 0 ? "pos" : ""}>{signedUsd(result.pnl)}</span><small>{result.trades} logical trade{result.trades === 1 ? "" : "s"} · {result.wins} profitable</small></div>)}{!loading && rows.length === 0 ? <div className="m2-period-empty">No channel activity in this period.</div> : null}</div> : null}

@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import type { EvidenceAuthority } from "@/lib/evidence/evidenceEnvelope";
 
 export function SeveWorkspaceHeader({
   title,
@@ -18,6 +19,13 @@ export function SeveWorkspaceHeader({
 export type SeveEvidenceKind = "actual" | "virtual" | "mixed" | "system";
 export type SeveEvidenceQuality = "live" | "complete" | "established" | "building" | "partial" | "checking";
 
+const evidenceAuthorityLabel: Record<EvidenceAuthority, string> = {
+  decision_ready: "DECISION READY",
+  research_only: "RESEARCH ONLY",
+  operational_only: "OPERATIONAL ONLY",
+  withheld: "WITHHELD",
+};
+
 const evidenceKindLabel: Record<SeveEvidenceKind, string> = {
   actual: "ACTUAL RESULTS",
   virtual: "VIRTUAL RESEARCH",
@@ -32,6 +40,7 @@ export function SeveEvidenceContext({
   era,
   sample,
   quality,
+  authority,
   detail,
 }: {
   kind: SeveEvidenceKind;
@@ -40,13 +49,14 @@ export function SeveEvidenceContext({
   era: string;
   sample: string;
   quality: SeveEvidenceQuality;
+  authority: EvidenceAuthority;
   detail?: string;
 }) {
-  return <details className={`sv909-evidence-context quality-${quality}`} aria-label="Evidence context" title={detail}>
+  return <details className={`sv909-evidence-context quality-${quality} authority-${authority}`} aria-label="Evidence context" title={detail}>
     <summary>
       <span><small>EVIDENCE</small><b>{evidenceKindLabel[kind]}</b></span>
       <p><b>{scope}</b><span>{asOf} · {sample}</span></p>
-      <em>{quality.toUpperCase()}</em>
+      <em>{evidenceAuthorityLabel[authority]}</em>
       <i aria-hidden="true">CONTEXT ▾</i>
     </summary>
     <div>
@@ -54,6 +64,7 @@ export function SeveEvidenceContext({
       <span><small>AS OF</small><b>{asOf}</b></span>
       <span><small>CONFIGURATION</small><b>{era}</b></span>
       <span><small>SAMPLE</small><b>{sample}</b></span>
+      <span><small>AUTHORITY</small><b>{evidenceAuthorityLabel[authority]}</b></span>
       {detail && <p>{detail}</p>}
     </div>
   </details>;

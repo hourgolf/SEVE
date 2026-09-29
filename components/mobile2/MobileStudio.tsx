@@ -9,6 +9,7 @@ import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { axisForDisposition, type WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 // =============================================================================
 // MOBILE · STUDIO (S5) — the tune surface (the gallery mock's studio frame):
@@ -57,6 +58,16 @@ export function MobileStudio({
   return (
     <>
       <div className="m2-scroll">
+        <SeveEvidenceContext
+          kind="mixed"
+          scope="selected paper account + all-paper research"
+          asOf={props.feed.updatedAt ?? props.decisionAtlas.throughSession ?? "checking"}
+          era="current runtime + latest nightly research"
+          sample={`${channels.length} channels · ${Object.keys(props.decisionAtlas.bySlug).length} published reports`}
+          quality={atlasTruth.publishedDecisionUsable && passports.release.state === "verified" && ["ok", "recovered"].includes(props.feed.positionAttribution.state) ? "complete" : "partial"}
+          authority={atlasTruth.publishedDecisionUsable && passports.release.state === "verified" && ["ok", "recovered"].includes(props.feed.positionAttribution.state) ? "decision_ready" : "withheld"}
+          detail={`${atlasTruth.fact} Current-session attribution remains separate from nightly research.`}
+        />
         <CanaryCommandCenter
           controlPlane={props.channelControlPlane}
           bundles={roster.bundles}

@@ -126,7 +126,7 @@ export function PerformPositionsWorkspace({ surface, onNavigate }: { surface: Su
         title="POSITIONS"
         boundary="PAPER · CONFIRM TO CLOSE"
       />
-    <SeveEvidenceContext kind="actual" scope={account?.name ?? "selected account"} asOf={asOf} era="current routed positions" sample={`${surface.feed.positions.length} open · ${model.exits.logicalTrades} closed`} quality={attributionBlocked ? "partial" : "live"} />
+    <SeveEvidenceContext kind="actual" scope={account?.name ?? "selected account"} asOf={asOf} era="current routed positions" sample={`${surface.feed.positions.length} open · ${model.exits.logicalTrades} closed`} quality={attributionBlocked ? "partial" : "live"} authority={attributionBlocked ? "withheld" : "operational_only"} />
     <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="positions" channelSlugs={surface.feed.positions.map((position) => position.strategist_slug)} onNavigate={onNavigate} />
     {showReconciliation && <BrokerReconciliationStrip model={surface.opsReadiness} />}
     {attributionBlocked ? <SeveEmptyState title="POSITION EVIDENCE UNAVAILABLE" summary="Loading or unresolved account attribution does not establish a flat account." facts={surface.feed.positionAttribution.issues} /> : isQuietBook ? <SeveEmptyState title="DESK FLAT" summary="There are no open positions or current-session exits for this account." facts={[reconciliation?.tone === "green" ? "Broker and desk positions agree" : "Broker reconciliation is still checking", "No capital is currently deployed", "The next position will appear here with its live exit evidence"]} /> : <>

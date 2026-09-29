@@ -5,11 +5,11 @@ import { LineChart } from "@/components/charts/LineChart";
 import { useFold } from "@/hooks/useFold";
 import { signedUsd, usd0, timeOfDay } from "@/lib/format";
 import type { PnlWindow, ChannelStat, WindowedPnl } from "@/hooks/useWindowedPnl";
-import { useSentinelDigest } from "@/hooks/useSentinelDigest";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import { pmVar } from "@/lib/desk/colors";
 import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
 import type { SessionNavReconciliation } from "@/lib/desk/sessionNavReconciliation";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 const WINDOWS: { id: PnlWindow; label: string }[] = [
   { id: "today", label: "Today" },
@@ -46,8 +46,6 @@ export function PnlPanel({
   // Timeframe toggle. "today" uses the live feed props (instant); week/month/all
   // fetch windowed realized P&L (+ open unrealized) + a windowed NAV curve lazily.
   const win = window;
-  // era-4 avg-peak/win per channel (the harvest lens) — published nightly by the sentinel
-  const { lens } = useSentinelDigest();
   const isToday = win === "today";
   const loading = isToday
     ? todayAttribution?.state === "checking"
@@ -68,7 +66,13 @@ export function PnlPanel({
   };
   const fundVal = isToday ? fundPnl.dayPnl : windowed?.fundPnl;
   const equityValues = isToday ? equityCurve.map((p) => p.equity) : (windowed?.curve ?? []);
-  const attributionAvailable = isToday || windowed?.attributionEvidenceState === "ok" || windowed?.attributionEvidenceState === "partial";
+  const attributionAvailable = isToday
+    ? !blocked
+    : windowed?.attributionEvidenceState === "ok" || windowed?.attributionEvidenceState === "partial";
+  const historicalDecisionReady = !isToday
+    && windowed?.navEvidenceState === "ok"
+    && windowed.attributionEvidenceState === "ok"
+    && windowed.withheldPositionRows === 0;
 
   const hasCurve =
     equityValues.length >= 2 && Math.max(...equityValues) !== Math.min(...equityValues);
@@ -78,7 +82,7 @@ export function PnlPanel({
   // Rows sorted by |window P&L| (the movers first); idle channels (no trades, $0 in
   // window) collapse behind a count line so the glance is only what moved.
   const rows = strategists
-    .map((s) => ({ s, st: statFor(s.slug), lens: lens?.[s.slug] ?? null }))
+    .map((s) => ({ s, st: statFor(s.slug) }))
     .sort((a, b) => Math.abs(b.st.pnl) - Math.abs(a.st.pnl));
   const active = rows.filter((r) => r.st.trades > 0 || r.st.pnl !== 0);
   const idle = rows.filter((r) => r.st.trades === 0 && r.st.pnl === 0);
@@ -93,6 +97,18 @@ export function PnlPanel({
         <button type="button" className="pfold" onClick={toggleFold} aria-expanded={!folded} title={folded ? "expand" : "collapse"}>{folded ? "▸" : "▾"}</button>
       </div>
       <div className="pbody">
+        <SeveEvidenceContext
+          kind="actual"
+          scope={scopeLabel ?? "selected account"}
+          asOf={isToday ? (equityCurve.at(-1)?.ts ? new Date(equityCurve.at(-1)!.ts).toLocaleString() : "current session") : windowed?.through ?? "checking"}
+          era={isToday ? "current exchange session" : `${winLabel} executed window`}
+          sample={isToday
+            ? `${Object.values(pnlByStrategist).reduce((total, row) => total + row.trades, 0)} logical trades`
+            : `${windowed?.attributedClosedLogicalTrades ?? 0} closed logical trades · ${windowed?.attributedPositionRows ?? 0} position rows · ${windowed?.withheldPositionRows ?? 0} withheld rows`}
+          quality={historicalDecisionReady ? "complete" : blocked ? "partial" : isToday ? "live" : "partial"}
+          authority={historicalDecisionReady ? "decision_ready" : isToday && !blocked ? "operational_only" : "withheld"}
+          detail="Account P&L comes only from broker NAV snapshots. Channel P&L comes only from immutable execution-account attribution; neither substitutes for the other."
+        />
         {windowed?.windowLabel && window !== "today" && <p className="wk-ee-note">{windowed.windowLabel}</p>}
         {/* hero: the window's fund number leads; the seg picks the window */}
         <div className="pnl-hero">
@@ -101,7 +117,6 @@ export function PnlPanel({
           </span>
           <span className="pnl-hero-sub" title={windowed?.sinceNote ? "this bucket's account NAV history starts here; channel rows require independent immutable execution-account attribution" : undefined}>
             {isToday ? "session NAV change" : winLabel}{windowed?.sinceNote ? ` · NAV since ${windowed.sinceNote}` : ""}
-            {!isToday && windowed?.fundPnlSource === "immutable_position_attribution" ? " · attributed positions" : ""}
           </span>
           <div className="seg" aria-label="P&L timeframe" style={{ marginLeft: "auto" }}>
             {WINDOWS.map((w) => (
@@ -111,6 +126,12 @@ export function PnlPanel({
             ))}
           </div>
         </div>
+        {!isToday && <div className="pnl-reconciliation" role="status">
+          <b>SEPARATE ECONOMIC LAYERS</b>
+          <span>account NAV change {windowed?.fundPnl == null ? "unavailable" : signedUsd(windowed.fundPnl)}</span>
+          <span>immutable channel attribution {windowed?.attributedPnl == null ? "unavailable" : signedUsd(windowed.attributedPnl)}</span>
+          <small>A difference may include broker adjustments, open-position marks, timing, or incomplete attribution. It is not assigned to a channel without a receipt.</small>
+        </div>}
         {isToday && fundPnl.reconciliation?.state === "complete" && (
           <div className="pnl-reconciliation" role="status">
             <b>EXACT RECONCILIATION</b>
@@ -184,15 +205,14 @@ export function PnlPanel({
             <span className="dvg-pk">best</span>
             <span className="dvg-wn">win</span>
           </div>
-          {shown.map(({ s, st, lens: L }) => {
+          {shown.map(({ s, st }) => {
             const w = Math.max(2, Math.round((Math.abs(st.pnl) / barMax) * 100) / 2); // half-width %
-            // pk·win FOLLOW THE WINDOW (peak_mark on the window's own closed trades);
-            // the era-4 lens stays as tooltip context (stable channel character).
+            // Peak and win rate follow this window's own closed logical trades.
             const pk = st.pkN > 0 ? Math.round(st.pkSum / st.pkN) : null;
             const win = st.trades > 0 ? Math.round((100 * st.wins) / st.trades) : null;
             const hot = pk != null && win != null && st.trades >= 5 && pk >= 25 && win < 40;
             return (
-              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades}t in ${winLabel}${L ? ` · historical pattern: best move ${L.p}% · win ${L.w}% (n=${L.n})` : ""}${hot ? " · large moves but low win rate in this window" : ""}`}>
+              <div className="dvg" key={s.slug} title={`${s.name} · ${st.trades} logical trades in ${winLabel}${hot ? " · large moves but low win rate in this window" : ""}`}>
                 <span className="dvg-nm">
                   <span className="dvg-dot" style={{ background: pmVar(s.color), boxShadow: `0 0 5px ${pmVar(s.color)}` }} />
                   {s.name}

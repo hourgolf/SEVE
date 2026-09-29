@@ -13,6 +13,19 @@ import type { SurfaceProps } from "@/components/surfaceTypes";
 import { timeOfDay } from "@/lib/format";
 import { deriveTapeRows } from "@/lib/perform/eventTape";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
+import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
+
+function FolioDecisionContext({ surface }: { surface: SurfaceProps }) {
+  const truth = deriveAtlasReportTruth({ state: surface.decisionAtlas.state, freshness: surface.decisionAtlas.freshness,
+    reportThroughSession: surface.decisionAtlas.throughSession, evidenceThroughSession: surface.decisionAtlas.evidenceThroughSession,
+    publicationState: surface.decisionAtlas.publication?.state });
+  const ready = truth.publishedDecisionUsable
+    && surface.opsReadiness.summary.tone === "green"
+    && surface.incident.severity === "normal"
+    && ["ok", "recovered"].includes(surface.feed.positionAttribution.state);
+  return <SeveEvidenceContext kind="mixed" scope="selected paper account + all-paper research" asOf={surface.feed.updatedAt ?? surface.decisionAtlas.throughSession ?? "checking"} era="current runtime + latest nightly research" sample={`${Object.keys(surface.decisionAtlas.bySlug).length} channel reports`} quality={ready ? "complete" : "partial"} authority={ready ? "decision_ready" : "withheld"} detail={`${truth.fact} Account operation and research publication are independently checked.`} />;
+}
 
 function FolioSentinelCard({ surface, compact = false }: { surface: SurfaceProps; compact?: boolean }) {
   const { sentinel, symbol } = surface;
@@ -85,6 +98,7 @@ export function FolioHomeDesktop({ surface }: { surface: SurfaceProps }) {
 
   return (
     <div className="folio-home folio-home-desktop">
+      <FolioDecisionContext surface={surface} />
       <div className="folio-home-grid">
         <FolioMarketCard surface={surface} />
         <aside className="folio-home-side">
@@ -116,6 +130,7 @@ export function FolioHomeMobile({ surface }: { surface: SurfaceProps }) {
   return (
     <div className="folio-home folio-home-mobile">
       <div className="folio-home-scroll">
+        <FolioDecisionContext surface={surface} />
         <DecisionAtlasFleetPulse reports={surface.decisionAtlas} />
         <FolioMarketCard surface={surface} mobile />
         <MobilePositions props={surface} strategists={surface.view.desk.strategists} />

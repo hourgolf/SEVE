@@ -9,11 +9,13 @@ import { computeNetExposure } from "@/lib/desk/netExposure";
 import { signedUsd } from "@/lib/format";
 import { derivePositionsWorkspace } from "@/lib/perform/derivePositionsWorkspace";
 import { DecisionAtlasFleetPulse } from "@/components/research/DecisionAtlasFleetPulse";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 export function FolioBookDesktop({ surface }: { surface: SurfaceProps }) {
   const exposure = computeNetExposure(surface.feed.positions, surface.liveMarks);
   const reconciliation = surface.opsReadiness.evidence.find((item) => item.id === "reconciliation");
   const unrealized = derivePositionsWorkspace(surface.feed.positions, surface.feed.recentTrades, surface.liveMarks).open.unrealized;
+  const attributionBlocked = !["ok", "recovered"].includes(surface.feed.positionAttribution.state);
 
   return (
     <div className="folio-book folio-book-desktop" data-nav-target="true" tabIndex={-1}>
@@ -25,6 +27,7 @@ export function FolioBookDesktop({ surface }: { surface: SurfaceProps }) {
           <span><small>UNREALIZED</small><b className={unrealized < 0 ? "neg" : unrealized > 0 ? "pos" : ""}>{signedUsd(unrealized)}</b></span>
         </div>
       </header>
+      <SeveEvidenceContext kind="actual" scope={surface.accounts.find((row) => row.id === surface.acctId)?.name ?? "selected account"} asOf={surface.feed.updatedAt ?? "checking"} era="current routed positions" sample={`${surface.feed.positions.length} open positions`} quality={attributionBlocked ? "partial" : "live"} authority={attributionBlocked ? "withheld" : "operational_only"} />
       <DecisionAtlasFleetPulse reports={surface.decisionAtlas} purpose="positions" channelSlugs={surface.feed.positions.map((position) => position.strategist_slug)} />
       <BrokerReconciliationStrip model={surface.opsReadiness} />
       <div className="folio-book-grid">

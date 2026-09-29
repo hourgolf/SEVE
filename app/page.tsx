@@ -19,7 +19,6 @@ import { useKitSounds } from "@/hooks/useKitSounds";
 import { channelPnl } from "@/lib/desk/derive";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { DeskProvider } from "@/components/console/DeskProvider";
-import { DesktopSurface } from "@/components/DesktopSurface";
 import { MobileShell } from "@/components/mobile2/MobileShell";
 import { WorkstationShell } from "@/components/shell/WorkstationShell";
 import { FolioShell } from "@/components/skins/FolioShell";
@@ -264,49 +263,25 @@ function Surface({
 
   const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, evidenceWorkspace, setEvidenceWorkspace, activeReviewSection, setActiveReviewSection, researchDemand, setResearchDemand, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, allChannelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
 
-  // P5 slice 2 — the legacy FIVE-room product (DesktopSurface: Play/Mix/Write/Tape/Ops) is no
-  // longer MOUNTED beneath STUDIO (that duplicated the header/transport/KILL/chart/book/sequencer/
-  // nav on one page). It moves behind ONE explicit entry: a "Legacy rooms" link at the foot of
-  // STUDIO opens it as a full replacement view, with a way back. The PAGE-OWNED seam
-  // (sentinel/workerRuns/positionPeaks) stays singular; the legacy view's OWN lazy panels
-  // (Brief/Pnl/Sentinel/Positions) still perform their documented reads while it is mounted —
-  // a transitional double-read that goes away when the legacy view is retired (slice 7).
-  const [legacyOpen, setLegacyOpen] = useState(false);
-
   // Mobile (S5 rework) — the PERFORM/STUDIO phone shell. Shares the same seam
   // props + the persisted mode/skin (useShell) as desktop; MobileApp is retained
   // on disk (reviewer decides deletion at S6) but no longer mounted.
   if (isMobile) {
     return presentation === "folio"
-      ? <FolioShell surface={props} dayChangePct={marketSummary(data.bars, data.spot).dayChangePct} mobile onLegacy={() => setLegacyOpen(true)} />
+      ? <FolioShell surface={props} dayChangePct={marketSummary(data.bars, data.spot).dayChangePct} mobile />
       : <MobileShell {...props} />;
   }
 
   // DESKTOP — one fixed workstation chassis spans both modes. Its inset display
   // composes the subscription-free Studio/Perform surfaces; the hardware frame,
   // telemetry, PT clock, guarded KILL, and mode switch never move between them.
-  // The legacy DesktopSurface remains reachable as a replacement view (slice 2).
   const mkt = marketSummary(data.bars, data.spot);
-
-  // LEGACY VIEW (P5 slice 2) — the full DesktopSurface as a REPLACEMENT (not a sibling
-  // beneath STUDIO), so only one product/header/transport/KILL is ever on screen. Rendered
-  // OUTSIDE .shell-root (its own cream chassis; shell skin tokens must not leak in). It receives
-  // the page-owned seam props; note its own lazy panels still do their documented reads while
-  // mounted (the transitional double-read noted above, retired with the legacy view at slice 7).
-  if (legacyOpen) {
-    return (
-      <div className="legacy-view">
-        <button type="button" className="legacy-back" onClick={() => setLegacyOpen(false)}>← Back to desk</button>
-        <DesktopSurface {...props} />
-      </div>
-    );
-  }
 
   return (
     <>
       {presentation === "folio"
-        ? <FolioShell surface={props} dayChangePct={mkt.dayChangePct} mobile={false} onLegacy={() => setLegacyOpen(true)} />
-        : <WorkstationShell surface={props} onLegacy={() => setLegacyOpen(true)} />}
+        ? <FolioShell surface={props} dayChangePct={mkt.dayChangePct} mobile={false} />
+        : <WorkstationShell surface={props} />}
       {/* ⌘K COMMAND palette (S4) — mounted ONCE inside .shell-root so it floats over EITHER
           room. Opens on the shared `seve:command-palette` event; roster scoped to the account. */}
       <CommandPalette

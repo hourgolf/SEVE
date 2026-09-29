@@ -19,7 +19,6 @@ import type { WorkspaceDestination } from "@/lib/shell/workspaceDestination";
 
 interface WorkstationShellProps {
   surface: SurfaceProps;
-  onLegacy: () => void;
 }
 
 const NAV = [
@@ -89,7 +88,7 @@ function RuntimeHealthButton({ incident, workerRuns, readiness, onOpen }: {
   </button>;
 }
 
-export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
+export function WorkstationShell({ surface }: WorkstationShellProps) {
   const { mode, setMode, skin, toggleSkin, density } = useShell();
   const [performSection, setPerformSection] = useState<PerformSection>("overview");
   const [authOpen, setAuthOpen] = useState(false);
@@ -250,7 +249,6 @@ export function WorkstationShell({ surface, onLegacy }: WorkstationShellProps) {
               </button>
             );
           })}
-          <button type="button" title="Legacy Rooms" className="group-start" onClick={onLegacy}><span aria-hidden="true">⌗</span><span className="ws-left-copy"><b>Legacy Rooms</b></span></button>
           <button type="button" title={write.canWrite ? "Operator" : "Sign In"} className="ws-auth-launch" onClick={() => setAuthOpen(true)}>
             <span aria-hidden="true">OP</span><span className="ws-left-copy"><b>{write.canWrite ? "Operator" : "Sign In"}</b></span>
           </button>

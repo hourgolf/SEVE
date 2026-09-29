@@ -30,6 +30,7 @@ import type { ShadowResearch } from "@/hooks/useShadowResearch";
 import type { ChannelDecisionBrief } from "@/lib/research/channelDecisionBrief";
 import type { EvidenceAxis } from "@/lib/shell/workspaceDestination";
 import type { DecisionAtlasReportsRead } from "@/hooks/useDecisionAtlasReports";
+import { deriveAtlasReportTruth } from "@/lib/research/atlasSurfaceTruth";
 
 const PYRAMID_ELIGIBLE = new Set(["breakout-alt-v3", "breakout-smart-entries"]);
 
@@ -115,6 +116,11 @@ export function ChannelInspector({ strategist, summary, passport, write, control
     : researchEvidence?.currentExecutedBySlug[slug];
   const retuneEvidence = researchEvidence?.boundedRetuneError ? undefined : researchEvidence?.boundedRetunes.experiments
     .find((experiment) => experiment.definition.channel === slug)?.evidence;
+  const atlasTruth = deriveAtlasReportTruth({ state: decisionAtlasReports?.state ?? "unavailable",
+    freshness: decisionAtlasReports?.freshness ?? "unknown",
+    reportThroughSession: decisionAtlasReports?.throughSession ?? null,
+    evidenceThroughSession: decisionAtlasReports?.evidenceThroughSession ?? null,
+    publicationState: decisionAtlasReports?.publication?.state });
 
   const stageCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : dispatch({ type: "SET_CONFIG", slug, patch });
   const commitCfg = (patch: Partial<StrategistConfig>) => draft.active ? draft.update(patch) : persistConfig(id, patch);
@@ -151,7 +157,7 @@ export function ChannelInspector({ strategist, summary, passport, write, control
           {a13 && <span className="ih-tag amber">⚡ A13</span>}
           <span className="ih-stats">state <b>{effectiveStateLabel}</b> · open <b>{summary?.pnl.openCount ?? 0}</b> · session attrib <b>{signedUsd(summary?.pnl.dayPnl ?? 0)}</b></span>
         </div>
-        <ChannelResearchProgramCard assignment={decisionBrief?.researchProgram} compact />
+        <ChannelResearchProgramCard assignment={atlasTruth.publishedDecisionUsable ? decisionBrief?.researchProgram : undefined} compact />
         <ExecutableShadowStatus slug={slug} />
         <DecisionAtlasPreviewCard brief={decisionBrief} reports={decisionAtlasReports} summary={shadowSummary} dryPowder={dryPowder} managerEvidence={managerEvidence} retuneEvidence={retuneEvidence} focusAxis={decisionAxis} compact />
         <details className="channel-disclosure" onToggle={(event) => { if (event.currentTarget.open) setHistoricalEvidenceSlug(slug); }}><summary><span><small>REVIEW</small><b>HISTORICAL EXECUTED ECONOMICS</b></span><i>▾</i></summary>{historicalEvidenceSlug === slug ? <HistoricalChannelEvidence channel={slug} /> : null}</details>

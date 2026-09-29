@@ -22,7 +22,8 @@ export interface ChannelStat { pnl: number; trades: number; wins: number; pkSum:
 export interface WindowedPnl {
   statsBySlug: Record<string, ChannelStat>;
   fundPnl: number | null;
-  fundPnlSource: "nav_delta" | "immutable_position_attribution" | "unavailable";
+  fundPnlSource: "nav_delta" | "unavailable";
+  attributedPnl: number | null;
   curve: number[];
   curveLabels: string[];
   windowLabel?: string;
@@ -36,6 +37,10 @@ export interface WindowedPnl {
   issues: string[];
   attributedPositionRows: number;
   withheldPositionRows: number;
+  attributedLogicalTrades: number;
+  attributedClosedLogicalTrades: number;
+  from: string | null;
+  through: string | null;
 }
 
 const startISO = (window: PnlWindow): string | null => {
@@ -59,6 +64,7 @@ const emptyWindow = (
   statsBySlug: {},
   fundPnl: null,
   fundPnlSource: "unavailable",
+  attributedPnl: null,
   curve: [],
   curveLabels: [],
   sinceNote: null,
@@ -71,6 +77,10 @@ const emptyWindow = (
   issues: [...navIssues, ...attributionIssues],
   attributedPositionRows: 0,
   withheldPositionRows: 0,
+  attributedLogicalTrades: 0,
+  attributedClosedLogicalTrades: 0,
+  from: null,
+  through: null,
 });
 
 /**
@@ -111,6 +121,8 @@ export function useWindowedPnl(
         issues: string[];
         attributedPositionRows: number;
         withheldPositionRows: number;
+        attributedLogicalTrades: number;
+        attributedClosedLogicalTrades: number;
       }> => {
         const positionRows = await readWindowedPositions(sb, start, asOf);
         const [observations, historical] = await Promise.all([readWindowedExecutionRoutes(sb, positionRows), readHistoricalAttribution()]);
@@ -132,6 +144,8 @@ export function useWindowedPnl(
         const stats: Record<string, ChannelStat> = {};
         let attributedPositionRows = 0;
         let withheldPositionRows = 0;
+        let attributedLogicalTrades = 0;
+        let attributedClosedLogicalTrades = 0;
         const bump = (slug: string): ChannelStat =>
           (stats[slug] ??= { pnl: 0, trades: 0, wins: 0, pkSum: 0, pkN: 0 });
         for (const trade of logical.groups) {
@@ -147,7 +161,6 @@ export function useWindowedPnl(
             throw new Error(`logical trade ${trade.rootPositionId} spans immutable account routes`);
           }
           if (accounts[0] !== acctId) continue;
-          attributedPositionRows += trade.rows.length;
           const slugs = [...new Set(trade.rows.map((row) => slugOf(row)))];
           if (slugs.length !== 1) {
             throw new Error(`logical trade ${trade.rootPositionId} spans channel identities`);
@@ -156,8 +169,11 @@ export function useWindowedPnl(
           // complete trade only when its final close belongs to this window.
           const finalClose = trade.rows.map(row => String(row.closed_at ?? "")).sort().at(-1);
           if (trade.status === "closed" && start && (!finalClose || finalClose < start)) continue;
+          attributedPositionRows += trade.rows.length;
+          attributedLogicalTrades += 1;
           const channel = bump(slugs[0]);
           if (trade.status === "closed") {
+            attributedClosedLogicalTrades += 1;
             const pnl = reconstructed ? reconstructed.reconstructedGross : trade.realizedPnl;
             if (pnl == null) throw new Error(`logical trade ${trade.rootPositionId} lacks realized P&L`);
             channel.pnl += pnl;
@@ -180,7 +196,7 @@ export function useWindowedPnl(
           }
         }
         for (const channel of Object.values(stats)) channel.pnl = Math.round(channel.pnl);
-        return { stats, issues: [...historicalIssues, ...(withheldPositionRows ? [`${withheldPositionRows} position rows withheld for unresolved economics or routing.`] : [])], attributedPositionRows, withheldPositionRows };
+        return { stats, issues: [...historicalIssues, ...(withheldPositionRows ? [`${withheldPositionRows} position rows withheld for unresolved economics or routing.`] : [])], attributedPositionRows, withheldPositionRows, attributedLogicalTrades, attributedClosedLogicalTrades };
       };
 
       const readNav = async (): Promise<{
@@ -237,25 +253,22 @@ export function useWindowedPnl(
       const attributedPnl = attributionOk
         ? Math.round(Object.values(stats).reduce((total, channel) => total + channel.pnl, 0))
         : null;
-      const fundPnl = navDelta ?? attributedPnl;
+      const fundPnl = navDelta;
       const navIssues = navOk
-        ? []
+        ? navDelta == null ? ["Account NAV needs at least two observed snapshots in the selected window."] : []
         : [(navResult.reason as Error)?.message ?? "account NAV evidence read failed"];
       const attributionIssues = attributionOk
         ? attributionRead?.issues ?? []
         : [(attributionResult.reason as Error)?.message ?? "position attribution read failed"];
-      const navEvidenceState: PerformanceEvidenceState = navOk ? "ok" : "blocked";
+      const navEvidenceState: PerformanceEvidenceState = navOk ? navDelta == null ? "partial" : "ok" : "blocked";
       const attributionEvidenceState: PerformanceEvidenceState = attributionOk
         ? attributionIssues.length ? "partial" : "ok"
         : "blocked";
       setData({
         statsBySlug: stats,
         fundPnl,
-        fundPnlSource: navDelta != null
-          ? "nav_delta"
-          : attributedPnl != null
-            ? "immutable_position_attribution"
-            : "unavailable",
+        fundPnlSource: navDelta != null ? "nav_delta" : "unavailable",
+        attributedPnl,
         curve: nav.curve,
         curveLabels: nav.curveLabels,
         sinceNote: nav.sinceNote,
@@ -269,6 +282,10 @@ export function useWindowedPnl(
         issues: [...navIssues, ...attributionIssues],
         attributedPositionRows: attributionRead?.attributedPositionRows ?? 0,
         withheldPositionRows: attributionRead?.withheldPositionRows ?? 0,
+        attributedLogicalTrades: attributionRead?.attributedLogicalTrades ?? 0,
+        attributedClosedLogicalTrades: attributionRead?.attributedClosedLogicalTrades ?? 0,
+        from: start,
+        through: asOf,
       });
     })().catch((error: unknown) => {
       if (!alive) return;

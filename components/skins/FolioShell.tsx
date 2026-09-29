@@ -26,7 +26,6 @@ interface FolioShellProps {
   surface: SurfaceProps;
   dayChangePct: number | null;
   mobile: boolean;
-  onLegacy: () => void;
 }
 
 type DesktopItem = {
@@ -97,7 +96,7 @@ function FolioRuntimeState({ surface }: { surface: SurfaceProps }) {
   return <article className="folio-state-card"><span><small>PROCESS</small><b className={process.tone}>{process.label}</b></span><span><small>BROKER</small><b className={broker.tone}>{broker.label}</b></span></article>;
 }
 
-function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps, "mobile">) {
+function FolioDesktop({ surface, dayChangePct }: Omit<FolioShellProps, "mobile">) {
   const { mode, setMode, skin, toggleSkin } = useShell();
   const [section, setSection] = useState<PerformSection>("overview");
   const [authOpen, setAuthOpen] = useState(false);
@@ -150,7 +149,6 @@ function FolioDesktop({ surface, dayChangePct, onLegacy }: Omit<FolioShellProps,
             return <button type="button" key={item.key} className={active ? "on" : ""} onClick={() => navigate(item)} aria-label={`${item.label} ${item.hint}`}><i>{item.mark}</i><span><b>{item.label}</b><small>{item.hint}</small></span></button>;
           })}
         </div>
-        <button type="button" className="folio-legacy" onClick={onLegacy}>ROOMS</button>
         <div className="folio-kill"><span><small>AUTO</small><b>PAPER</b></span><KillControl halted={view.desk.fund.is_halted} /></div>
       </nav>
 

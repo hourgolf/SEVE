@@ -40,7 +40,7 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
     ? atlasStale ? atlasLabel : researchVerified ? `BUNDLE VERIFIED · ${surface.decisionAtlas.throughSession?.slice(5).replace("-", "/")}` : "BUNDLE UNVERIFIED"
     : surface.decisionAtlas.state.toUpperCase();
   // Publication integrity does not establish calibration of every evidence layer.
-  const evidenceQuality = "partial" as const;
+  const evidenceQuality = healthy && researchVerified && positionsKnown ? "complete" as const : "partial" as const;
   const attention = [
     surface.incident.severity !== "normal" ? { label: surface.incident.title, destination: { section: "ops" as const, check: "reconciliation" } } : null,
     atlasStale ? { label: "Nightly channel decisions need a fresh close", destination: { section: "research" as const, researchMode: "decisions" as const } } : null,
@@ -58,6 +58,7 @@ export function DecisionHomeWorkspace({ surface, onNavigate }: {
       era={surface.channelControlPlane.view?.configurationEpochId ? "current configuration" : "sealed runtime"}
       sample={`${fleet.reports} channel reports`}
       quality={evidenceQuality}
+      authority={healthy && researchVerified && positionsKnown ? "decision_ready" : "withheld"}
       detail="Actual selected-account positions are kept separate from all-paper nightly research."
     />
     <section className={`decision-home-status ${healthy && researchVerified ? "healthy" : "attention"}`}>

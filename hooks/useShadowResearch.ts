@@ -91,11 +91,11 @@ const EMPTY: ShadowResearch = {
   }),
   virtualEvidence: evidenceEnvelope({ layer: "historical_virtual", unit: "opportunity", fromSession: null, throughSession: null,
     configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
-    completeness: "unavailable", reconciliation: "unverified", source: "virtual_trades", receiptHash: null,
+    completeness: "unavailable", reconciliation: "unverified", authority: "withheld", source: "virtual_trades", receiptHash: null,
     limitations: ["Legacy virtual rows may remain unstamped; stamped rows retain channel, release, portfolio, manager, and publisher provenance."], asOf: null }),
   currentExecutedEvidence: evidenceEnvelope({ layer: "current_executed", unit: "logical_trade", fromSession: null, throughSession: null,
     configurationEpochId: null, managerVersion: null, scope: { kind: "portfolio", accountIds: [], channelSlugs: [] },
-    completeness: "unavailable", reconciliation: "blocked", source: "positions lineage + immutable execution route", receiptHash: null,
+    completeness: "unavailable", reconciliation: "blocked", authority: "withheld", source: "positions lineage + immutable execution route", receiptHash: null,
     limitations: ["No attributed current execution cohort is available."], asOf: null }),
   cohortStart: COHORT_START,
   truncated: false,
@@ -366,7 +366,7 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
             configurationEpochId: null, managerVersion: null,
             scope: { kind: "portfolio", accountIds: [], channelSlugs: [...new Set(rows.map((row) => row.slug))] },
             completeness: sessions.length ? "complete" : "unavailable",
-            reconciliation: "unverified", source: "virtual_trades · native hypothetical paths", receiptHash: null,
+            reconciliation: "unverified", authority: sessions.length ? "research_only" : "withheld", source: "virtual_trades · native hypothetical paths", receiptHash: null,
             limitations: [
               ...(rows.some((row) => !row.channelSpecVersionId) ? ["Some legacy virtual rows are unstamped and remain labeled as all-history context."] : []),
               "Source row counts reconciled before and after complete pagination. Quote-path quality is a separate requirement.",
@@ -377,6 +377,7 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
             scope: { kind: "portfolio", accountIds: [...new Set(Object.values(currentExecutedBySlug).flatMap((summary) => summary.accountIds))], channelSlugs: Object.keys(currentExecutedBySlug) },
             completeness: currentExecutedState === "error" ? "unavailable" : currentExecutedTruncated || historicalExecutedWithheld || historicalMissingChannels.length ? "partial" : currentExecutedState === "ok" ? "complete" : "unavailable",
             reconciliation: currentExecutedState === "ok" ? "reconciled" : "blocked",
+            authority: currentExecutedState === "ok" && !currentExecutedTruncated && !historicalExecutedWithheld && !historicalMissingChannels.length ? "decision_ready" : "withheld",
             source: "positions lineage + immutable execution route · latest channel behavior spec", receiptHash: null,
             limitations: ["Current execution cohort begins July 20; earlier virtual history remains separately available.", "Channel behavior specifications are selected independently; receipt-only portfolio epoch changes do not reset unchanged channel evidence.", ...(currentExecutedTruncated ? ["Read reached its bounded row cap."] : []), ...(historicalExecutedWithheld ? [`${historicalExecutedWithheld} position rows withheld from current behavior comparisons because their broker result or inventory does not match the recorded ledger.`] : []), ...(historicalMissingChannels.length ? [`Broker-only historical fills prevent complete executed comparisons for ${historicalMissingChannels.join(", ")}. See Review for their audited economic subtotals.`] : [])], asOf }),
           cohortStart: dateRange.from,
@@ -391,9 +392,9 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
           state: "error",
           error: message(error),
           virtualEvidence: evidenceEnvelope({ ...previous.virtualEvidence,
-            completeness: previous.asOf ? "stale" : "unavailable" }),
+            completeness: previous.asOf ? "stale" : "unavailable", authority: previous.asOf ? "research_only" : "withheld" }),
           currentExecutedEvidence: evidenceEnvelope({ ...previous.currentExecutedEvidence,
-            completeness: previous.asOf ? "stale" : "unavailable" }),
+            completeness: previous.asOf ? "stale" : "unavailable", authority: "withheld" }),
         }));
       } finally { reading = false; }
     };

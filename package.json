@@ -162,6 +162,7 @@
     "deterministic-sentinel": "tsx --env-file=.env.local scripts/deterministic-sentinel.ts",
     "deterministic-sentinel:hosted": "tsx scripts/deterministic-sentinel.ts",
     "event-tape-selftest": "tsx lib/perform/eventTape.selftest.ts",
+    "dashboard-truth-contract-selftest": "tsx lib/evidence/dashboardTruthContract.selftest.ts",
     "clarity-disclosure-selftest": "tsx components/perform/clarityDisclosure.selftest.ts",
     "mobile-review-selftest": "tsx lib/mobile/reviewWorkspace.selftest.ts",
     "release-receipt-selftest": "tsx lib/ops/releaseReceipt.selftest.ts",
