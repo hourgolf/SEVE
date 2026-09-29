@@ -34,7 +34,11 @@ for (const path of [
   "../../components/perform/ShadowResearchWorkspace.tsx",
   "../../components/studio/StudioFleet.tsx",
   "../../components/mobile2/MobileDeskSheet.tsx",
+  "../../components/mobile2/MobilePerform.tsx",
   "../../components/mobile2/MobileStudio.tsx",
+  "../../components/skins/folio/FolioHome.tsx",
+  "../../components/skins/folio/FolioBook.tsx",
+  "../../components/skins/folio/FolioChannels.tsx",
 ]) {
   const source = read(path);
   assert.match(source, /<SeveEvidenceContext[\s\S]*?authority=/, `${path} must render explicit evidence authority`);

@@ -19,6 +19,7 @@ import { MarketOpenRisk, MarketReadStrip } from "@/components/perform/PerformMar
 import { SUPPORTED_UNDERLYINGS } from "@/lib/desk/strategySpec";
 import { buildFleetDecisionSummary } from "@/lib/research/channelDecisionSummary";
 import { decisionAtlasFreshnessShortLabel } from "@/lib/research/decisionAtlasFreshness";
+import { SeveEvidenceContext } from "@/components/ui/Seve909";
 
 // =============================================================================
 // MOBILE · PERFORM (S5) — the watch surface as ONE vertical scroll (the gallery
@@ -146,6 +147,8 @@ export function MobilePerform({
   const ready = props.incident.severity === "normal" && props.opsReadiness.summary.tone === "green";
   const researchVerified = props.decisionAtlas.state === "ready"
     && props.decisionAtlas.publication?.state === "verified" && props.decisionAtlas.freshness === "current";
+  const positionsKnown = ["ok", "recovered"].includes(props.feed.positionAttribution.state);
+  const decisionReady = ready && researchVerified && positionsKnown;
   const researchLabel = props.decisionAtlas.state === "ready"
     ? props.decisionAtlas.freshness === "stale" ? atlasLabel : researchVerified
       ? `BUNDLE VERIFIED · ${props.decisionAtlas.throughSession?.slice(5).replace("-", "/")}` : "BUNDLE UNVERIFIED"
@@ -158,6 +161,16 @@ export function MobilePerform({
   return (
     <>
       <div className="m2-scroll">
+        <SeveEvidenceContext
+          kind="mixed"
+          scope={`${props.accounts.find((row) => row.id === props.acctId)?.name ?? "selected account"} + all-paper research`}
+          asOf={props.feed.updatedAt ?? props.data.lastIngestTs ?? "checking"}
+          era={props.channelControlPlane.view?.configurationEpochId ? "current configuration" : "sealed runtime"}
+          sample={`${fleet.reports} channel reports`}
+          quality={decisionReady ? "complete" : "partial"}
+          authority={decisionReady ? "decision_ready" : "withheld"}
+          detail="Actual selected-account positions are kept separate from all-paper nightly research."
+        />
         <section className={`m2-decision-home ${ready && researchVerified ? "ready" : "attention"}`} aria-label="Decision Home summary">
           <header><span><small>DECISION HOME</small><b>{ready ? researchVerified ? "OBSERVED HEALTH CHECKS PASS" : "OBSERVED CHECKS PASS · RESEARCH NEEDS REVIEW" : "CHECK BEFORE THE NEXT SESSION"}</b></span><em>{signedUsd(props.liveFund.dayPnl)} SESSION NAV Δ</em></header>
           <p>{!researchVerified ? "Channel research needs a verified close before the next decision." : fleet.lead ? `Next review: ${fleet.lead.channel} · ${fleet.lead.disposition.toLowerCase()}.` : "No urgent channel action. Continue collecting evidence."}</p>

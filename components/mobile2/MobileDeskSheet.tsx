@@ -9,7 +9,7 @@ import { signedUsd, timeOfDay, usd0 } from "@/lib/format";
 import type { ChannelPnl, StrategistState } from "@/lib/desk/types";
 import type { SurfaceProps } from "@/components/surfaceTypes";
 import { deriveRecentExits } from "@/lib/perform/derivePositionsWorkspace";
-import { SentinelReceiptStrip } from "@/components/perform/SentinelWorkspace";
+import { deriveSentinelDigestReceipt, SentinelReceiptStrip } from "@/components/perform/SentinelWorkspace";
 import { findSealedReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { BrokerReconciliationStrip, OpsReadinessPanel, PositionEvidenceChains } from "@/components/ops/OpsReadinessPanel";
 import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
@@ -31,6 +31,7 @@ import type { PnlWindow } from "@/hooks/useWindowedPnl";
 import { summarizePerformanceIssue } from "@/lib/perform/performanceEvidence";
 import { mobileReviewDestination, mobileReviewModeForDestination } from "@/lib/mobile/workspaceRouting";
 import { SeveEvidenceContext } from "@/components/ui/Seve909";
+import { deriveSentinelConfigurationFreshness } from "@/lib/sentinel/operatorPacket";
 
 type DeskTab = "book" | "review" | "ops" | "build";
 
@@ -43,6 +44,9 @@ const TABS: { id: DeskTab; label: string; sub: string }[] = [
 
 const age = (sec: number | null) => sec == null ? "—" : sec < 90 ? `${sec}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${Math.round(sec / 3600)}h`;
 const moneyK = (value: number) => Math.abs(value) >= 1000 ? `$${(value / 1000).toFixed(1)}k` : usd0(value);
+const localTime = (value: string | null | undefined): string => value ? new Date(value).toLocaleString("en-US", {
+  timeZone: "America/Los_Angeles", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+}) + " PT" : "checking";
 
 function Section({ title, meta, children, collapsible = false }: {
   title: string;
@@ -169,6 +173,13 @@ export function MobileReviewView({ props, channels, livePnl, destination, onNavi
   const brief = sentinel.brief;
   const judge = sentinel.judge;
   const tape = useMemo(() => deriveTapeRows(props.data.events).slice(0, 12), [props.data.events]);
+  const sentinelReceipt = deriveSentinelDigestReceipt(sentinel);
+  const sentinelConfiguration = deriveSentinelConfigurationFreshness(
+    sentinel.operatorPacket?.release.configurationSha256,
+    props.channelWorkspace.release.state === "verified" ? props.channelWorkspace.release.expectedHash : null,
+  );
+  const sentinelSuperseded = sentinelConfiguration.state === "superseded";
+  const sentinelFindings = sentinel.operatorPacket?.findings.length ?? sentinel.scan?.promote.length ?? 0;
   useEffect(() => {
     const nextMode = mobileReviewModeForDestination(destination);
     if (nextMode) setMode(nextMode);
@@ -194,7 +205,10 @@ export function MobileReviewView({ props, channels, livePnl, destination, onNavi
       <button type="button" className="m2-council-full" onClick={() => { setMode("shadow"); onNavigate?.({ section: "research", researchMode: "decisions" }); }}>OPEN FULL CHANNEL RESEARCH</button>
     </div>}
 
-    {mobileReviewHas(mode, "sentinel-receipt") && <SentinelReceiptStrip sentinel={sentinel} compact />}
+    {mobileReviewHas(mode, "sentinel-receipt") && <>
+      <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={localTime(sentinelReceipt.publishedAt)} era="next-session packet" sample={`${sentinelFindings} findings`} quality={sentinelSuperseded ? "partial" : sentinelReceipt.tone === "green" ? "complete" : sentinelReceipt.tone === "yellow" ? "partial" : "checking"} authority={sentinelSuperseded || sentinelReceipt.tone !== "green" ? "withheld" : "operational_only"} detail={sentinelSuperseded ? "This brief predates the active paper configuration. Its configuration instruction is no longer current." : sentinelReceipt.detail} />
+      <SentinelReceiptStrip sentinel={sentinel} compact />
+    </>}
     {mobileReviewHas(mode, "session-summary") && <ReviewSessionScorecard evidence={props.reviewEvidence.daily} />}
 
     {mobileReviewHas(mode, "session-summary") && <MobilePeriodResults props={props} channels={channels} livePnl={livePnl} />}
@@ -240,9 +254,11 @@ export function MobileOpsView({ props, channels, destination, onNavigate, onOpen
   const rows = channels.map((channel) => ({ channel, pnl: livePnl[channel.slug]?.dayPnl ?? 0 })).filter((row) => row.pnl !== 0).sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
   const ingestAge = data.lastIngestTs ? Math.max(0, Math.round((Date.now() - Date.parse(data.lastIngestTs)) / 1000)) : null;
   const release = findSealedReleaseReceipt(data.releaseEvents);
+  const reconciliation = props.opsReadiness.evidence.find((item) => item.id === "reconciliation");
   const selectedCheck = destination?.check ? [...props.opsReadiness.configuration, ...props.opsReadiness.evidence].find((item) => item.id === destination.check) : undefined;
 
   return <>
+    <SeveEvidenceContext kind="system" scope="all paper accounts" asOf={localTime(reconciliation?.observedAt ?? release?.createdAt)} era="current sealed release" sample={`${props.opsReadiness.counts.candidates} candidate decisions`} quality={props.opsReadiness.summary.tone === "red" ? "partial" : props.opsReadiness.summary.tone === "yellow" ? "building" : "complete"} authority="operational_only" detail="Readiness is based on observed broker, process, market, and research evidence." />
     <section className={`m2-incident-card ${incident.severity}`}><header><i /><b>{incident.title}</b><span>{incident.severity.toUpperCase()}</span></header>
       <p>desk shows {feed.positions.length} open positions</p>{incident.facts.slice(0, 3).map((fact, index) => <p key={index}>{fact}</p>)}</section>
     <DecisionAtlasFleetPulse reports={props.decisionAtlas} purpose="operations" />
