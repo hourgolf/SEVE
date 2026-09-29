@@ -33,7 +33,9 @@ const percent = (wins: number, scored: number): string =>
   scored ? `${Math.round((1000 * wins) / scored) / 10}%` : "—";
 const money = (value: number | null): string => value == null ? "—" : signedUsd(value);
 const shortSession = (session: string): string => session.slice(5).replace("-", "/");
-const freshnessLabel = (value: string): string => value === "CURRENT" ? "CURRENT REPORT" : value;
+// These rows are live virtual summaries. Reserve "report" for a verified
+// published Atlas bundle so a fresh sample cannot imply decision authority.
+const freshnessLabel = (value: string): string => value === "CURRENT" ? "CURRENT SAMPLE" : value;
 const RECENT_SESSION_LIMIT = 4;
 const DEFAULT_CHANNEL_LIMIT = 12;
 const DEFAULT_DECISION_LIMIT = 4;
