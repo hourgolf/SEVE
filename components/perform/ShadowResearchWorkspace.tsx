@@ -248,8 +248,11 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
     ? rows.filter((row) => !excluded[lane].includes(row.slug))
     : rows, [excluded, lane, rows, windowMode]);
   const totals = useMemo(() => laneTotals(filteredRows), [filteredRows]);
-  const retuneBySlug = useMemo(() => new Map(shadowResearch.boundedRetunes.experiments
-    .map((experiment) => [experiment.definition.channel, experiment.evidence])), [shadowResearch.boundedRetunes.experiments]);
+  const retuneBySlug = useMemo(() => new Map(
+    (shadowResearch.boundedRetuneState === "ok" || shadowResearch.boundedRetuneState === "empty"
+      ? shadowResearch.boundedRetunes.experiments : [])
+      .map((experiment) => [experiment.definition.channel, experiment.evidence])),
+  [shadowResearch.boundedRetuneState, shadowResearch.boundedRetunes.experiments]);
   const atlasReads = useMemo(() => rows.map((row) => ({
     slug: row.slug,
     label: publishedDecisionUsable && surface.decisionAtlas.bySlug[row.slug]
@@ -261,9 +264,9 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
         ? shadowResearch.dryPowderBySlug[row.slug]
         : selected ? shadowResearch.dryPowderBySession[selected.session]?.[row.slug] : undefined,
       managerEvidence: surface.managerEvidence.book?.channels[row.slug],
-      retuneEvidence: shadowResearch.boundedRetuneError ? undefined : retuneBySlug.get(row.slug),
+      retuneEvidence: retuneBySlug.get(row.slug),
     }),
-  })), [publishedDecisionUsable, retuneBySlug, rows, selected, shadowResearch.boundedRetuneError, shadowResearch.dryPowderBySession, shadowResearch.dryPowderBySlug, surface.decisionAtlas.bySlug, surface.managerEvidence.book?.channels, windowMode]);
+  })), [publishedDecisionUsable, retuneBySlug, rows, selected, shadowResearch.dryPowderBySession, shadowResearch.dryPowderBySlug, surface.decisionAtlas.bySlug, surface.managerEvidence.book?.channels, windowMode]);
   const { atlasWorking, atlasReview } = useMemo(() => ({
     atlasWorking: atlasReads.filter((item) => item.label
       ? /PROMOTION|SIZE|MANAGER/.test(item.label)
@@ -377,7 +380,8 @@ export function ShadowResearchWorkspace({ surface, compact = false, destination,
       <button type="submit">Load range</button>
       <span>{shadowResearch.state === "ok" || shadowResearch.state === "empty" ? `${shadowResearch.sourceCounts.virtual.toLocaleString()} virtual rows · source count verified` : "Source count awaiting verification"}</span>
     </form>
-    {shadowResearch.boundedRetuneError ? <div className="srw-empty error" role="status">Experiment comparisons unavailable · {shadowResearch.boundedRetuneError}. Other research evidence remains separate.</div>
+    {shadowResearch.boundedRetuneState === "loading" || shadowResearch.boundedRetuneState === "idle" ? <p aria-live="polite">Experiment comparisons are loading independently; the verified virtual ledger is available now.</p>
+      : shadowResearch.boundedRetuneError ? <div className="srw-empty error" role="status">Experiment comparisons unavailable · {shadowResearch.boundedRetuneError}. Other research evidence remains separate.</div>
       : shadowResearch.sourceCounts.retuneSignals != null ? <p>{shadowResearch.sourceCounts.retuneSignals.toLocaleString()} experiment signals · source count verified · selected range only</p> : null}
     <p>Complete row counts do not establish quote-path quality. Missing, stale or sampled quotes can still limit entry and exit comparisons.</p>
     <section className={`srw-truth authority-${atlasTruth.authority}`} aria-label="Atlas evidence authority">

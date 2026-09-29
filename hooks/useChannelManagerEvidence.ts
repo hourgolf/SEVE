@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { startVisibilityPoll } from "@/lib/pollControl";
 import type { ChannelManagerEvidenceBook } from "@/lib/research/channelManagerEvidence";
@@ -13,10 +13,13 @@ export interface ChannelManagerEvidenceRead {
 }
 
 const EMPTY: ChannelManagerEvidenceRead = { state: "idle", book: null, error: "", asOf: null };
+const MANAGER_EVIDENCE_REOPEN_CACHE_MS = 10 * 60_000;
 
 export function useChannelManagerEvidence(enabled: boolean): ChannelManagerEvidenceRead {
   const { session, operator } = useAuth();
   const [state, setState] = useState<ChannelManagerEvidenceRead>(EMPTY);
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
 
   useEffect(() => {
     if (!session || !operator) {
@@ -25,7 +28,13 @@ export function useChannelManagerEvidence(enabled: boolean): ChannelManagerEvide
     }
     if (!enabled) return;
     let alive = true;
+    let reading = false;
     const poll = async () => {
+      if (reading) return;
+      const cached = stateRef.current;
+      if ((cached.state === "ok" || cached.state === "empty") && cached.asOf
+        && Date.now() - Date.parse(cached.asOf) < MANAGER_EVIDENCE_REOPEN_CACHE_MS) return;
+      reading = true;
       setState((current) => ({ ...current, state: current.book ? current.state : "loading", error: "" }));
       try {
         const response = await fetch("/api/channel-manager-evidence", {
@@ -49,7 +58,7 @@ export function useChannelManagerEvidence(enabled: boolean): ChannelManagerEvide
           state: "error",
           error: error instanceof Error ? error.message : "manager evidence read failed",
         }));
-      }
+      } finally { reading = false; }
     };
     void poll();
     const stop = startVisibilityPoll(() => void poll(), 10 * 60_000);
