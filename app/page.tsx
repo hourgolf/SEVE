@@ -96,6 +96,7 @@ function Surface({
   const [evidenceWorkspace, setEvidenceWorkspace] = useState<EvidenceWorkspace>("none");
   const [activeReviewSection, setActiveReviewSection] = useState<ReviewSection>("tape");
   const [researchDemand, setResearchDemand] = useState(false);
+  const [researchDetailDemand, setResearchDetailDemand] = useState(false);
   useEffect(() => {
     const s = localStorage.getItem("seve-room");
     if (s === "play" || s === "mix" || s === "write" || s === "tape" || s === "ops") setActiveRoom(s);
@@ -227,7 +228,7 @@ function Surface({
   });
   // Historical research is demand-loaded by its visible presenter. Closing an
   // inspector leaves the last verified result in memory, but stops polling it.
-  const researchEnabled = !accountsLoading && (evidenceWorkspace === "research" || researchDemand);
+  const researchEnabled = !accountsLoading && (researchDemand || researchDetailDemand);
   const shadowResearch = useShadowResearch(researchEnabled, configuredPaperAccountIds);
   const managerEvidence = useChannelManagerEvidence(researchEnabled);
   const reviewVisible = evidenceWorkspace === "review";
@@ -261,7 +262,7 @@ function Surface({
   // operator returns to the same room/layout. Lifted to the seam (passed down).
   const [collapsedMarket, setCollapsedMarket] = useState(false);
 
-  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, evidenceWorkspace, setEvidenceWorkspace, activeReviewSection, setActiveReviewSection, researchDemand, setResearchDemand, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, allChannelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
+  const props = { data, view, feed, write, spotUp, selected, setSelected, contractHistory, symbol, setSymbol, theme, setTheme, accounts, acctId, setAcctId, accountChannels, ops, liveMarks, livePnl, liveFund, activeRoom, setActiveRoom, evidenceWorkspace, setEvidenceWorkspace, activeReviewSection, setActiveReviewSection, researchDemand, setResearchDemand, researchDetailDemand, setResearchDetailDemand, collapsedMarket, setCollapsedMarket, sentinel, workerRuns, positionPeaks, incident, studioEvidence, channelWorkspace, allChannelWorkspace, channelControlPlane, opsReadiness, shadowResearch, managerEvidence, decisionAtlas, reviewEvidence };
 
   // Mobile (S5 rework) — the PERFORM/STUDIO phone shell. Shares the same seam
   // props + the persisted mode/skin (useShell) as desktop; MobileApp is retained

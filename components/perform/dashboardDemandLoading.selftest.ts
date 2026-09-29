@@ -13,8 +13,10 @@ const manager = source("hooks/useChannelManagerEvidence.ts");
 const runtime = source("hooks/useRuntimeTelemetry.ts");
 const shadow = source("hooks/useShadowResearch.ts");
 
-assert.match(page, /evidenceWorkspace === "research" \|\| researchDemand/,
-  "the bounded research book must run only for visible Research or an open inspector");
+assert.match(page, /researchDemand \|\| researchDetailDemand/,
+  "the bounded research book must run only for an explicit data, comparison, or inspector demand");
+assert.doesNotMatch(page, /evidenceWorkspace === "research" \|\| researchDemand/,
+  "opening verified Decisions must not automatically fetch the full historical ledger");
 assert.match(page, /useChannelManagerEvidence\(researchEnabled\)/,
   "manager evidence must share the explicit research demand gate");
 assert.doesNotMatch(page, /useShadowResearch\(!accountsLoading|useChannelManagerEvidence\(true\)/,
@@ -43,6 +45,12 @@ assert.doesNotMatch(shell, /const \[now, setNow\]/,
   "the one-second clock must not rerender the full workstation shell");
 assert.match(research, /const rowsBySlug = useMemo/,
   "research rows must be indexed once per result rather than rescanned for every card");
+assert.match(research, /Object\.values\(surface\.decisionAtlas\.bySlug\)\.map\(publishedDecisionCohortSummary\)/,
+  "Decisions must use the verified compact publication rather than reconstructing it from raw rows");
+assert.match(research, /setResearchDetailDemand\(viewMode === "data" \|\| supportingEvidenceOpen\)/,
+  "the raw ledger and supplemental readers must start only after explicit operator demand");
+assert.match(research, /viewMode === "data" \? <><form className="srw-controls"/,
+  "date-range and row-count controls belong to the raw Data surface only");
 assert.match(research, /const atlasReads = useMemo/,
   "expensive Atlas derivations must be memoized");
 assert.match(research, /historicalEvidenceSlug === focusSlug \? <HistoricalChannelEvidence/,

@@ -94,7 +94,9 @@ export function buildDecisionAtlasPreview(input: {
     summary,
     metrics: experimentMetrics ?? defaultMetrics,
     evidenceFact: input.summary
-      ? `${input.summary.scored}/${input.summary.paths} historical native paths scored · largest winner ${input.summary.largestWinnerShare == null ? "unknown" : `${Math.round(input.summary.largestWinnerShare * 100)}% of positive result`}.${experiment ? ` Prospective scoring starts ${experiment.cohortStartSession}; review waits for 5 sessions and 10 logical outcomes.${progress ? ` Missing or mismatched source stamps: ${progress.censored.missingExperimentStamp + progress.censored.baselineMismatch}.` : ""}` : ""} Full configuration-era, collision, capital, and paired-exit checks remain in the nightly dossier.`
+      ? `${input.summary.evidenceBasis === "published_decision_cohort"
+        ? `${input.summary.sessions} sessions / ${input.summary.paths} opportunities in the verified published decision cohort`
+        : `${input.summary.scored}/${input.summary.paths} historical native paths scored`} · largest winner ${input.summary.largestWinnerShare == null ? "unknown" : `${Math.round(input.summary.largestWinnerShare * 100)}% of positive result`}.${experiment ? ` Prospective scoring starts ${experiment.cohortStartSession}; review waits for 5 sessions and 10 logical outcomes.${progress ? ` Missing or mismatched source stamps: ${progress.censored.missingExperimentStamp + progress.censored.baselineMismatch}.` : ""}` : ""} Full configuration-era, collision, capital, and paired-exit checks remain in the nightly dossier.`
       : "No cumulative native-path summary is available. Full methodology remains in the nightly dossier.",
     experiment,
   };

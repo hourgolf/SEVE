@@ -112,6 +112,10 @@ export interface ChannelDryPowderCurve {
 }
 
 export interface ShadowChannelSummary {
+  /** Identifies whether the summary was derived from raw virtual rows or is a
+   * sparse projection of the verified nightly decision cohort. Consumers must
+   * not present a published projection as a newly reconciled ledger read. */
+  evidenceBasis?: "virtual_ledger" | "published_decision_cohort";
   slug: string;
   paths: number;
   scored: number;
@@ -625,6 +629,7 @@ function summarizeChannels(rows: ShadowResearchRow[]): ShadowChannelSummary[] {
     const sessionResults = sessionOutcomes.map((row) => row.result);
     const losses = channel.outcomes.filter((value) => value < 0);
     return ({
+    evidenceBasis: "virtual_ledger" as const,
     slug: channel.slug,
     paths: channel.paths,
     scored: channel.scored,
