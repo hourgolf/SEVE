@@ -12,7 +12,7 @@ import { PerformPositionsWorkspace } from "@/components/perform/PerformPositions
 import { SentinelWorkspace } from "@/components/perform/SentinelWorkspace";
 import { ReviewWorkspace } from "@/components/perform/ReviewWorkspace";
 import { OpsWorkspace } from "@/components/perform/OpsWorkspace";
-import { ShadowResearchWorkspace } from "@/components/perform/ShadowResearchWorkspace";
+import { ShadowResearchWorkspace } from "@/components/perform/ResearchWorkspace";
 import { DecisionHomeWorkspace } from "@/components/perform/DecisionHomeWorkspace";
 import { derivePerformFocus, type PerformSection } from "@/lib/perform/derivePerformView";
 import type { SurfaceProps } from "@/components/surfaceTypes";

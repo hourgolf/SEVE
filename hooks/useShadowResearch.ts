@@ -2,7 +2,7 @@
 
 import { readHistoricalAttribution } from '@/lib/reporting/readHistoricalAttribution';
 import { type HistoricalTrade } from '@/supabase/functions/_shared/historicalAttribution';
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { startVisibilityPoll } from "@/lib/pollControl";
 import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
@@ -474,5 +474,9 @@ export function useShadowResearch(enabled: boolean, configuredPaperAccountIds: r
     return () => { alive = false; stop(); };
   }, [configuredKey, enabled, dateRange.from, dateRange.through]);
 
-  return { ...state, dateRange, setDateRange: (from, through) => { researchDateBounds(from, through); setRange({ from, through }); } };
+  const setDateRange = useCallback((from: string, through: string) => {
+    researchDateBounds(from, through);
+    setRange((previous) => previous.from === from && previous.through === through ? previous : { from, through });
+  }, []);
+  return useMemo(() => ({ ...state, dateRange, setDateRange }), [state, dateRange, setDateRange]);
 }
