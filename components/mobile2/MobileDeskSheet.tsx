@@ -13,7 +13,7 @@ import { deriveSentinelDigestReceipt, SentinelReceiptStrip } from "@/components/
 import { findSealedReleaseReceipt } from "@/lib/ops/releaseReceipt";
 import { BrokerReconciliationStrip, OpsReadinessPanel, PositionEvidenceChains } from "@/components/ops/OpsReadinessPanel";
 import { TapeReadStrip } from "@/components/perform/EventTapeWorkspace";
-import { ShadowResearchWorkspace } from "@/components/perform/ShadowResearchWorkspace";
+import { ShadowResearchWorkspace } from "@/components/perform/ResearchWorkspace";
 import { deriveTapeRows } from "@/lib/perform/eventTape";
 import {
   DEFAULT_MOBILE_REVIEW_MODE,

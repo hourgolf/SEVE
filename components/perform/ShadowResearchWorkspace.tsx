@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { SurfaceProps } from "@/components/surfaceTypes";
+import type { ResearchWorkspaceInputs } from "@/lib/research/researchWorkspaceInputs";
 import { buildDecisionAtlasPreview } from "@/lib/research/decisionAtlasPreview";
 import { dispositionForAxis } from "@/lib/research/channelDecisionSummary";
 import { ChannelDryPowderCurve } from "@/components/research/ChannelDryPowderCurve";
@@ -57,7 +57,7 @@ const laneTotals = (rows: ShadowChannelSummary[]) => {
   };
 };
 
-function ExactStatus({ surface, session }: { surface: SurfaceProps; session: string }) {
+function ExactStatus({ surface, session }: { surface: ResearchWorkspaceInputs; session: string }) {
   const archived = exactShadowReceipt(session);
   const current = surface.sentinel.operatorPacket?.session === session
     ? surface.sentinel.operatorPacket.darkBook
@@ -186,7 +186,7 @@ export function NativeTable({
   </div>;
 }
 
-export function ShadowResearchWorkspace({ surface, compact = false, destination, onNavigate }: { surface: SurfaceProps; compact?: boolean; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
+export function ShadowResearchWorkspace({ surface, compact = false, destination, onNavigate }: { surface: ResearchWorkspaceInputs; compact?: boolean; destination?: WorkspaceDestination; onNavigate?: (destination: WorkspaceDestination) => void }) {
   const { shadowResearch } = surface;
   const [session, setSession] = useState("");
   const [lane, setLane] = useState<ResearchLane>("vb");

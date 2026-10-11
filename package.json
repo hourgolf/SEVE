@@ -323,6 +323,7 @@
     "workspace-navigation-selftest": "tsx lib/shell/workspaceDestination.selftest.ts && tsx components/perform/workspaceNavigation.selftest.ts",
     "ui-clarity-selftest": "tsx lib/perform/sessionReview.selftest.ts && tsx lib/shell/workspaceDestination.selftest.ts && tsx components/perform/workspaceNavigation.selftest.ts && tsx components/perform/uiClarityLayout.selftest.ts && tsx components/perform/clarityDisclosure.selftest.ts && tsx components/research/DecisionAtlasHierarchy.selftest.ts && tsx components/perform/decisionFirstPlatform.selftest.ts",
     "dashboard-demand-loading-selftest": "tsx components/perform/dashboardDemandLoading.selftest.ts && tsx lib/research/publishedDecisionCohort.selftest.ts",
+    "research-render-isolation-selftest": "tsx hooks/useResearchWorkspaceInputs.selftest.ts",
     "execution-observation-persistence-selftest": "tsx worker/src/executionObservationPersistence.selftest.ts",
     "execution-timing-selftest": "tsx worker/src/executionTiming.selftest.ts",
     "position-route-observation-selftest": "tsx worker/src/positionRouteObservation.selftest.ts",
@@ -496,7 +497,7 @@
     "closed-position-invariant-selftest": "tsx worker/src/closedPositionInvariant.selftest.ts",
     "position-close-flow-selftest": "tsx lib/positions/positionCloseFlow.selftest.ts",
     "perform-selftest": "tsx lib/perform/perform.selftest.ts",
-    "review-workspace-selftest": "tsx lib/perform/reviewWorkspace.selftest.ts",
+    "review-workspace-selftest": "tsx lib/perform/reviewWorkspace.selftest.ts && npm run research-render-isolation-selftest && npm run dashboard-demand-loading-selftest && npm run atlas-surface-truth-selftest",
     "performance-evidence-selftest": "tsx lib/perform/performanceEvidence.selftest.ts",
     "studio-selftest": "tsx lib/studio/studio.selftest.ts",
     "ride-filter-probe": "tsx --env-file=.env.local engine/ride-filter-probe.ts",
@@ -575,6 +576,7 @@
     "@types/react-dom": "^19.0.3",
     "@types/ws": "^8.18.1",
     "esbuild": "~0.28.0",
+    "react-test-renderer": "19.0.0",
     "tsx": "^4.22.3",
     "typescript": "^5.7.3"
   }

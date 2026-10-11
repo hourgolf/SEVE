@@ -1,7 +1,7 @@
 "use client";
 
 import "@/app/workstation.css";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuthControl } from "@/components/AuthControl";
 import { KillControl } from "@/components/console/hw/KillControl";
 import { LedDisplay, LedWordmark } from "@/components/console/hw/LedDisplay";
@@ -160,7 +160,7 @@ export function WorkstationShell({ surface }: WorkstationShellProps) {
     if (item.section === "overview") return;
     window.setTimeout(() => document.getElementById(`perform-${item.section}`)?.focus({ preventScroll: true }), 0);
   };
-  const navigateFromSurface = (target: WorkspaceDestination) => {
+  const navigateFromSurface = useCallback((target: WorkspaceDestination) => {
     const item = target.section === "studio"
       ? NAV.find((candidate) => candidate.key === "studio")
       : NAV.find((candidate) => candidate.mode === "perform" && "section" in candidate && candidate.section === target.section);
@@ -169,7 +169,7 @@ export function WorkstationShell({ surface }: WorkstationShellProps) {
     if (item.mode === "perform" && "section" in item) setPerformSection(item.section);
     navigateDestination(target);
     window.setTimeout(() => document.getElementById(item.mode === "studio" ? "studio-workspace" : `perform-${target.section}`)?.focus({ preventScroll: true }), 0);
-  };
+  }, [navigateDestination, setMode]);
 
   return (
     <div className="shell-root ws909" data-mode={mode} data-section={activeNav.key} data-skin={skin} data-density={density} data-incident={incident.severity}>

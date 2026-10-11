@@ -2,7 +2,7 @@
 
 import "@/app/mobile2.css";
 import "@/app/seve-909.css";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { LedDisplay, LedWordmark } from "@/components/console/hw/LedDisplay";
 import { MobilePerform, type MobileMarketView } from "@/components/mobile2/MobilePerform";
 import { MobileStudio } from "@/components/mobile2/MobileStudio";
@@ -99,10 +99,10 @@ export function MobileShell(props: SurfaceProps) {
     setRoom("studio");
     navigate({ section: "studio", channel: slug });
   };
-  const navigateMobile = (next: WorkspaceDestination) => {
+  const navigateMobile = useCallback((next: WorkspaceDestination) => {
     setRoom(mobileRoomForDestination(next));
     navigate(next);
-  };
+  }, [navigate]);
   return (
     <div className="m2-app" data-mode={room === "studio" ? "studio" : "perform"} data-room={room} data-skin={skin}>
       <span className="m2-screw m2-screw--tl" /><span className="m2-screw m2-screw--tr" />
