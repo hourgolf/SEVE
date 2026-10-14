@@ -20,6 +20,114 @@ export interface ManualClosePositionEvidenceRow {
   entry_features?: Record<string, unknown> | null;
 }
 
+export type ManualClosePreflightResolution<T> =
+  | { ok: true; value: T }
+  | {
+    ok: false;
+    kind: "read_error" | "invalid_route";
+    error: string;
+  };
+
+const CHANNEL_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+
+/**
+ * A broker order must retain the real channel identity. Substituting a generic
+ * prefix makes the sell invisible to channel-level reconciliation and can
+ * resurrect a position from an apparently unmatched buy.
+ */
+export function resolveManualCloseChannelIdentity(input: {
+  strategistId: string;
+  slug?: unknown;
+  readError?: string | null;
+}): ManualClosePreflightResolution<string> {
+  if (input.readError) {
+    return {
+      ok: false,
+      kind: "read_error",
+      error: `manual-close channel identity unavailable: ${input.readError}`,
+    };
+  }
+  const slug = typeof input.slug === "string" ? input.slug.trim() : "";
+  if (!slug || !CHANNEL_SLUG.test(slug)) {
+    return {
+      ok: false,
+      kind: "invalid_route",
+      error: `manual-close position lacks a valid channel identity: ${input.strategistId}`,
+    };
+  }
+  return { ok: true, value: slug };
+}
+
+/**
+ * The sell quantity is authorized only by a successful broker-position read.
+ * A transport error, a non-2xx response, malformed quantity, fractional
+ * quantity, or a short position all fail closed. In particular, desk quantity
+ * is never used as a fallback when broker custody is unknown.
+ */
+export function resolveManualCloseSellQuantity(input: {
+  deskQuantity: unknown;
+  responseStatus?: number | null;
+  responseOk?: boolean;
+  brokerQuantity?: unknown;
+  readError?: string | null;
+}): ManualClosePreflightResolution<{
+  deskQuantity: number;
+  heldQuantity: number;
+  sellQuantity: number;
+  evidenceBasis: "verified_broker_position" | "verified_broker_absence";
+}> {
+  const deskQuantity = Number(input.deskQuantity);
+  if (!Number.isSafeInteger(deskQuantity) || deskQuantity < 1) {
+    return {
+      ok: false,
+      kind: "invalid_route",
+      error: "manual-close position has an invalid desk quantity",
+    };
+  }
+  if (input.readError) {
+    return {
+      ok: false,
+      kind: "read_error",
+      error: `broker position evidence unavailable: ${input.readError}`,
+    };
+  }
+  if (input.responseStatus === 404) {
+    return {
+      ok: true,
+      value: {
+        deskQuantity,
+        heldQuantity: 0,
+        sellQuantity: 0,
+        evidenceBasis: "verified_broker_absence",
+      },
+    };
+  }
+  if (!input.responseOk) {
+    return {
+      ok: false,
+      kind: "read_error",
+      error: `broker position evidence returned HTTP ${input.responseStatus ?? "unknown"}`,
+    };
+  }
+  const heldQuantity = Number(input.brokerQuantity);
+  if (!Number.isSafeInteger(heldQuantity) || heldQuantity < 0) {
+    return {
+      ok: false,
+      kind: "invalid_route",
+      error: "broker position evidence has an invalid long quantity",
+    };
+  }
+  return {
+    ok: true,
+    value: {
+      deskQuantity,
+      heldQuantity,
+      sellQuantity: Math.min(deskQuantity, heldQuantity),
+      evidenceBasis: "verified_broker_position",
+    },
+  };
+}
+
 export type ManualCloseAccountResolution =
   | {
     ok: true;

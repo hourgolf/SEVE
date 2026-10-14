@@ -21,6 +21,8 @@ import { buildExecutionQualityReceipt } from "@/lib/execution/executionQualityMo
 import {
   manualClosePolicyEvidence,
   resolveManualCloseAccount,
+  resolveManualCloseChannelIdentity,
+  resolveManualCloseSellQuantity,
   type ManualCloseAccountRow,
 } from "@/lib/positions/manualCloseServerEvidence";
 import type { ExecutionAccountObservation } from "@/lib/ops/brokerReconciliation";
@@ -127,13 +129,13 @@ export async function POST(req: Request) {
   if (!AK || !AS) return NextResponse.json({ ok: false, error: "paper broker is not configured" }, { status: 503 });
 
   const occ = String(pos.occ_symbol);
-  const qty = Math.max(1, Math.round(Number(pos.qty)));
   // Tag the sell with the CHANNEL's slug-prefixed client_order_id (`<slug>-<occ>-…`) — the
   // SAME scheme the worker uses — so the worker's per-channel order matching SEES this manual
   // sell and nets it against the channel's buy. With the old `manual-<occ>-…` prefix the worker
   // couldn't see the sell, so its re-buy guard kept RESURRECTING the already-closed position as a
-  // ghost row at the stale entry ("recovered … lost insert") and mis-booked the realized. Falls
-  // back to `manual` only if the strategist can't be resolved.
+  // ghost row at the stale entry ("recovered … lost insert") and mis-booked the realized.
+  // Missing or unreadable channel identity fails closed; a fabricated generic prefix cannot be
+  // reconciled to the owning channel.
   // Resolve the position's broker account from immutable execution evidence.
   // A channel may be reassigned after entry, so mutable strategists.account_id
   // is neither queried nor accepted as a fallback. Missing/unreadable routing
@@ -145,7 +147,18 @@ export async function POST(req: Request) {
       .select("id,position_id,account_id,event_at")
       .eq("position_id", id),
   ]);
-  const slug = String(stratRead.data?.slug ?? "manual");
+  const channelResolution = resolveManualCloseChannelIdentity({
+    strategistId: String(pos.strategist_id ?? ""),
+    slug: stratRead.data?.slug,
+    readError: stratRead.error?.message,
+  });
+  if (!channelResolution.ok) {
+    return NextResponse.json({
+      ok: false,
+      error: `${channelResolution.error} — position left open; no order placed`,
+    }, { status: channelResolution.kind === "read_error" ? 502 : 409 });
+  }
+  const slug = channelResolution.value;
   const accountResolution = resolveManualCloseAccount({
     position: pos,
     accounts: (accountsRead.data ?? []) as ManualCloseAccountRow[],
@@ -178,13 +191,34 @@ export async function POST(req: Request) {
   // qty. Selling the full row qty would open a SHORT put → "insufficient buying power for
   // cash-secured put". If Alpaca holds none, the lot's already closed → just book this row
   // at the last mark (no order). Mirrors the worker's min(alpacaQty, rowQty) exit.
-  let heldQty = qty;
+  let brokerPositionStatus: number | null = null;
+  let brokerPositionOk = false;
+  let brokerPositionQty: unknown;
+  let brokerPositionReadError: string | null = null;
   try {
     const pr = await fetch(`${PAPER}/v2/positions/${encodeURIComponent(occ)}`, { headers: aHdr });
-    if (pr.status === 404) heldQty = 0;
-    else if (pr.ok) heldQty = Math.abs(Math.round(Number((await pr.json())?.qty ?? 0)));
-  } catch { /* fall through using the desk qty */ }
-  const sellQty = Math.min(qty, heldQty);
+    brokerPositionStatus = pr.status;
+    brokerPositionOk = pr.ok;
+    if (pr.ok) brokerPositionQty = (await pr.json())?.qty;
+  } catch (error) {
+    brokerPositionReadError = error instanceof Error ? error.message : "broker position read failed";
+  }
+  const quantityResolution = resolveManualCloseSellQuantity({
+    deskQuantity: pos.qty,
+    responseStatus: brokerPositionStatus,
+    responseOk: brokerPositionOk,
+    brokerQuantity: brokerPositionQty,
+    readError: brokerPositionReadError,
+  });
+  if (!quantityResolution.ok) {
+    return NextResponse.json({
+      ok: false,
+      error: `${quantityResolution.error} — position left open; no order placed`,
+    }, { status: quantityResolution.kind === "read_error" ? 502 : 409 });
+  }
+  const qty = quantityResolution.value.deskQuantity;
+  const heldQty = quantityResolution.value.heldQuantity;
+  const sellQty = quantityResolution.value.sellQuantity;
 
   // ---- place the market sell on Alpaca paper (only if a lot is actually held) ----
   let orderId = "";
@@ -318,6 +352,8 @@ export async function POST(req: Request) {
           decisionQuoteAvailable: false,
           fillTimeBasis: "local_terminal_observation",
           accountEvidenceBasis: accountResolution.evidenceBasis,
+          brokerPositionEvidenceBasis: quantityResolution.value.evidenceBasis,
+          brokerHeldQuantity: heldQty,
           policyEvidenceBasis: policyEvidence.evidenceBasis,
           rc54ManagerProfileId: policyEvidence.managerProfileId,
         },
@@ -332,6 +368,8 @@ export async function POST(req: Request) {
       order_id: orderId,
       account_id: effectiveAccountId,
       account_evidence_basis: accountResolution.evidenceBasis,
+      broker_position_evidence_basis: quantityResolution.value.evidenceBasis,
+      broker_held_quantity: heldQty,
       by: userData.user.email ?? null,
       sold: soldQty,
       row_qty: qty,
