@@ -1,5 +1,5 @@
 import { historicalTradeForRows, type HistoricalSnapshot } from '../../supabase/functions/_shared/historicalAttribution';
-import { nativeComparisonReason, type ComparisonSpec, type NativeObservation } from "./nativeManagerComparison";
+import { NATIVE_COMPARISON_VERSION, isNativeQuoteComparisonCensor, nativeComparisonReason, type ComparisonSpec, type NativeObservation } from "./nativeManagerComparison";
 import { DAY1_MANAGER_ARMS } from "@/lib/channels/day1Release";
 import { evidenceEnvelope, type EvidenceEnvelope } from "@/lib/evidence/evidenceEnvelope";
 import { applyFixedManagerComparison, constrainFixedManagerEvidence, type FixedManagerComparisonIndex } from "./fixedManagerComparison";
@@ -117,6 +117,7 @@ export interface ChannelManagerEvidence {
 
 export interface ChannelManagerEvidenceBook {
   schemaVersion: 1;
+  comparisonIntegrityVersion?: typeof NATIVE_COMPARISON_VERSION;
   generatedAt: string;
   cohortFrom: string;
   defaultShadowBookVersion: string;
@@ -366,7 +367,7 @@ export function deriveChannelManagerEvidenceBook(input: {
             : run?.censor_code ?? null,
         };
       });
-      if (arms.some(arm => arm.censorCode === "comparison_native_quote_missed")) commonMfe = null;
+      if (arms.some(arm => isNativeQuoteComparisonCensor(arm.censorCode))) commonMfe = null;
       return {
         positionId,
         session: etDate(first.entry_at),
@@ -394,6 +395,7 @@ export function deriveChannelManagerEvidenceBook(input: {
 
   return {
     schemaVersion: 1,
+    comparisonIntegrityVersion: NATIVE_COMPARISON_VERSION,
     generatedAt: input.generatedAt,
     cohortFrom: input.cohortFrom ?? "2026-07-13",
     defaultShadowBookVersion: defaultVersion,

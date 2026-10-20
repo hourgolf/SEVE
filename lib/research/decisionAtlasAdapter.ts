@@ -1,4 +1,5 @@
 import { FIXED_CONTRACT_ADMISSION_MODE } from "../channels/fixedContractAdmission";
+import { NATIVE_COMPARISON_VERSION } from "./nativeManagerComparison";
 import { isFixedEntryProtocolObservation } from "./fixedEntryProtocolEvidence";
 import { fixedEntryOwnershipPresent } from "../channels/fixedEntryOwnership";
 import { applyFixedManagerComparison, type FixedManagerComparisonIndex } from "./fixedManagerComparison";
@@ -700,7 +701,7 @@ export function adaptDecisionAtlasSnapshot(input: {
   }
   const integrityById = new Map((snapshot.ledger.managerCounterfactualPaths ?? []).map(p => [p.id, p]));
   const checkedManagerRuns = snapshot.managerRuns.map(run => {
-    const proof = snapshot.ledger.comparisonIntegrityVersion === "native-comparison-v1" ? integrityById.get(run.id) : undefined;
+    const proof = snapshot.ledger.comparisonIntegrityVersion === NATIVE_COMPARISON_VERSION ? integrityById.get(run.id) : undefined;
     return !proof || proof.status === "censored" || proof.actualComparatorPnlUsd == null ? { ...run, status: "censored" as const,
       terminal_pnl: null, terminal_return_pct: null, censor_code: proof?.censorCode ?? "comparison_integrity_unavailable" } : run;
   });

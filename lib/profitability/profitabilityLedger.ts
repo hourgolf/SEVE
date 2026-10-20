@@ -1,5 +1,5 @@
 import { historicalTradeForRows, selectHistorical, historicalCoverageText, type HistoricalSnapshot } from '../../supabase/functions/_shared/historicalAttribution';
-import { nativeComparisonReason, type ComparisonSpec } from "../research/nativeManagerComparison";
+import { NATIVE_COMPARISON_VERSION, nativeComparisonReason, type ComparisonSpec, type NativeObservation } from "../research/nativeManagerComparison";
 // ============================================================================
 // Canonical profitability ledger.
 //
@@ -51,7 +51,7 @@ export interface ProfitabilityOutcomeRow {
   opportunity_id: string | null;
 }
 
-export interface ProfitabilityExecutionRouteRow {
+export interface ProfitabilityExecutionRouteRow extends NativeObservation {
   reason?: string | null;
   payload?: Record<string, unknown> | null;
   id: string;
@@ -210,7 +210,7 @@ export interface BrokerNavDay {
 }
 
 export interface ProfitabilityLedger {
-  comparisonIntegrityVersion?: "native-comparison-v1";
+  comparisonIntegrityVersion?: "native-comparison-v1" | typeof NATIVE_COMPARISON_VERSION;
   logicalTrades: LogicalTrade[];
   managerCounterfactualPaths: ManagerCounterfactualPath[];
   brokerNavDays: BrokerNavDay[];
@@ -711,6 +711,16 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
   for (const trade of logicalTrades) {
     for (const positionId of trade.positionIds) tradeIdByPosition.set(positionId, trade.id);
   }
+  // The quote guard needs the complete root/runner family, not every desk event
+  // for every arm. Preserve source order while avoiding repeated global scans.
+  const comparisonObservationsByTrade = new Map<string, NativeObservation[]>();
+  for (const observation of input.executionRoutes) {
+    const id = observation.position_id ? tradeIdByPosition.get(observation.position_id) : undefined;
+    if (!id) continue;
+    const rows = comparisonObservationsByTrade.get(id) ?? [];
+    rows.push(observation);
+    comparisonObservationsByTrade.set(id, rows);
+  }
   const shadowIds = new Set<string>();
   const managerCounterfactualPaths: ManagerCounterfactualPath[] = [];
   const fixedPositionIds = new Set([...input.positions.filter(fixedEntryOwnershipPresent).map(r => r.id),
@@ -728,7 +738,8 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
     const logicalTradeId = tradeIdByPosition.get(row.position_id) ?? null;
     if (!logicalTradeId) pushIssue(warnings, `manager-shadow run ${row.id} has no ledger position`);
     const comparisonReason = nativeComparisonReason({ run: row, position: input.positions.find(p => p.id === row.position_id),
-      positions: input.positions, specs: input.comparisonSpecs ?? [], runs: input.managerShadow, observations: input.executionRoutes });
+      positions: input.positions, specs: input.comparisonSpecs ?? [], runs: input.managerShadow,
+      observations: comparisonObservationsByTrade.get(logicalTradeId ?? "") ?? [] });
     managerCounterfactualPaths.push({
       ...(comparisonReason ? { rawCounterfactualPnlUsd: finite(original.terminal_pnl), rawActualComparatorPnlUsd: finite(original.actual_realized_pnl) } : {}),
       ...(row.raw_fixed_manager_evidence ? {rawCounterfactualPnlUsd:finite(original.terminal_pnl),
@@ -803,7 +814,7 @@ export function buildProfitabilityLedger(input: ProfitabilityLedgerInput): Profi
   if (!brokerNavDays.length) warnings.push("no account-complete broker NAV days observed");
 
   return {
-    comparisonIntegrityVersion: "native-comparison-v1",
+    comparisonIntegrityVersion: NATIVE_COMPARISON_VERSION,
     logicalTrades,
     managerCounterfactualPaths,
     brokerNavDays,

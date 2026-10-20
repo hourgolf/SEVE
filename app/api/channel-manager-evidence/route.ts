@@ -55,8 +55,8 @@ export async function GET(req: Request) {
       readCompleteEvidence<ComparisonSpec>(() => sb.from("channel_spec_versions")
         .select("id,version_key,stop_loss,take_profit,ratchet_parameters,exit_parameters", { count: "exact" }).order("id"), "comparison specs"),
       readCompleteEvidence<NativeObservation & {id:string}>(() => sb.from("execution_observations")
-        .select("id,position_id,event_at,reason,bid,payload", { count: "exact" })
-        .eq("reason", "target_premium").gte("event_at", COHORT_ISO).order("id"), "native target observations"),
+        .select("id,position_id,event_at,event_kind,action,filled_qty,reason,bid,ask,payload", { count: "exact" })
+        .in("reason", ["target_premium", "premium_stop", "stop_premium"]).gte("event_at", COHORT_ISO).order("id"), "native target and stop observations"),
     ]);
     const book = deriveChannelManagerEvidenceBook({
       historicalAttribution: await loadHistoricalAttribution(sb),
