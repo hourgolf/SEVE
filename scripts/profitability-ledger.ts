@@ -96,7 +96,7 @@ async function readRoutes(
     if (!batch.length) continue;
     rows.push(...await pageAll<ProfitabilityExecutionRouteRow>((from) => sb
       .from("execution_observations")
-      .select("id,position_id,opportunity_id,account_id,event_at,reason,payload")
+      .select("id,position_id,opportunity_id,account_id,event_at,event_kind,action,filled_qty,reason,bid,ask,payload")
       .in(column, batch)
       .not("account_id", "is", null)
       .order("event_at", { ascending: true })
