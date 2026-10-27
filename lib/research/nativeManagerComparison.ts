@@ -1,5 +1,12 @@
 import { sessionCloseMin } from "../../engine/market-calendar";
 
+export const NATIVE_COMPARISON_VERSION = "native-comparison-v2" as const;
+
+export function isNativeQuoteComparisonCensor(reason: string | null): boolean {
+  return ["comparison_native_quote_missed", "comparison_native_stop_quote_missed",
+    "comparison_native_stop_evidence_unverified"].includes(reason ?? "");
+}
+
 export interface ComparisonSpec {
   id: string; version_key: string;
   stop_loss: { catastrophePct?: number; priceBasis?: string };
@@ -22,11 +29,13 @@ export interface ComparisonRun {
 }
 export interface NativeObservation {
   position_id: string | null; event_at: string; reason?: string | null;
-  bid?: number | string | null; payload?: Record<string, unknown> | null;
+  bid?: number | string | null; ask?: number | string | null; payload?: Record<string, unknown> | null;
+  event_kind?: string; action?: string; filled_qty?: number | string | null;
 }
 const n = (v: unknown) => v == null || v === "" ? NaN : Number(v);
 const object = (v: unknown): Record<string, unknown> => v && typeof v === "object" ? v as Record<string, unknown> : {};
 const time = (s: string | null | undefined) => s ? Date.parse(s) : NaN;
+const quoteNumber = (v: unknown) => typeof v === "number" || typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
 const et = (s: string) => {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(new Date(s));
@@ -94,6 +103,29 @@ export function nativeComparisonReason(input: {
     const mandatoryClose = family.find(x => /event|halt|kill|eod|flatten/.test(x.close_reason ?? ""));
     if (mandatoryClose && time(run.terminal_at) > time(mandatoryClose.closed_at) + 1_000)
       return "comparison_after_mandatory_close";
+  }
+  // A manager cannot survive an independently evidenced native catastrophe
+  // stop. event_at here is a quote/decision clock, never an exchange fill clock.
+  // Keep actual results and raw counterfactual rows intact; quarantine comparison.
+  if (run.status === "terminal") for (const obs of input.observations) {
+    const nativeRow = family.find(row => row.id === obs.position_id);
+    if (!nativeRow || obs.payload?.shadowOnly || !["premium_stop", "stop_premium"].includes(obs.reason ?? "")) continue;
+    if (obs.action != null && obs.action !== "exit") continue;
+    if (obs.event_kind != null && obs.event_kind !== "decision" && obs.event_kind !== "broker_result") continue;
+    if (obs.event_kind === "broker_result" && obs.filled_qty != null && !(n(obs.filled_qty) > 0)) continue;
+    const nativeEvent = obs.action === "exit" && (obs.event_kind === "decision"
+      || obs.event_kind === "broker_result" && n(obs.filled_qty) > 0);
+    const detail = object(obs.payload?.decisionDetail);
+    // Use one quote pair. Mixing a partial decision quote with top-level prices
+    // can manufacture a crossing that neither source independently supports.
+    const detailed = detail.bid != null || detail.ask != null;
+    const bid = quoteNumber(detailed ? detail.bid : obs.bid), ask = quoteNumber(detailed ? detail.ask : obs.ask);
+    const at = time(obs.event_at);
+    if (!Number.isFinite(at) || at < time(run.entry_at) || at > time(nativeRow.closed_at)
+      || !Number.isFinite(bid) || !Number.isFinite(ask) || bid < 0 || ask <= 0 || ask < bid) continue;
+    if (bid <= n(run.entry_price) * (1 - n(spec.stop_loss.catastrophePct) / 100) + 0.000001
+      && time(run.terminal_at) > at + 1_000) return nativeEvent
+        ? "comparison_native_stop_quote_missed" : "comparison_native_stop_evidence_unverified";
   }
   // An all-out native has an independently observable target. If its identical
   // observer missed a native target quote, quarantine every arm of the entry.

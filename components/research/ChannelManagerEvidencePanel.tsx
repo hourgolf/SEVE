@@ -9,6 +9,7 @@ import type {
   CommonManagerId,
 } from "@/lib/research/channelManagerEvidence";
 import { filterChannelManagerEvidenceByEpoch } from "@/lib/research/channelManagerEvidence";
+import { isNativeQuoteComparisonCensor } from "@/lib/research/nativeManagerComparison";
 
 const signedPct = (value: number | null, digits = 1): string => value == null
   ? "—"
@@ -88,7 +89,7 @@ function CaptureScatter({ evidence, managerId }: { evidence: ChannelManagerEvide
         const managerY = sy(managerReturn);
         const clipped = (trade.commonMfePct as number) > xMax || managerReturn < yMin || managerReturn > yMax || (trade.actualReturnPct as number) < yMin || (trade.actualReturnPct as number) > yMax;
         return <g key={trade.positionId} className={clipped ? "clipped" : ""}>
-          <title>{trade.session} · MFE {signedPct(trade.commonMfePct)} · executed {signedPct(trade.actualReturnPct)} · {managerId} {signedPct(managerReturn)}</title>
+          <title>{`${trade.session} · MFE ${signedPct(trade.commonMfePct)} · executed ${signedPct(trade.actualReturnPct)} · ${managerId} ${signedPct(managerReturn)}`}</title>
           <line className="pair" x1={x} x2={x} y1={actualY} y2={managerY} />
           <circle className="actual" cx={x} cy={actualY} r="4" /><circle className={managerReturn >= (trade.actualReturnPct as number) ? "manager better" : "manager worse"} cx={x} cy={managerY} r="4.5" />
         </g>;
@@ -145,6 +146,8 @@ export function ChannelManagerEvidencePanel({ evidence, currentManagerLabel, cur
   </section>;
 
   if (!scopedEvidence) return null;
+  const nativeQuoteWithheld = scopedEvidence.trades.filter(trade =>
+    trade.arms.some(arm => isNativeQuoteComparisonCensor(arm.censorCode))).length;
   return <section className={`cme${compact ? " compact" : ""}`} aria-label={`Eight-arm manager evidence for ${scopedEvidence.slug}`}>
     <header className="cme-head">
       <span><b>EIGHT-ARM MANAGER LAB</b><small>MANAGER COUNTERFACTUAL · {scopedEvidence.slug} · {scopedEvidence.positions} positions · {scopedEvidence.sessions} sessions · {scopedEvidence.shadowBookVersion.replace("manager-shadow-book-", "")}</small></span>
@@ -158,6 +161,7 @@ export function ChannelManagerEvidencePanel({ evidence, currentManagerLabel, cur
       {!currentEpochAvailable && <em>current epoch has no completed pair yet</em>}
     </div>
     {currentManagerLabel && <div className="cme-current"><span>CURRENT EXECUTED MANAGER</span><b>{currentManagerLabel}</b><em>shadow arms compare against canonical executed root+runner results</em></div>}
+    {nativeQuoteWithheld > 0 && <p>{nativeQuoteWithheld} trade{nativeQuoteWithheld === 1 ? " has" : "s have"} exit comparisons withheld because native stop or target evidence failed verification. Actual trade results are unchanged.</p>}
     <Ladder evidence={scopedEvidence} selected={selectedManager} onSelect={setSelectedManager} />
     <div className="cme-detail-head"><span><b>{selectedManager}</b><em>{selected?.terminalPaths ?? 0} paths · {selected?.sessions ?? 0} sessions · {pct(selected?.beatRate ?? null)} beat executed</em></span><div role="group" aria-label="Manager evidence detail"><button type="button" className={detail === "capture" ? "on" : ""} onClick={() => setDetail("capture")}>CAPTURE MAP</button><button type="button" className={detail === "tape" ? "on" : ""} onClick={() => setDetail("tape")}>TRADE STRIP</button></div></div>
     {detail === "capture" ? <CaptureScatter evidence={scopedEvidence} managerId={selectedManager} /> : <TradeTape evidence={scopedEvidence} managerId={selectedManager} />}

@@ -57,5 +57,5 @@ assert.equal(failed.managerCounterfactualPaths[0].rawCounterfactualPnlUsd,-88);
 const passed=buildProfitabilityLedger({...ledgerInput,executionRoutes:[{id:'route',position_id:'root',account_id:'account',event_at:run.entry_at!,opportunity_id:null}]});
 assert.equal(passed.managerCounterfactualPaths[0].counterfactualPnlUsd,-88);
 assert.equal(passed.managerCounterfactualPaths[0].actualComparatorPnlUsd,40,'compare to logical booked result, not stale shadow actual=999');
-assert.equal(passed.comparisonIntegrityVersion,'native-comparison-v1');
+assert.equal(passed.comparisonIntegrityVersion,'native-comparison-v2');
 console.log('comparison-integrity-selftest: PASS');
