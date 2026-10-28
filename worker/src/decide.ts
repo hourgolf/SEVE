@@ -11,6 +11,7 @@
 //  Live order placement is Phase B (see README), deliberately not wired here.
 // ============================================================================
 
+import { profitProtectionExitRequired } from "./profitProtection.js";
 import { isFixedContractAdmissionPolicy } from "../../lib/channels/fixedContractAdmission.js";
 import { startEntryTrace, quoteObservation } from "./decisionTrace.js";
 import { computeFeatures } from "../../engine/engine";
@@ -401,6 +402,13 @@ export async function decideChannel(ch: ChannelConfig, ctx: DecisionCtx): Promis
       && (!intent || intent.kind !== "exit")
       && inEventWindow(ctx.todayET, ctx.rthCloseMin - ctx.minutesToClose, policy.EVENT_FLATTEN_MIN_BEFORE, policy.EVENT_RESUME_MIN_AFTER, ch.underlying)) {
     intent = { kind: "exit", reason: "event_flatten" };
+  }
+
+  // The precision sweep owns fresh quote observation and durable protection.
+  // A committed exit survives a recovery in price or a quote outage.
+  if (pos && row && (!intent || intent.kind !== "exit")
+      && profitProtectionExitRequired(receiptBoundPolicy, row)) {
+    intent = { kind: "exit", reason: "early_profit_floor" };
   }
 
   // Arm-high giveback trail, per-channel (GIVEBACK_TRAIL map): once the peak mark clears

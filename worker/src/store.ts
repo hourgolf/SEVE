@@ -158,6 +158,8 @@ export interface PositionRow {
   expiration: string | null;
   opened_at: string | null;
   status: string;
+  profit_protection_armed_at?: string | null;
+  profit_protection_exit_required_at?: string | null;
   peak_mark: number | null; // durable MFE source — the running MAX option mark over the hold (44_trade_forensics)
   trough_mark: number | null; // durable MAE twin — the running MIN option mark over the hold (58_trough_mark; stop-calibration instrumentation)
   runner_of: string | null; // R1 (64_runner_tranche): parent row id when this row is a runner remainder — rides, never re-tranches
@@ -547,6 +549,29 @@ export async function getOpenPositionsStrict(): Promise<PositionRow[] | null> {
     return null;
   }
   return mapOpenPositions({ data: result.data as unknown[] | null, error: null });
+}
+
+/** Conditional writes make protection monotonic across concurrent sweep/cycle
+ * readers. A failed write never reports a successful latch. */
+export async function persistProfitProtection(id: string, transition: "arm" | "exit") {
+  const field = transition === "arm" ? "profit_protection_armed_at" : "profit_protection_exit_required_at";
+  const fields = "profit_protection_armed_at,profit_protection_exit_required_at";
+  try {
+    let query = sb.from("positions").update({ [field]: new Date().toISOString() })
+      .eq("id", id).eq("status", "open").is(field, null)
+      .eq("entry_features->receipt_bound_entry_policy->>policyVersion", "receipt-bound-entry-policy-v4");
+    if (transition === "exit") query = query.not("profit_protection_armed_at", "is", null);
+    const write = await query.select(fields).abortSignal(AbortSignal.timeout(2_000));
+    if (write.error) throw new Error("protection persistence failed");
+    if (write.data?.length === 1) return write.data[0];
+    const read = await sb.from("positions").select(fields).eq("id", id)
+      .eq("status", "open").abortSignal(AbortSignal.timeout(2_000)).maybeSingle();
+    if (read.error || !read.data?.[field]) throw new Error("protection state unresolved");
+    return read.data;
+  } catch {
+    warn(`profit-protection: ${id} ${transition} not durably confirmed; native exits remain enabled`);
+    return null;
+  }
 }
 
 /** Durable MFE: persist the running peak option mark (the fast-exit sweep ratchets it).
@@ -1110,6 +1135,16 @@ export async function insertPartialRemainderRow(parent: PositionRow, remainQty: 
 
 async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: number, o: { runnerOf: string | null; entryReason: string }): Promise<PositionInsertResult> {
   if (fixedEntryOwnershipPresent(parent)) throw new Error("fixed_store:legacy_remainder_prohibited");
+  // Parent is already closed here. Its protection timestamps can no longer
+  // change (writes require open status), so this is a stable handoff even if
+  // another sweep armed protection after the caller took its row snapshot.
+  if ((parent.entry_features?.receipt_bound_entry_policy as { policyVersion?: string } | undefined)?.policyVersion
+      === "receipt-bound-entry-policy-v4") {
+    const saved = await sb.from("positions").select("profit_protection_armed_at,profit_protection_exit_required_at")
+      .eq("id", parent.id).eq("status", "closed").abortSignal(AbortSignal.timeout(2_000)).maybeSingle();
+    if (saved.error || !saved.data) return { id: null, openedAt: null, error: "protection remainder state unavailable" };
+    Object.assign(parent, saved.data);
+  }
   const { data, error } = await sb.from("positions").insert({
     strategist_id: parent.strategist_id, occ_symbol: parent.occ_symbol,
     underlying: parent.underlying || parent.occ_symbol.slice(0, parent.occ_symbol.length - 15),
@@ -1126,6 +1161,8 @@ async function insertRemainderRow(parent: PositionRow, remainQty: number, mark: 
     peak_mark: Math.max(parent.peak_mark ?? parent.avg_entry_price, mark), trough_mark: parent.trough_mark ?? parent.avg_entry_price,
     peak_at: new Date().toISOString(), trough_at: new Date().toISOString(),
     entry_reason: o.entryReason, entry_features: parent.entry_features ?? null, runner_of: o.runnerOf,
+    ...(parent.profit_protection_armed_at ? { profit_protection_armed_at: parent.profit_protection_armed_at } : {}),
+    ...(parent.profit_protection_exit_required_at ? { profit_protection_exit_required_at: parent.profit_protection_exit_required_at } : {}),
     channel_spec_version_id: parent.channel_spec_version_id ?? null,
     release_manifest_id: parent.release_manifest_id ?? null,
     configuration_epoch_id: parent.configuration_epoch_id ?? null,

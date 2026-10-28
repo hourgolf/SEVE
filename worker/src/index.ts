@@ -1,3 +1,4 @@
+import { observeProfitProtection, profitProtectionExitRequired } from "./profitProtection.js";
 import { captureFixedAdmissionObservation } from "./executionObservation.js";
 import { executeAccountBatches } from "./accountExecution.js";
 import { observedCandidate, finalDecisionEvidence, observedDecisionStage } from "./decisionTrace.js";
@@ -1784,6 +1785,14 @@ async function fastExitSweep(): Promise<void> {
         clearSweepPriceState(r.id);
         continue;
       }
+      if (profitProtectionExitRequired(receiptBoundEntryPolicyFromRow(r), r)) {
+        if (!sweepExitAllowed("early_profit_floor", ordersFresh) || !exitGuard.claim(r.id)) continue;
+        try {
+          await executeExit({ slug: ch.slug, status: ch.status, action: "exit", reason: "early_profit_floor" },
+            r, exec, undefined, exitQualityPolicyFor(ch));
+        } finally { exitGuard.release(r.id); }
+        continue;
+      }
       // ---- PRICE-TRIGGERED exits below — EXECUTABLE-BID basis (audit 2026-07-11, 1b #6) ----
       // We are LONG options: a liquidation SELLS, so every trigger evaluates the BID — the
       // price a buyer will actually pay — NOT the mid (a mid-based stop fires late/at a level
@@ -1863,7 +1872,7 @@ async function fastExitSweep(): Promise<void> {
         day1RootPolicy || rc54RootPolicy || receiptBoundPolicyStamped;
       // 1b #6: `mark` = the fresh EXECUTABLE BID, `peak` = the bid-based MFE ratchet above.
       // premiumExitReason stays PURE (unchanged comparisons) — only the input price changed.
-      const reason = premiumExitReason({
+      let reason = premiumExitReason({
         row: r, slug: ch.slug, premiumExit: sealedReleaseRootPolicy ? undefined : pe,
         takeProfitPct: sealedReleaseRootPolicy ? 0 : ch.take_profit_pct,
         premiumStopPct: receiptBoundPolicy
@@ -1881,6 +1890,15 @@ async function fastExitSweep(): Promise<void> {
         rc54ManagerProfileId: rc54ManagerProfileFromRow(r)?.id ?? null,
         receiptBoundEntryPolicy: receiptBoundPolicy,
       }, bid, peak);
+      const transition = await observeProfitProtection({
+        policy: receiptBoundPolicy, state: r, entry: r.avg_entry_price, remainingQty: r.qty,
+        bid, ask: executable!.quote.ask, bidSize: executable!.quote.bidSize ?? 0,
+        ageMs: chainAgeMs, providerClock: executable!.clockBasis === "provider", nativeExitReason: reason,
+      }, transition => store.persistProfitProtection(r.id, transition));
+      if (transition) info(`profit-protection-v1: ${JSON.stringify({ positionId: r.id,
+        transition, bid, quoteAgeMs: chainAgeMs, remainingQty: r.qty,
+        managerVersion: receiptBoundPolicy?.managerVersion })}`);
+      if (!reason && profitProtectionExitRequired(receiptBoundPolicy, r)) reason = "early_profit_floor";
       if (!reason) continue;
       // 1b #9: ordinary PRICE exits need the order snapshot (late-fill recovery + working-order
       // idempotency read it) — on a degraded pass only the mandatory flattens above may sell.

@@ -276,6 +276,7 @@ function admissionRootFromReceipt(
       ? root.takeProfit.targetPct
       : null,
     runnerKind: root.ratchetParameters.kind,
+    ...(root.ratchetParameters.profitProtection ? { profitProtectionEnabled: true } : {}),
     configurationEpochId: root.configuration.configurationEpochId,
     entryQualificationVersion: root.entryQualificationVersion,
     entryStartEtMinute: root.entryStartEtMinute,

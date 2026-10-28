@@ -1,3 +1,4 @@
+import { profitProtectionScopeValid } from "../../lib/channels/profitProtection.js";
 import type {
   ChannelRatchetPolicy,
   ChannelStopLossPolicy,
@@ -12,6 +13,7 @@ import type {
 
 import { isFixedContractAdmissionPolicy, type FixedContractAdmissionPolicy } from "../../lib/channels/fixedContractAdmission.js";
 
+export const PROTECTED_ENTRY_POLICY_VERSION = "receipt-bound-entry-policy-v4" as const;
 export const FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION = "receipt-bound-entry-policy-v3" as const;
 export const RECEIPT_BOUND_ENTRY_POLICY_VERSION =
   "receipt-bound-entry-policy-v2" as const;
@@ -24,7 +26,7 @@ const SHA256 = /^sha256:[0-9a-f]{64}$/;
 
 export interface ReceiptBoundEntryPolicy {
   fixedContractAdmission?: FixedContractAdmissionPolicy;
-  policyVersion: typeof FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION | typeof RECEIPT_BOUND_ENTRY_POLICY_VERSION
+  policyVersion: typeof PROTECTED_ENTRY_POLICY_VERSION | typeof FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION | typeof RECEIPT_BOUND_ENTRY_POLICY_VERSION
     | typeof LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION;
   configuration: Readonly<ConfigurationEpochIdentity>;
   quantity: number;
@@ -134,7 +136,7 @@ export function buildReceiptBoundEntryPolicy(
   root: Readonly<ReceiptBoundRuntimeRoot>,
 ): Readonly<ReceiptBoundEntryPolicy> {
   const policy: ReceiptBoundEntryPolicy = {
-    policyVersion: root.fixedContractAdmission ? FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION : RECEIPT_BOUND_ENTRY_POLICY_VERSION,
+    policyVersion: root.ratchetParameters.profitProtection ? PROTECTED_ENTRY_POLICY_VERSION : root.fixedContractAdmission ? FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION : RECEIPT_BOUND_ENTRY_POLICY_VERSION,
     ...(root.fixedContractAdmission ? { fixedContractAdmission: root.fixedContractAdmission } : {}),
     configuration: root.configuration,
     quantity: root.quantity,
@@ -169,6 +171,7 @@ export function parseReceiptBoundEntryPolicy(
   const fixed = row?.policyVersion === FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION;
   if (!row
       || ![
+        PROTECTED_ENTRY_POLICY_VERSION,
         FIXED_RECEIPT_BOUND_ENTRY_POLICY_VERSION,
         RECEIPT_BOUND_ENTRY_POLICY_VERSION,
         LEGACY_RECEIPT_BOUND_ENTRY_POLICY_VERSION,
@@ -189,12 +192,15 @@ export function parseReceiptBoundEntryPolicy(
       || !validTakeProfit(row.takeProfit)
       || !validStopLoss(row.stopLoss)
       || !validRatchet(row.ratchetParameters)
+      || (row.policyVersion === PROTECTED_ENTRY_POLICY_VERSION
+        ? !profitProtectionScopeValid({ ...(row as unknown as ReceiptBoundEntryPolicy), slug: String(row.configuration.channelSlug) })
+        : record(row.ratchetParameters)?.profitProtection !== undefined)
       || (record(row.ratchetParameters)?.postBankFloor === "breakeven"
         && (record(row.takeProfit)?.kind !== "bank"
           || record(row.takeProfit)?.fraction !== 0.5))
       || row.managerProfileId !== row.configuration.managerProfileId
       || row.managerVersion !== row.configuration.managerVersion
-      || ((row.policyVersion === RECEIPT_BOUND_ENTRY_POLICY_VERSION || fixed)
+      || ((row.policyVersion === RECEIPT_BOUND_ENTRY_POLICY_VERSION || row.policyVersion === PROTECTED_ENTRY_POLICY_VERSION || fixed)
         && (!["disabled", "bounded"].includes(String(row.reentryPolicy))
           || !Number.isInteger(row.maxEntriesPerSession)
           || Number(row.maxEntriesPerSession) < 1

@@ -106,6 +106,8 @@ export function mapOpenPositions(res: RowsReadResult): PositionRow[] {
     peak_mark: p.peak_mark != null ? Number(p.peak_mark) : null,
     trough_mark: p.trough_mark != null ? Number(p.trough_mark) : null,
     runner_of: p.runner_of ?? null,
+    profit_protection_armed_at: p.profit_protection_armed_at ?? null,
+    profit_protection_exit_required_at: p.profit_protection_exit_required_at ?? null,
     entry_features: p.entry_features && typeof p.entry_features === "object" ? p.entry_features : null,
     // Receipt-bound exits can split an open root into a runner or partial
     // remainder. Preserve the immutable relational identity fetched by the

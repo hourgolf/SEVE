@@ -405,3 +405,31 @@ const run = (
 }
 
 console.log("executable-shadow-ledger selftest: PASS");
+
+// Exact executable-bid boundaries, native precedence and quote qualification.
+{
+  const protectedRow = (quotes: ExecutableShadowQuote[]) => opportunity("momo-protection", {
+    manager: { kind: "bank_runner", id: "MOMO-B30-R50-K67-P15-F5", version: "test",
+      stopLossPct: 30, bankTargetPct: 30, runnerFraction: 0.5, runnerArmPct: 50,
+      runnerKeepFraction: 0.67, postBankFloorPct: null, forceExitAt: at(600),
+      profitProtection: { armReturnPct: 15, floorReturnPct: 5 } },
+    quotes: [quote(0, 0.9, 1), ...quotes],
+  });
+  const replay = (quotes: ExecutableShadowQuote[]) => run([protectedRow(quotes)]).receipts
+    .find(row => row.mode === "channel_isolated")!;
+  const floor = replay([quote(60, 1.15, 1.16), quote(120, 1.05, 1.06)]);
+  assert.equal(floor.exit?.reason, "early_profit_floor");
+  assert.equal(floor.totalResultUsd, 10);
+  const bank = replay([quote(60, 1.3, 1.31), quote(120, 1.05, 1.06, { bidSize: 1 })]);
+  assert.equal(bank.exit?.reason, "early_profit_floor");
+  assert.equal(bank.totalResultUsd, 35);
+  assert.equal(replay([quote(60, 1.14, 1.15), quote(120, 1.05, 1.06)]).exit?.reason, "force_exit");
+  assert.equal(replay([quote(60, 1.15, 1.16), quote(120, 0.69, 0.7)]).exit?.reason, "stop");
+  for (const extra of [{ bidSize: 1 }, { providerAt: at(30) }, { ask: 1.14 }]) {
+    assert.equal(replay([quote(60, 1.15, 1.16, extra), quote(120, 1.05, 1.06)]).exit?.reason, "force_exit");
+  }
+  const malformed = protectedRow([]);
+  if (malformed.manager.kind === "bank_runner") malformed.manager.profitProtection!.armReturnPct = NaN;
+  assert.throws(() => run([malformed]), /profit protection is invalid/);
+}
+console.log("executable shadow profit-protection replay: PASS");

@@ -16,10 +16,12 @@ export const RC54_WORKER_VERSION = "stream-2026-07-27a" as const;
 // provenance.
 export const WORKER_RUNTIME_VERSION = "stream-runtime-2026-09-07a" as const;
 
+import { PROFIT_PROTECTION_COMPATIBILITY } from "../../lib/channels/profitProtection.js";
 import { FIXED_CONTRACT_WORKER_COMPATIBILITY } from "../../lib/channels/fixedContractAdmission.js";
 export function supportsManifestCompatibility(version: string, currentStrategyVersion: string): boolean {
   return currentStrategyVersion === RC54_WORKER_VERSION
-    && (version === RC54_WORKER_VERSION || version === FIXED_CONTRACT_WORKER_COMPATIBILITY);
+    && (version === RC54_WORKER_VERSION || version === FIXED_CONTRACT_WORKER_COMPATIBILITY
+      || version === PROFIT_PROTECTION_COMPATIBILITY);
 }
 
 export function activeWorkerVersion(rc54ReleaseEnabled: boolean): string {

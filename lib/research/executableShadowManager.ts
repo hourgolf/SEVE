@@ -52,6 +52,10 @@ export function executableManagerFromChannelSpec(
       runnerArmPct: ratchet.engageReturnPct,
       runnerKeepFraction: keep / 100,
       postBankFloorPct: ratchet.postBankFloor === "breakeven" ? 0 : null,
+      ...(ratchet.profitProtection ? { profitProtection: {
+        armReturnPct: ratchet.profitProtection.armReturnPct,
+        floorReturnPct: ratchet.profitProtection.floorReturnPct,
+      } } : {}),
       forceExitAt,
     };
   }

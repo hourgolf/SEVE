@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { MOMO_PROTECTED_MANAGER, MOMO_PROTECTED_MANAGER_VERSION, momoProfitProtection } from "../../lib/channels/profitProtection.js";
 import { randomUUID } from "node:crypto";
 import type { PositionRow } from "./store.js";
 import type { ExecCtx } from "./execute.js";
@@ -47,6 +48,8 @@ async function main() {
       if (method === "GET" && readFails) return response({ message: "fixture unavailable" }, 503);
       const matches = (r: DbRow) => [...u.searchParams].every(([key, value]) => {
         if (["select", "or"].includes(key) || key.includes("->")) return true;
+        if (value === "is.null") return r[key] == null;
+        if (value === "not.is.null") return r[key] != null;
         if (value.startsWith("eq.")) return String(r[key]) === value.slice(3);
         throw new Error(`unexpected row filter ${key}`);
       });
@@ -128,6 +131,47 @@ async function main() {
     assert.equal(orders.length, before); assert.equal(held, 3);
     await run(mapOpenPositions({ data: [remainderDb], error: null })[0], "halt_flatten");
     assert.equal(held, 0);
+
+    // Exercise the actual store -> close -> remainder handoff, including a
+    // caller snapshot that predates the durable arm write.
+    const store = await import("./store.js");
+    const protectedPolicy = { ...policy, policyVersion: "receipt-bound-entry-policy-v4",
+      managerProfileId: MOMO_PROTECTED_MANAGER, managerVersion: MOMO_PROTECTED_MANAGER_VERSION,
+      quantity: 2, takeProfit: { kind: "bank", fraction: 0.5, targetPct: 30 },
+      stopLoss: { catastrophePct: 30, priceBasis: "executable-option-bid" },
+      ratchetParameters: { kind: "a13", engageReturnPct: 50, givebackPct: 33,
+        retainGainPct: 67, fixedTargetPct: null, profitProtection: momoProfitProtection() },
+      configuration: { ...policy.configuration, channelSlug: "momo-shape-2",
+        managerProfileId: MOMO_PROTECTED_MANAGER, managerVersion: MOMO_PROTECTED_MANAGER_VERSION } };
+    const protectedParent = { ...structuredClone(parent), id: randomUUID(), avg_entry_price: 1,
+      entry_features: { receipt_bound_entry_policy: protectedPolicy } };
+    rows.set(protectedParent.id, structuredClone(protectedParent)); held = 2; price = 1.3;
+    const armed = await store.persistProfitProtection(protectedParent.id, "arm");
+    assert.ok(armed?.profit_protection_armed_at);
+    assert.deepEqual(await store.persistProfitProtection(protectedParent.id, "arm"), armed, "idempotent arm");
+    await run(protectedParent);
+    const protectedRunner = [...rows.values()].find(r => r.runner_of === protectedParent.id)!;
+    assert.equal(protectedRunner.profit_protection_armed_at, armed.profit_protection_armed_at,
+      "runner reads committed arm even when bank caller took an earlier snapshot");
+    assert.equal(held, 1);
+    const latched = await store.persistProfitProtection(protectedRunner.id, "exit");
+    assert.ok(latched?.profit_protection_exit_required_at);
+    price = 1.05;
+    await run(mapOpenPositions({ data: [protectedRunner], error: null })[0], "early_profit_floor");
+    assert.equal(held, 0);
+    assert.equal(protectedRunner.close_reason, "early_profit_floor");
+
+    const protectedPartial = { ...protectedParent, id: randomUUID(),
+      profit_protection_armed_at: armed.profit_protection_armed_at,
+      profit_protection_exit_required_at: latched.profit_protection_exit_required_at };
+    rows.set(protectedPartial.id, structuredClone(protectedPartial)); held = 2; partialNext = true;
+    const priorIds = new Set(rows.keys());
+    await run(protectedPartial, "early_profit_floor");
+    const protectedRemainder = [...rows.values()].find(r => !priorIds.has(r.id))!;
+    assert.equal(protectedRemainder.qty, 1); assert.equal(held, 1);
+    assert.equal(protectedRemainder.profit_protection_exit_required_at, latched.profit_protection_exit_required_at);
+    await run(mapOpenPositions({ data: [protectedRemainder], error: null })[0], "early_profit_floor");
+    assert.equal(held, 0, "partially filled protection exits only the remaining contract");
 
     assert.equal(legacyExitSnapshotMatches(parent, null), false);
     for (const patch of [{ qty: 3 }, { avg_entry_price: 2.5 }, { runner_of: "new-parent" },

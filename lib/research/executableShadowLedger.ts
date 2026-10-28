@@ -68,6 +68,7 @@ export interface ExecutableBankRunnerManager {
   runnerArmPct: number;
   runnerKeepFraction: number;
   postBankFloorPct: number | null;
+  profitProtection?: { armReturnPct: number; floorReturnPct: number };
   forceExitAt: string;
 }
 
@@ -128,7 +129,7 @@ export interface ExecutableShadowRunPolicy {
 }
 
 export interface ExecutableShadowExit {
-  reason: "target" | "stop" | "ratchet" | "force_exit";
+  reason: "target" | "stop" | "ratchet" | "early_profit_floor" | "force_exit";
   quoteId: string;
   at: string;
   bid: number;
@@ -288,6 +289,12 @@ function assertInput(input: {
           || (row.manager.postBankFloorPct != null
             && !Number.isFinite(row.manager.postBankFloorPct)))) {
       throw new Error(`${row.id}: executable shadow bank/runner is invalid`);
+    }
+    if (row.manager.kind === "bank_runner" && row.manager.profitProtection) {
+      const p = row.manager.profitProtection;
+      if (!Number.isFinite(p.armReturnPct) || !Number.isFinite(p.floorReturnPct)
+          || p.armReturnPct <= 0 || p.floorReturnPct < 0 || p.floorReturnPct >= p.armReturnPct)
+        throw new Error(`${row.id}: executable shadow profit protection is invalid`);
     }
   }
   const accountIds = new Set<string>();
@@ -454,6 +461,7 @@ function simulateExit(
   let peakReturn = Number.NEGATIVE_INFINITY;
   let troughReturn = Number.POSITIVE_INFINITY;
   let armed = false;
+  let protectionArmed = false;
   let bankReturn: number | null = null;
   let chosen: ExecutableShadowQuote | null = null;
   let reason: ExecutableShadowExit["reason"] = "force_exit";
@@ -492,6 +500,12 @@ function simulateExit(
       const runnerQty = Math.max(1, Math.round(row.quantity
         * row.manager.runnerFraction));
       const bankQty = row.quantity - runnerQty;
+      const protection = row.manager.profitProtection;
+      const remainingQty = bankReturn == null ? row.quantity : runnerQty;
+      const protectionQuote = validBidQuote(quote, { ...policy, maxQuoteAgeMs: Math.min(policy.maxQuoteAgeMs, 15_000), requireDisplayedSize: true }, remainingQty)
+        && quote.providerAt != null && finite(quote.ask) && quote.ask >= quote.bid! && quote.bid! > 0;
+      if (protection && protectionQuote && quote.bid! >= entryAsk * (1 + protection.armReturnPct / 100))
+        protectionArmed = true;
       if (bankReturn == null) {
         if (currentReturn + 1e-9 >= row.manager.bankTargetPct
             && validBidQuote(quote, policy, bankQty)) {
@@ -509,7 +523,8 @@ function simulateExit(
         const postBankFloorReached = !armed
           && row.manager.postBankFloorPct != null
           && currentReturn <= row.manager.postBankFloorPct;
-        if ((postBankFloorReached
+        const nativePeakPriceFloor = protection && currentReturn <= (100 + peakReturn) * 0.67 - 100;
+        if ((nativePeakPriceFloor || postBankFloorReached
               || (armed && currentReturn - 1e-9 <= ratchetFloor))
             && validBidQuote(quote, policy, runnerQty)) {
           chosen = quote;
@@ -522,6 +537,11 @@ function simulateExit(
           reason = "stop";
           break;
         }
+      }
+      if (protection && protectionArmed && protectionQuote && quote.bid! <= entryAsk * (1 + protection.floorReturnPct / 100)) {
+        chosen = quote;
+        reason = "early_profit_floor";
+        break;
       }
     }
   }

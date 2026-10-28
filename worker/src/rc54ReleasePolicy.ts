@@ -168,6 +168,7 @@ export interface Rc54AdmissionRoot {
   accountId: string;
   bankTargetPct: number | null;
   runnerKind: "none" | "a13" | "fixed-target" | "native-atr";
+  profitProtectionEnabled?: boolean;
   configurationEpochId?: string | null;
   entryQualificationVersion?: "orb-entry-qualification-v1";
   entryStartEtMinute?: number;
@@ -979,6 +980,7 @@ function managerOwnsExit(root: Readonly<Rc54AdmissionRoot>, reason: string): boo
   if (reason === "target_premium") {
     return root.bankTargetPct != null || root.runnerKind === "fixed-target";
   }
+  if (reason === "early_profit_floor") return root.profitProtectionEnabled === true;
   if (reason === "trail_giveback") return root.runnerKind === "a13";
   if (reason === "trail_chandelier") return root.runnerKind === "native-atr";
   return false;

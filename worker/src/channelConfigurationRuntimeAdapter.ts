@@ -1,3 +1,4 @@
+import { PROFIT_PROTECTION_COMPATIBILITY } from "../../lib/channels/profitProtection.js";
 import { supportsManifestCompatibility } from "./version.js";
 import { isFixedContractAdmissionPolicy, FIXED_CONTRACT_WORKER_COMPATIBILITY } from "../../lib/channels/fixedContractAdmission.js";
 import type {
@@ -338,7 +339,7 @@ export function validateReceiptBoundRuntimeStartup(input: {
   }
   if (input.runtime?.roots.some(root => root.fixedContractAdmission !== undefined
     && (!isFixedContractAdmissionPolicy(root.fixedContractAdmission) || root.slug !== "vb-macd-state"
-      || root.quantity !== 4 || input.runtime?.workerCompatibilityVersion !== FIXED_CONTRACT_WORKER_COMPATIBILITY))) {
+      || root.quantity !== 4 || !([FIXED_CONTRACT_WORKER_COMPATIBILITY, PROFIT_PROTECTION_COMPATIBILITY] as string[]).includes(input.runtime!.workerCompatibilityVersion)))) {
     blockers.push("runtime_configuration:fixed_contract_policy_invalid");
   }
   try {

@@ -1,3 +1,4 @@
+import { validProfitProtection } from "./profitProtection";
 import {
   CHANNEL_CONTROL_PLANE_SCHEMA_VERSION,
   managerPolicyContentHash,
@@ -359,20 +360,17 @@ function validateManagerPolicy(value: unknown): asserts value is OperatorManager
     "kind",
     "retainGainPct",
   ].sort();
-  const ratchetKeysValid = (
-    ratchetKeys.length === baseRatchetKeys.length
-      && ratchetKeys.every((key, index) => key === baseRatchetKeys[index])
-  ) || (
-    ratchetKeys.length === baseRatchetKeys.length + 1
-      && ratchetKeys.every((key, index) =>
-        key === [...baseRatchetKeys, "postBankFloor"].sort()[index])
-  );
+  const ratchetKeysValid = baseRatchetKeys.every(key => ratchetKeys.includes(key))
+    && ratchetKeys.every(key => [...baseRatchetKeys, "postBankFloor", "profitProtection"].includes(key));
   if (!ratchetKeysValid) {
     throw new ProposalInputError(
       "managerPolicy.ratchetParameters contains unsupported fields",
     );
   }
   const ratchet = value.ratchetParameters;
+  if ("profitProtection" in ratchet && !validProfitProtection(ratchet.profitProtection)) {
+    throw new ProposalInputError("managerPolicy.profitProtection is not a supported policy");
+  }
   const finiteOrNull = ["engageReturnPct", "fixedTargetPct", "givebackPct", "retainGainPct"]
     .every((field) => ratchet[field] === null
       || (typeof ratchet[field] === "number" && Number.isFinite(ratchet[field])));
