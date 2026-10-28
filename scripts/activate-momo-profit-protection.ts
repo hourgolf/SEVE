@@ -1,5 +1,5 @@
 // Opt-in Momo manager activation. Dry-run by default; no broker order authority.
-import { momoProfitProtection } from "../lib/channels/profitProtection";
+import { MOMO_PROTECTED_MANAGER_VERSION, profitProtectionScopeValid, momoProfitProtection } from "../lib/channels/profitProtection";
 import { buildShadowActivationCandidate } from "../lib/channels/channelActivation";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -366,6 +366,24 @@ async function main(): Promise<void> {
       ? current : null;
   });
   const activeMomo = after.channelSpecs.find((row) => row.slug === "momo-shape-2");
+  if (!activeMomo || !profitProtectionScopeValid(activeMomo)
+      || activeMomo.managerVersion !== MOMO_PROTECTED_MANAGER_VERSION
+      || canonicalJson(after.channelSpecs.filter(row => row.slug !== momo.slug))
+        !== canonicalJson(before.channelSpecs.filter(row => row.slug !== momo.slug)))
+    throw new Error("activated roster differs from the approved manager-only change");
+  const adoption = await poll<Record<string, unknown>>("worker manifest adoption", async () => {
+    const read = await sb.from("events").select("created_at,meta")
+      .like("message", "stream: rc54-release ACTIVE%")
+      .eq("meta->>manifestContentHash", after.manifest.contentHash)
+      .gte("created_at", now).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (read.error) throw new Error("worker adoption evidence unavailable");
+    const roots = read.data?.meta?.roots as Array<Record<string, unknown>> | undefined;
+    return roots?.some(root => root.slug === momo.slug
+      && root.managerVersion === MOMO_PROTECTED_MANAGER_VERSION
+      && root.configurationEpochId === activation.receipt.configurationEpochId)
+      ? read.data as Record<string, unknown> : null;
+  });
+  await requireWorkerCommit(sb);
   const report = {
     schemaVersion: 1,
     completedAt: new Date().toISOString(),
@@ -395,6 +413,7 @@ async function main(): Promise<void> {
       configurationEpochId: activation.receipt.configurationEpochId,
     },
     storageReceipt: activationWrite.data,
+    workerAdoption: adoption,
     historicalEvidenceMutation: false,
     orderAuthority: false,
   };
