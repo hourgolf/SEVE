@@ -488,9 +488,13 @@ const fixedRuntime = fixedServiceClient ? makeFixedEntryRuntimeDriver(fixedServi
     apiForAccount,quote:fixedManagementQuote,eventPolicy:{enabled:policy.EVENT_STANDDOWN,
       beforeMinutes:policy.EVENT_FLATTEN_MIN_BEFORE,afterMinutes:policy.EVENT_RESUME_MIN_AFTER}}),
   executionSettings:()=>({spreadCapture:config.spreadCapture,ladder:{...config.spreadCaptureLadder}}),
+  freshManagementQuote:fixedManagementQuote.fresh,
   onAdmission:captureFixedAdmissionObservation,
   // Console receipt avoids adding database I/O to the path being measured.
   onTiming:receipt=>info(`fixed-entry timing ${JSON.stringify({schema:"fixed-entry-timing-v1",...receipt})}`),
+  onManagement:receipt=>info(`fixed-entry management ${JSON.stringify({schema:"fixed-entry-management-v1",bootId:BOOT_ID,...receipt})}`),
+  onExitLatch:receipt=>info(`fixed-entry latch ${JSON.stringify({schema:"fixed-entry-latch-v1",bootId:BOOT_ID,...receipt})}`),
+  onBrokerIo:receipt=>info(`fixed-entry broker-io ${JSON.stringify({schema:"fixed-entry-broker-io-v1",bootId:BOOT_ID,...receipt})}`),
   onCommand:async()=>{fixedClock?.kick("sweep");},
   onCoverage:async()=>{fixedClock?.kick("sweep");},
   onReporting:makeFixedEntryReportingReplay(fixedServiceClient,BOOT_ID,{

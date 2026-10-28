@@ -38,6 +38,9 @@ export interface FixedLifecyclePorts {
    * not permitted to turn an unresolved result into a booked outcome. */
   onCommand?(intent: FixedEntryIntent, claim: FixedCommandClaim, result: FixedCommandResult): Promise<void>;
   onCoverage?(intent: FixedEntryIntent, result: FixedCoverageResult): Promise<void>;
+  /** Nonblocking bounded diagnostics, never order authority. */
+  onExitLatch?(receipt: { intentId: string; startedAtMs: number; completedAtMs: number;
+    requestedReason: string; recordId: string | null; storedReason: string | null; confirmed: boolean }): void;
 }
 export interface FixedLifecycleResult {
   state: "active" | "settled" | "unresolved";
@@ -107,7 +110,17 @@ export async function reconcileFixedLifecycle(ports: FixedLifecyclePorts, origin
       // Failed durability cannot turn a stop observation into permission to
       // finish buying. This local inhibition grants no sell/settlement proof.
       exitObservedThisPass = true;
-      if (!await requestFixedIntentExit(ports.coverage.storage, intent, observation.exit)) note("exit-request-unconfirmed");
+      const startedAtMs = ports.commands.now();
+      let stored: FixedProtocolRecord | null = null;
+      try {
+        stored = await requestFixedIntentExit(ports.coverage.storage, intent, observation.exit);
+        if (!stored) note("exit-request-unconfirmed");
+      } finally {
+        try { ports.onExitLatch?.({ intentId: intent.id, startedAtMs, completedAtMs: ports.commands.now(),
+          requestedReason: observation.exit.reason, recordId: stored?.id ?? null,
+          storedReason: (stored?.body.exitRequest as FixedIntentExitRequest | undefined)?.reason ?? null,
+          confirmed: stored !== null }); } catch { /* observation only */ }
+      }
     }
     return observation;
   };

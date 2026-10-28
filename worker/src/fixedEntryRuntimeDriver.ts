@@ -17,10 +17,12 @@ import { admitFixedEntryIntent, type FixedIntentSeed } from "./fixedEntryIntentA
 import { parseFixedEntryIntent, type FixedEntryIntent } from "./fixedEntryLedgerModel.js";
 import { inspectFixedEntryInventory } from "./fixedEntryLedgerInventory.js";
 import { readFixedRowFence } from "./fixedEntryRowFence.js";
-import { fixedPositionIdentityMatches } from "./fixedEntryCoverageMaterialization.js";
+import { fixedPositionIdentityMatches, type FixedCoverageSnapshot } from "./fixedEntryCoverageMaterialization.js";
 import { verifyFixedIntentSettlement } from "./fixedEntryIntentSettlement.js";
 import { reconcileFixedLifecycle, type FixedLifecyclePorts, type FixedLifecycleResult } from "./fixedEntryLifecycle.js";
 import { observeFixedNativeManagement, type FixedManagementInput } from "./fixedEntryManagement.js";
+import type { FixedManagementQuoteRead } from "./fixedEntryManagementQuoteCache.js";
+import { validFixedExitRequest } from "./fixedEntryExitRequest.js";
 import { evaluateFixedContinuationAffordability, type OptionsAffordabilitySnapshot } from "./fixedContractAffordability.js";
 import { buildFixedEntryExecutionPlan, type FixedEntryExecutionPlan } from "./fixedEntryExecutionPlan.js";
 import type { FixedCommandClaim } from "./fixedEntryCommandCoordinator.js";
@@ -35,6 +37,56 @@ export function fixedReportingFailure(error: unknown): { state: string; reasons:
 }
 type Source = "cycle" | "sweep";
 type Client = Pick<SupabaseClient, "from">;
+export interface FixedManagementTrace {
+  intentId: string; source: Source; startedAtMs: number; completedAtMs: number;
+  input: FixedManagementInput | null;
+  initialQuote: FixedManagementInput["quote"];
+  positions: { id: string; status: string; qty: number; entryPrice: number }[];
+  permission: { allowed: boolean; validUntilMs: number } | null;
+  result: ReturnType<typeof observeFixedNativeManagement> | null;
+  failure: string | null;
+}
+export interface FixedBrokerIoTrace {
+  intentId: string; operation: "submit" | "lookup" | "cancel"; clientOrderId: string;
+  startedAtMs: number; completedAtMs: number | null; elapsedMs: number | null; failed: boolean | null;
+}
+/** Reporting failure cannot change management or broker authority. */
+export async function traceFixedManagement(intent: FixedEntryIntent, source: Source, snapshot: FixedCoverageSnapshot,
+  now: () => number, read: () => ReturnType<FixedRuntimeBindings["management"]>,
+  sink?: (receipt: FixedManagementTrace) => void,
+  refresh?: () => Promise<FixedManagementQuoteRead>): Promise<ReturnType<typeof observeFixedNativeManagement>> {
+  const receipt: FixedManagementTrace = { intentId: intent.id, source, startedAtMs: now(), completedAtMs: 0,
+    input: null, initialQuote: null, permission: null, result: null, failure: null,
+    positions: snapshot.positions.map(row => ({ id: row.id, status: row.status, qty: row.qty, entryPrice: row.avg_entry_price })) };
+  try {
+    const state = await read();
+    receipt.input = structuredClone(state.input);
+    receipt.initialQuote = structuredClone(state.input.quote);
+    receipt.permission = { allowed: state.allowed, validUntilMs: state.validUntilMs };
+    try { receipt.result = observeFixedNativeManagement(intent, snapshot, state.input); }
+    catch (error) {
+      // Unknown mandatory state cannot erase an independently proven price
+      // exit in a newly returned quote. Other identity/policy errors fail closed.
+      if (!(error instanceof Error && error.message === "fixed_manager:mandatory_state_unknown") || !refresh) throw error;
+    }
+    // First honor any already-observed target/stop or mandatory exit. Never
+    // replace it with a newer quote which has retreated inside the threshold.
+    if (!receipt.result?.exit && refresh) {
+      const quoteRead = await refresh();
+      receipt.input = { ...state.input, nowMs: now(), quote: quoteRead.quote, quoteRead };
+      receipt.result = observeFixedNativeManagement(intent, snapshot, receipt.input);
+    }
+    if (!receipt.result) throw new Error("fixed_manager:observation_unavailable");
+    return receipt.result;
+  } catch (error) {
+    receipt.failure = error instanceof Error && /^fixed_(manager|live):[a-z_]+$/.test(error.message)
+      ? error.message : "management-observation-unavailable";
+    throw error;
+  } finally {
+    receipt.completedAtMs = now();
+    try { sink?.(structuredClone(receipt)); } catch { /* observation only */ }
+  }
+}
 export interface FixedRuntimeEntryAuthority {
   allowed: boolean;
   /** Earliest expiry of current native gates and configuration authority. */
@@ -58,6 +110,7 @@ export interface FixedRuntimeBindings {
   management(intent: FixedEntryIntent, source: Source, brokerMark: FixedManagementInput["brokerMark"]): Promise<{
     input: FixedManagementInput; allowed: boolean; validUntilMs: number;
   }>;
+  freshManagementQuote?(occ: string, atMs: number): Promise<FixedManagementQuoteRead>;
   executionSettings(): { spreadCapture: boolean; ladder: FixedEntryExecutionPlan["ladder"] };
   onCommand: NonNullable<FixedLifecyclePorts["onCommand"]>;
   onCoverage: NonNullable<FixedLifecyclePorts["onCoverage"]>;
@@ -65,6 +118,9 @@ export interface FixedRuntimeBindings {
    * including already-settled intents; failures retry on subsequent passes. */
   onReporting(intent: FixedEntryIntent): Promise<void>;
   onAdmission?(row: ExecutionObservationDraft): void;
+  onManagement?(receipt: FixedManagementTrace): void;
+  onBrokerIo?(receipt: FixedBrokerIoTrace): void;
+  onExitLatch?: FixedLifecyclePorts["onExitLatch"];
   /** Bounded stage totals only. Sink must not do blocking I/O; never authority. */
   onTiming?(receipt: { intentId: string; source: Source; startedAtMs: number; completedAtMs: number;
     state: string; postsAttempted: number; stages: Record<string, TimingStage> }): void;
@@ -118,6 +174,19 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
     const account = await timer.measure("broker_resolution", () => bindings.broker(structuredClone(intent)));
     if (!account) throw new Error("fixed_runtime:original_broker_unavailable");
     const broker = makeFixedEntryBrokerTransport(intent, {...account,submissionEnabled:side=>bindings.submissionEnabled(side)===true});
+    const brokerIo = async <T>(operation: FixedBrokerIoTrace["operation"], clientOrderId: string, run: () => Promise<T>): Promise<T> => {
+      const startedAtMs = bindings.now(), started = performance.now();
+      const emit = (completedAtMs: number | null, failed: boolean | null) => {
+        try { bindings.onBrokerIo?.({ intentId: intent.id, operation, clientOrderId, startedAtMs,
+          completedAtMs, elapsedMs: completedAtMs === null ? null : Math.round(performance.now() - started), failed }); }
+        catch { /* observation only */ }
+      };
+      emit(null, null);
+      let failed = false;
+      try { return await timer.measure(`broker_${operation}`, run); }
+      catch (error) { failed = true; throw error; }
+      finally { emit(bindings.now(), failed); }
+    };
     let brokerMark: FixedManagementInput["brokerMark"] = null;
     const coverage = makeFixedSupabaseCoveragePorts(client, bootId, { intent, now: bindings.now,
       async attributedHoldings(_requested, snapshotRecords) {
@@ -155,13 +224,17 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
       booking: { storage, now: bindings.now, readRow: id => readFixedPosition(client, intent, id), cas: change => applyFixedRowCas(client, change) },
       commands: { storage, now: bindings.now, reserveSell: change => applyFixedRowCas(client, change),
         canSubmitNow:side=>bindings.submissionEnabled(side)===true,
-        submitOnce: (...args) => timer.measure("broker_submit", () => broker.submitOnce(...args)),
-        lookupExact: (...args) => timer.measure("broker_lookup", () => broker.lookupExact(...args)) },
+        submitOnce: (...args) => brokerIo("submit", args[1].client_order_id, () => broker.submitOnce(...args)),
+        lookupExact: (...args) => brokerIo("lookup", args[1], () => broker.lookupExact(...args)) },
       async observeManagement(original, snapshot) {
-        const state = await management();
         // Record known mandatory exits even if current management authority is
         // unavailable. Permission is checked independently before any broker POST.
-        return observeFixedNativeManagement(original, snapshot, state.input);
+        const latched = snapshot.records.some(record => validFixedExitRequest(record, original));
+        const refresh = !latched && bindings.freshManagementQuote
+          ? () => timer.measure("management_quote_refresh", () => bindings.freshManagementQuote!(original.occ, bindings.now()))
+          : undefined;
+        return traceFixedManagement(original, source, snapshot, bindings.now,
+          management, bindings.onManagement, refresh);
       },
       async mayManage() { const state = await management(); return state.allowed && fresh(state.validUntilMs); },
       async authorizeSubmission(original, claim) {
@@ -181,8 +254,8 @@ export function makeFixedEntryRuntimeDriver(client: Client, bootId: string, bind
         return { allowed: current.allowed && fresh(current.validUntilMs) && affordability.allowed,
           validUntilMs: Math.min(current.validUntilMs, (current.account?.observedAtMs ?? -Infinity) + 2_000) };
       },
-      cancelExact: (...args) => timer.measure("broker_cancel", () => broker.cancelExact(...args)),
-      onCommand: bindings.onCommand, onCoverage: bindings.onCoverage,
+      cancelExact: (...args) => brokerIo("cancel", args[0].clientOrderId, () => broker.cancelExact(...args)),
+      onCommand: bindings.onCommand, onCoverage: bindings.onCoverage, onExitLatch: bindings.onExitLatch,
     };
   }
   async function recover(intent: FixedEntryIntent, source: Source): Promise<FixedLifecycleResult> {

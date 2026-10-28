@@ -12,6 +12,7 @@ function harness(options: { spreadCapture?: boolean } = {}) {
   const h = fixedCoverageHarness(options);
   let bid = 1.9, canEnter = true, canManage = true, cancelConfirmed = false, cancelCalls = 0;
   const ports: FixedLifecyclePorts = { coverage: h.coverage, booking: h.bookPorts, commands: h.commandPorts,
+    onExitLatch: receipt => { assert.equal(receipt.intentId, h.intent.id); throw Error("fixture failed telemetry sink"); },
     ...(narrowLedgerReads ? { readRecords: h.readRecords } : {}),
     observeManagement: async (intent, s) => {
       const row = s.positions.find(r => r.status === "open");
