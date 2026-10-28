@@ -21,6 +21,9 @@ async function main(stopDuringFinalRead=false) {
   const reads: string[] = [], writes: string[] = [];
   let originalLedgerReads = 0;
   const timingReceipts: Parameters<NonNullable<FixedRuntimeBindings["onTiming"]>>[0][] = [];
+  const managementReceipts: Parameters<NonNullable<FixedRuntimeBindings["onManagement"]>>[0][] = [];
+  const brokerReceipts: Parameters<NonNullable<FixedRuntimeBindings["onBrokerIo"]>>[0][] = [];
+  let freshQuoteReads = 0;
   const fakeDb: typeof fetch = async (input, init) => {
     const u = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     assert.equal(u.origin, "https://fixture.supabase.co");
@@ -107,6 +110,9 @@ async function main(stopDuringFinalRead=false) {
     executionSettings: () => ({ spreadCapture: false, ladder: h.intent.executionPlan.ladder }),
     onCommand: async () => {}, onCoverage: async () => {},
     onTiming: receipt => { timingReceipts.push(receipt); throw new Error("fixture failed telemetry sink"); },
+    onManagement: receipt => { managementReceipts.push(receipt); throw new Error("fixture failed telemetry sink"); },
+    onBrokerIo: receipt => { brokerReceipts.push(receipt); throw new Error("fixture failed telemetry sink"); },
+    freshManagementQuote: async () => { freshQuoteReads++; throw Error("durable manual exit must not wait for new quote I/O"); },
     onReporting: async () => { reportingAttempts++; if (reportingFails) throw new Error("fixture reporting unavailable"); },
     status: async (_id, state) => { if (statusFails) throw new Error("fixture status failure"); reportingStates.push(state); },
   };
@@ -141,6 +147,10 @@ async function main(stopDuringFinalRead=false) {
       return;
     }
     assert.equal(first.postsAttempted, 1, JSON.stringify(first));
+    assert.ok(managementReceipts.length > 0);
+    assert.equal(freshQuoteReads, 0, "durable manual exit never waits for new quote I/O");
+    assert.ok(brokerReceipts.some(r => r.operation === "submit" && r.completedAtMs === null));
+    assert.ok(brokerReceipts.some(r => r.operation === "submit" && r.failed === false));
     assert.ok(first.reasons.includes("runtime-status-unconfirmed"));
     assert.equal(posts, 1); assert.equal(held, 0);
     assert.equal(h.positions.size, 1);

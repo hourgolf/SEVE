@@ -531,7 +531,7 @@
     "fixed-entry-intent-settlement-selftest": "tsx worker/src/fixedEntryIntentSettlement.selftest.ts",
     "fixed-entry-intent-admission-selftest": "tsx worker/src/fixedEntryIntentAdmission.selftest.ts",
     "fixed-entry-lifecycle-selftest": "tsx worker/src/fixedEntryLifecycle.selftest.ts && tsx worker/src/fixedEntryReadPlan.selftest.ts",
-    "fixed-entry-management-selftest": "tsx worker/src/fixedEntryManagement.selftest.ts",
+    "fixed-entry-management-selftest": "tsx worker/src/fixedEntryManagement.selftest.ts && tsx worker/src/fixedEntryQuoteHandoff.selftest.ts",
     "fixed-entry-execution-dispatch-selftest": "tsx worker/src/fixedEntryExecutionDispatch.selftest.ts",
     "fixed-entry-runtime-driver-selftest": "tsx worker/src/fixedEntryRuntimeDriver.selftest.ts",
     "fixed-entry-live-management-selftest": "tsx worker/src/fixedEntryLiveManagement.selftest.ts",

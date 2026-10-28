@@ -7,6 +7,7 @@ import { fixedPositionIdentityMatches, type FixedCoverageSnapshot } from "./fixe
 import { parseReceiptBoundEntryPolicy } from "./receiptBoundEntryPolicy.js";
 import { premiumExitReason, freshExecutableBid } from "./exitRules.js";
 import type { FixedManagementObservation } from "./fixedEntryLifecycle.js";
+import type { FixedManagementQuoteRead } from "./fixedEntryManagementQuoteCache.js";
 export function fixedEtClock(nowMs: number): { date: string; minute: number } {
   if (!Number.isFinite(nowMs)) throw new Error("fixed_manager:clock_invalid");
   const p = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit",
@@ -22,6 +23,8 @@ export interface FixedManagementInput {
   accountHalted: boolean | null;
   eventWindow: boolean | null;
   quote: { bid: number; ask: number; observedAtMs: number } | null;
+  /** Diagnostic only; never substitutes for the quote's provider timestamp. */
+  quoteRead?: FixedManagementQuoteRead;
   /** Preserve the existing cycle-only broker-mark fallback. The fast sweep
    * uses executable bid only. This price is never booking/custody evidence. */
   source: "cycle" | "sweep";
