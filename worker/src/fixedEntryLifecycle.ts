@@ -190,6 +190,7 @@ export async function reconcileFixedLifecycle(ports: FixedLifecyclePorts, origin
     s = await snapshot();
     const finalInventory = inspectFixedEntryInventory(intent, s.records);
     const exitLatched = finalInventory.records.has(fixedLedgerId("exit-required", [intent.id]));
+    let confirmedSellCancellation = false;
     for (const f of finalInventory.facts.filter(f => !f.terminal)) {
       const claim = f.record.body as unknown as FixedCommandClaim;
       const firstObserved = s.records.filter(r => (r.body.fillEvidence as { commandId?: string } | undefined)?.commandId === f.command.id)
@@ -202,10 +203,19 @@ export async function reconcileFixedLifecycle(ports: FixedLifecyclePorts, origin
       if (!((f.command.side === "buy" && (exitLatched || exitObservedThisPass)) || ports.commands.now() - firstObserved >= cancelMs)) continue;
       if (!await ports.mayManage(intent)) continue;
       try { await ports.cancelExact(f.command); } catch { note("cancellation-outcome-unconfirmed"); }
-      await run(claim);
+      const observed = await run(claim);
+      if (f.command.side === "sell" && observed.state === "resolved") confirmedSellCancellation = true;
     }
     await book(await snapshot());
     await cover();
+    // A cancel request is never terminal evidence. Once exact terminal evidence
+    // is durably booked and coverage refreshed, advance the original ladder in
+    // this pass instead of waiting for another clock + complete recovery pass.
+    // freshSell still bounds this pass to at most one NEW sell command.
+    if (confirmedSellCancellation && !freshSell) {
+      await sellKnown(await observeExit());
+      await cover();
+    }
     // A just-confirmed terminal final buy may now permit a finished-plan seal.
     await sealFixedEntryBuys(ports.coverage.storage, intent, await readRecords(),
       exitLatched ? "exit-required" : "buy-plan-finished", new Date(ports.commands.now()).toISOString());

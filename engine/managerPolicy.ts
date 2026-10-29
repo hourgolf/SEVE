@@ -1,3 +1,4 @@
+import { MACD_WIDE40_MANAGER, MACD_WIDE40_MANAGER_VERSION } from "../lib/channels/macdWide40";
 // Portable, causal manager policies shared by the retrospective lab and the
 // live worker's observation-only fast sweep. A tick can produce evidence; it
 // cannot place an order or mutate an active channel manager.
@@ -37,6 +38,7 @@ export const MANAGER_IDS = [
   "FULL-R50-K67",
   "ORB-TREND-SOURCE-30/35",
   "MOMO-B30-R50-K67-CONTROL",
+  "WIDE40/50",
 ] as const;
 
 export type ManagerId = typeof MANAGER_IDS[number];
@@ -108,6 +110,9 @@ export const FORWARD_CONTROL_NATIVE_VERSIONS: Readonly<Record<string, string>> =
 };
 export function managerIdsForObservedConfiguration(slug: string, nativeManagerId?: string | null, nativeManagerVersion?: string | null): readonly ManagerId[] {
   const prior = managerIdsForChannel(slug);
+  if (slug === "vb-macd-state" && nativeManagerId === MACD_WIDE40_MANAGER
+      && nativeManagerVersion === MACD_WIDE40_MANAGER_VERSION)
+    return [...prior, "WIDE20/50", "WIDE40/50"];
   if (slug === "momo-shape-2" && nativeManagerId === MOMO_PROTECTED_MANAGER
       && nativeManagerVersion === MOMO_PROTECTED_MANAGER_VERSION)
     return [...prior, "MOMO-B30-R50-K67-CONTROL"];
@@ -204,6 +209,7 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
     case "LOCK20/30": return lock(managerId, ret, 20, 30, isBell, state);
     case "LOCK30/30": return lock(managerId, ret, 30, 30, isBell, state);
     case "LOCK50/30": return lock(managerId, ret, 50, 30, isBell, state);
+    case "WIDE40/50": return lock(managerId, ret, 40, 50, isBell, state);
     case "WIDE20/50": return lock(managerId, ret, 20, 50, isBell, state);
     case "BELL/-30": return lock(managerId, ret, null, 30, isBell, state);
     case "BELL/no-stop": return lock(managerId, ret, null, null, isBell, state);

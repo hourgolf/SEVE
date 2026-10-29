@@ -1,3 +1,4 @@
+import { MACD_WIDE40_COMPATIBILITY, MACD_WIDE40_MANAGER, managerManifestCompatibility } from "./macdWide40";
 import { createHash } from "node:crypto";
 import { PROFIT_PROTECTION_COMPATIBILITY, profitProtectionScopeValid } from "./profitProtection";
 import { FIXED_CONTRACT_ADMISSION_MODE, FIXED_CONTRACT_WORKER_COMPATIBILITY, fixedContractAdmissionPolicy, fixedContractScopeValid, type FixedContractAdmissionPolicy } from "./fixedContractAdmission";
@@ -616,7 +617,7 @@ function compileValidation(
   if (new Set(specs.map((spec) => spec.slug)).size !== specs.length) schemaErrors.push("spec:duplicate_slug");
 
   if (specs.some(spec => spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE)
-      && !([FIXED_CONTRACT_WORKER_COMPATIBILITY, PROFIT_PROTECTION_COMPATIBILITY] as string[]).includes(manifest.workerCompatibilityVersion)) {
+      && !([FIXED_CONTRACT_WORKER_COMPATIBILITY, PROFIT_PROTECTION_COMPATIBILITY, MACD_WIDE40_COMPATIBILITY] as string[]).includes(manifest.workerCompatibilityVersion)) {
     schemaErrors.push("manifest:fixed_contract_worker_compatibility");
   }
   const riskErrors = specs.flatMap((spec) => {
@@ -718,9 +719,12 @@ function compileValidation(
 
   for (const spec of specs) {
     const ratchet = spec.ratchetParameters;
+    if (spec.managerProfileId === MACD_WIDE40_MANAGER
+        && manifest.workerCompatibilityVersion !== MACD_WIDE40_COMPATIBILITY)
+      compatibilityErrors.push(`${spec.slug}:macd40_worker_compatibility`);
     if (ratchet.profitProtection !== undefined
         && (!profitProtectionScopeValid(spec)
-          || manifest.workerCompatibilityVersion !== PROFIT_PROTECTION_COMPATIBILITY)) {
+          || !([PROFIT_PROTECTION_COMPATIBILITY, MACD_WIDE40_COMPATIBILITY] as string[]).includes(manifest.workerCompatibilityVersion))) {
       compatibilityErrors.push(`${spec.slug}:profit_protection_scope_or_worker`);
     }
     if (ratchet.postBankFloor != null
@@ -1105,8 +1109,7 @@ export function projectActiveVersusDraft(
     parentManifestId: compiled.manifest.id,
     status: "draft",
     channelSpecs: previewSpecs,
-    workerCompatibilityVersion: previewSpecs.some(s => s.ratchetParameters.profitProtection)
-      ? PROFIT_PROTECTION_COMPATIBILITY : compiled.manifest.workerCompatibilityVersion,
+    workerCompatibilityVersion: managerManifestCompatibility(previewSpecs, compiled.manifest.workerCompatibilityVersion),
     admissionPolicies: projectAdmissionPolicyReentry(
       compiled.manifest.admissionPolicies,
       previewSpecs,

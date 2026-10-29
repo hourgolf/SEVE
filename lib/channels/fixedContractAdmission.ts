@@ -1,3 +1,4 @@
+import { validFixedMacdManager } from "./macdWide40";
 /** Versioned admission intent. Legacy numeric budgets remain historical storage
  * fields; this policy explicitly makes them non-authoritative for new entries. */
 export const FIXED_CONTRACT_ADMISSION_MODE = "fixed-contracts-broker-affordability-v1" as const;
@@ -44,7 +45,7 @@ export function fixedContractScopeValid(spec: {
     && Number(spec.exitParameters.stallMinutes ?? 0) === 0
     && Number(spec.exitParameters.stallMaxFavorablePct ?? 0) === 0
     && spec.symbolScope.length === 1 && spec.symbolScope[0] === "SPY"
-    && spec.managerProfileId === "VB-MACD-WIDE20-50"
+    && validFixedMacdManager(spec.managerProfileId, spec.takeProfit.targetPct, spec.stopLoss.catastrophePct)
     && spec.entryParameters.entryDte === 0 && spec.entryParameters.strikeOffset === 0
     && (spec.entryParameters.eventPolicy ?? "standdown") === "standdown"
     && (spec.entryParameters.maxEntriesPerSession ?? 1) === 1
@@ -54,7 +55,7 @@ export function fixedContractScopeValid(spec: {
     && Number(spec.entryParameters.pyramidAdds ?? 0) === 0
     && spec.reentryPolicy === "disabled" && spec.scalePolicy.adds === 0
     && spec.scalePolicy.pyramiding === "disabled"
-    && spec.takeProfit.kind === "bank" && spec.takeProfit.targetPct === 20
+    && spec.takeProfit.kind === "bank"
     && spec.takeProfit.fraction === 0 && spec.stopLoss.catastrophePct === 50
     && spec.stopLoss.priceBasis === "executable-option-bid";
 }

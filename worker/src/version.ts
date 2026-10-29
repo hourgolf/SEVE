@@ -1,3 +1,4 @@
+import { MACD_WIDE40_COMPATIBILITY } from "../../lib/channels/macdWide40.js";
 // Import-safe identities with no environment or external-client side effects.
 //
 // WORKER_VERSION is part of the sealed Day 1 strategy identity. Changing it
@@ -21,7 +22,7 @@ import { FIXED_CONTRACT_WORKER_COMPATIBILITY } from "../../lib/channels/fixedCon
 export function supportsManifestCompatibility(version: string, currentStrategyVersion: string): boolean {
   return currentStrategyVersion === RC54_WORKER_VERSION
     && (version === RC54_WORKER_VERSION || version === FIXED_CONTRACT_WORKER_COMPATIBILITY
-      || version === PROFIT_PROTECTION_COMPATIBILITY);
+      || version === PROFIT_PROTECTION_COMPATIBILITY || version === MACD_WIDE40_COMPATIBILITY);
 }
 
 export function activeWorkerVersion(rc54ReleaseEnabled: boolean): string {

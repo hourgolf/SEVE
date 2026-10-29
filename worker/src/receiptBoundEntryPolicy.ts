@@ -1,3 +1,4 @@
+import { validFixedMacdManager } from "../../lib/channels/macdWide40.js";
 import { profitProtectionScopeValid } from "../../lib/channels/profitProtection.js";
 import type {
   ChannelRatchetPolicy,
@@ -183,9 +184,8 @@ export function parseReceiptBoundEntryPolicy(
         ? (!isFixedContractAdmissionPolicy(row.fixedContractAdmission)
           || row.quantity !== 4 || row.premiumCap !== null || row.aggregateDebitCap !== null
           || row.configuration.channelSlug !== "vb-macd-state"
-          || row.managerProfileId !== "VB-MACD-WIDE20-50"
-          || record(row.takeProfit)?.targetPct !== 20 || record(row.takeProfit)?.fraction !== 0
-          || record(row.stopLoss)?.catastrophePct !== 50)
+          || !validFixedMacdManager(row.managerProfileId, record(row.takeProfit)?.targetPct, record(row.stopLoss)?.catastrophePct)
+          || record(row.takeProfit)?.fraction !== 0)
         : (row.fixedContractAdmission !== undefined || !finite(row.premiumCap)
           || row.premiumCap <= 0 || !finite(row.aggregateDebitCap) || row.aggregateDebitCap <= 0
           || Number(row.quantity) * Number(row.premiumCap) * 100 > Number(row.aggregateDebitCap) + 1e-9))
