@@ -183,3 +183,26 @@ assert.ok(drifted.blockers.includes("candidate:configuration_epoch_drift"));
 assert.equal(drifted.acknowledgementRpcArgs, null);
 
 console.log("channel-activation-preview-watcher-selftest: 2/2 passed");
+
+// Startup identity follows the exact current manifest, including newer
+// compatible runtimes. A different supported version is still a mismatch.
+for (const workerCompatibilityVersion of ["stream-fixed-contract-affordability-v1", "stream-profit-protection-v1"]) {
+  const current = compileReleaseManifest({ ...RC54_CONTROL_PLANE_FIXTURE, workerCompatibilityVersion });
+  const next = buildShadowActivationCandidate({ active: current, proposal, readiness });
+  const observed = { ...envelope, preview: { ...envelope.preview,
+    candidate_manifest: next.compiled!.manifest,
+    worker_projection: next.compiled!.workerProjection,
+    dashboard_projection: next.compiled!.dashboardProjection,
+    validation_results: next.validationResults,
+    configuration_epoch_id: next.projection!.configurationEpochId } };
+  const input = { active: current, envelope: observed, acknowledgementId,
+    currentReleaseId: RC54_RELEASE_ID, currentWorkerVersion: RC54_WORKER_VERSION,
+    currentWorkerRuntimeVersion: WORKER_RUNTIME_VERSION, bootId, paperMode: true,
+    heldCaptureReady: true, startupReceipt: { ...startupReceipt, workerVersion: workerCompatibilityVersion },
+    observedAt: "2026-07-31T04:00:02.000Z" };
+  assert.equal(stageStoredChannelActivationPreview(input).state, "acknowledged");
+  const wrong = stageStoredChannelActivationPreview({ ...input, startupReceipt });
+  assert.equal(wrong.state, "blocked");
+  assert.ok(wrong.blockers.includes("startup_receipt:worker_version_mismatch"));
+}
+console.log("current-manifest startup compatibility: PASS");

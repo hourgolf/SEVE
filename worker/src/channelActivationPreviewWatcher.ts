@@ -268,6 +268,7 @@ export function stageStoredChannelActivationPreview(input: {
     workerStage = stageChannelActivationShadow({
       candidate,
       expectedCurrentReleaseId: input.active.manifest.releaseId,
+      expectedCurrentWorkerCompatibility: input.active.manifest.workerCompatibilityVersion,
       currentReleaseId: input.currentReleaseId,
       currentWorkerVersion: input.currentWorkerVersion,
       currentWorkerRuntimeVersion: input.currentWorkerRuntimeVersion,
