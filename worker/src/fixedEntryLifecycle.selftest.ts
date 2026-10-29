@@ -134,7 +134,10 @@ async function main() {
     setBid(2.4); await reconcileFixedLifecycle(ports, h.intent);
     assert.equal(sellCount, 1);
     const frozen = inspectFixedSellPlans(h.intent, (await h.coverage.snapshot(h.intent)).records).plans[0];
-    confirmCancel(); h.setNow(h.coverage.now() + 1_001);
+    h.setNow(h.coverage.now() + 1_001);
+    await reconcileFixedLifecycle(ports, h.intent);
+    assert.equal(sellCount, 1, "a cancel request without terminal confirmation cannot advance a sell rung");
+    confirmCancel();
     await reconcileFixedLifecycle(ports, h.intent); // cancel, book partial, submit next rung in this pass
     assert.equal(sellCount, 2, "confirmed canceled partial advances without a second recovery pass");
     setBid(10); await reconcileFixedLifecycle(ports, h.intent); // same frozen wave after price recovery
