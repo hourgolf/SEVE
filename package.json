@@ -241,7 +241,7 @@
     "channel-collection-runtime-selftest": "tsx worker/src/channelCollectionRuntime.selftest.ts",
     "channel-epoch-evidence-persistence-selftest": "tsx worker/src/channelEpochEvidencePersistence.selftest.ts",
     "channel-epoch-evidence-runtime-selftest": "tsx worker/src/channelEpochEvidenceRuntime.selftest.ts",
-    "receipt-bound-entry-policy-selftest": "tsx worker/src/receiptBoundEntryPolicy.selftest.ts",
+    "receipt-bound-entry-policy-selftest": "tsx worker/src/receiptBoundEntryPolicy.selftest.ts && tsx scripts/momo-profit-protection.selftest.ts",
     "single-flight-release-reload-selftest": "tsx worker/src/singleFlightReload.selftest.ts",
     "channel-collection-bootstrap-selftest": "tsx scripts/channel-collection-bootstrap.selftest.ts",
     "temporary-rc54-runtime-adapter-selftest": "tsx worker/src/temporaryRc54RuntimeAdapter.selftest.ts",

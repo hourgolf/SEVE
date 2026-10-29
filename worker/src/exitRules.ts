@@ -13,6 +13,7 @@
 //   · trancheSplit — the sell/retain arithmetic with the unsplittable fallback
 // ============================================================================
 
+import { profitProtectionExitRequired } from "./profitProtection.js";
 import { policy } from "./config.js";
 import type { PositionRow } from "./store.js";
 import {
@@ -55,6 +56,10 @@ export interface FastExitCheck {
 
 export function premiumExitReason(c: FastExitCheck, mark: number, peak: number): string | null {
   const entry = c.row.avg_entry_price;
+  if (profitProtectionExitRequired(c.receiptBoundEntryPolicy ?? null, c.row)) {
+    const stop = c.receiptBoundEntryPolicy!.stopLoss.catastrophePct;
+    return mark > 0 && mark <= entry * (1 - stop / 100) ? "premium_stop" : "early_profit_floor";
+  }
   if (!(entry > 0) || !(mark > 0)) return null;
   if (c.isManual) return c.minutesToClose <= policy.MANUAL_BACKSTOP_MIN ? "manual_eod_backstop" : null;
   // RUNNER rows skip BOTH take-profit checks (ride mode — the tranche already banked the

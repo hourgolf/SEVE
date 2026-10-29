@@ -2,6 +2,8 @@
 // live worker's observation-only fast sweep. A tick can produce evidence; it
 // cannot place an order or mutate an active channel manager.
 
+import { MOMO_PROTECTED_MANAGER, MOMO_PROTECTED_MANAGER_VERSION } from "../lib/channels/profitProtection";
+
 export const BASE_MANAGER_IDS = [
   "LOCK20/30",
   "LOCK30/30",
@@ -34,6 +36,7 @@ export const MANAGER_IDS = [
   "FULL-R20-K50",
   "FULL-R50-K67",
   "ORB-TREND-SOURCE-30/35",
+  "MOMO-B30-R50-K67-CONTROL",
 ] as const;
 
 export type ManagerId = typeof MANAGER_IDS[number];
@@ -105,6 +108,9 @@ export const FORWARD_CONTROL_NATIVE_VERSIONS: Readonly<Record<string, string>> =
 };
 export function managerIdsForObservedConfiguration(slug: string, nativeManagerId?: string | null, nativeManagerVersion?: string | null): readonly ManagerId[] {
   const prior = managerIdsForChannel(slug);
+  if (slug === "momo-shape-2" && nativeManagerId === MOMO_PROTECTED_MANAGER
+      && nativeManagerVersion === MOMO_PROTECTED_MANAGER_VERSION)
+    return [...prior, "MOMO-B30-R50-K67-CONTROL"];
   if (!nativeManagerVersion || nativeManagerVersion !== FORWARD_CONTROL_NATIVE_VERSIONS[slug]) return prior;
   if (slug === "grind-smart-entries" && nativeManagerId === "FULL-R50-K75")
     return [...prior, "GRIND-SMART-ALL-OUT-8"];
@@ -120,7 +126,7 @@ export function managerIdsForObservedConfiguration(slug: string, nativeManagerId
 }
 
 export function isBankRunnerManager(managerId: ManagerId): boolean {
-  return ["BANK20/RUN50", "PB2-BANK15/HALF-GIVEBACK", "GRIND-B25/CURRENT-A13", "MOMO2-B20-BE-R50"].includes(managerId);
+  return ["BANK20/RUN50", "PB2-BANK15/HALF-GIVEBACK", "GRIND-B25/CURRENT-A13", "MOMO2-B20-BE-R50", "MOMO-B30-R50-K67-CONTROL"].includes(managerId);
 }
 
 export interface ManagerExit {
@@ -162,6 +168,24 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
       if (state.armedPeakPct != null && ret <= state.armedPeakPct * keep)
         return terminal(managerId, "giveback", ret, state);
       if (isBell) return terminal(managerId, "bell", ret, state);
+      return { state, exit: null };
+    }
+    case "MOMO-B30-R50-K67-CONTROL": {
+      const banked = state.bankReturnPct != null;
+      if (!banked && ret <= -30) return terminal(managerId, "prebank_stop", ret, state);
+      if (!banked && ret >= 30) state.bankReturnPct = ret;
+      if (state.bankReturnPct != null) {
+        state.armedPeakPct = Math.max(state.armedPeakPct ?? ret, ret);
+        const blended = (state.bankReturnPct + ret) / 2;
+        // Preserve BOTH currently executable native runner rules: peak-price
+        // giveback and, once +50 is reached, retention of 67% of peak gain.
+        if (ret <= (100 + state.armedPeakPct) * 0.67 - 100)
+          return terminal(managerId, "runner_ratchet", blended, state);
+        if (ret <= -30) return terminal(managerId, "stop", blended, state);
+        if (state.armedPeakPct >= 50 && ret <= state.armedPeakPct * 0.67)
+          return terminal(managerId, "trail_giveback", blended, state);
+        if (isBell) return terminal(managerId, "runner_bell", blended, state);
+      } else if (isBell) return terminal(managerId, "bell", ret, state);
       return { state, exit: null };
     }
     case "MOMO2-B20-BE-R50": {
@@ -268,6 +292,8 @@ export function advanceManager(managerId: ManagerId, prior: ManagerState, ret: n
 // peak_mark cannot reconstruct the first crossing's overshoot. Evidence carries
 // `recovered` so analysis never mistakes that approximation for an observed fill.
 export function recoverManagerState(managerId: ManagerId, peakReturnPct: number): ManagerState {
+  if (managerId === "MOMO-B30-R50-K67-CONTROL" && peakReturnPct >= 30)
+    return { bankReturnPct: 30, armedPeakPct: peakReturnPct, recovered: true };
   if (managerId === "MOMO2-B20-BE-R50" && peakReturnPct >= 20)
     return { bankReturnPct: 20, recovered: true };
   if ((managerId === "FULL-R20-K50" && peakReturnPct >= 20) || (managerId === "FULL-R50-K67" && peakReturnPct >= 50))

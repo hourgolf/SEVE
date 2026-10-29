@@ -107,7 +107,7 @@ export function executionQualityTriggerKind(reason: string): ExecutionQualityTri
   if (reason === "premium_stop" || reason === "stop_premium") return "premium_stop";
   if (reason === "underlying_stop") return "underlying_stop";
   if (reason === "target_premium" || reason === "target_tranche") return "target";
-  if (reason === "trail_giveback" || reason === "runner_ratchet") return "trail";
+  if (reason === "trail_giveback" || reason === "runner_ratchet" || reason === "early_profit_floor") return "trail";
   if (reason === "stall_exit" || /eod|bell/i.test(reason)) return "time";
   if (/halt|event_flatten|reconcile/i.test(reason)) return "safety";
   if (/manual|operator/i.test(reason)) return "operator";

@@ -46,7 +46,7 @@ const et = (s: string) => {
 export function shadowManagerStop(manager: string): number | null {
   if (["LOCK20/30", "LOCK30/30", "LOCK50/30", "BANK20/RUN50", "ARM20/HALF-GIVEBACK", "BELL/-30",
     "FULL-R20-K50", "FULL-R50-K67", "PB2-BANK15/HALF-GIVEBACK", "GRIND-B25/CURRENT-A13",
-    "VB-MACD-CURRENT-LOCK18", "VB-LEVEL-CURRENT-LOCK25"].includes(manager)) return 30;
+    "VB-MACD-CURRENT-LOCK18", "VB-LEVEL-CURRENT-LOCK25", "MOMO-B30-R50-K67-CONTROL"].includes(manager)) return 30;
   if (["GRIND-SMART-ALL-OUT-8", "ORB-TREND-SOURCE-30/35"].includes(manager)) return 35;
   if (["MOMO2-CURRENT-LOCK27", "MOMO2-B20-BE-R50"].includes(manager)) return 40;
   return manager === "WIDE20/50" ? 50 : null;
