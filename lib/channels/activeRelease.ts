@@ -1,3 +1,5 @@
+import { MACD_WIDE40_COMPATIBILITY } from "./macdWide40";
+import { PROFIT_PROTECTION_COMPATIBILITY } from "./profitProtection";
 import { FIXED_CONTRACT_WORKER_COMPATIBILITY } from "./fixedContractAdmission";
 import type { MarketEvent } from "@/lib/types";
 import {
@@ -348,7 +350,7 @@ function receiptBoundRootBindings(
       || manifestHash !== receipt.configHash
       || !epoch?.match(SHA256)
       || !activationReceiptId
-      || (workerVersion !== RC54_WORKER_VERSION && workerVersion !== FIXED_CONTRACT_WORKER_COMPATIBILITY)) {
+      || ![RC54_WORKER_VERSION, FIXED_CONTRACT_WORKER_COMPATIBILITY, PROFIT_PROTECTION_COMPATIBILITY, MACD_WIDE40_COMPATIBILITY].includes(workerVersion ?? "")) {
     return { bindings: {}, issue: "receipt-bound startup identity is incomplete or internally inconsistent" };
   }
   if (!Array.isArray(meta.roots)

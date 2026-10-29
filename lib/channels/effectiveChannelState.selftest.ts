@@ -168,6 +168,44 @@ test("receipt-bound startup retains binding identity without inventing unstamped
   assert.equal(state.economics.configurationEpochId, epoch);
 });
 
+test("new manager compatibility retains dashboard authority and rejects unknown versions", () => {
+  const epoch = `sha256:${"d".repeat(64)}`;
+  const hash = "c".repeat(64);
+  const roots = Object.values(RC54_ROOTS).map((root) => ({
+    slug: root.slug,
+    accountId: root.accountId,
+    quantity: root.quantity,
+    managerProfileId: root.managerProfileId,
+    managerVersion: `sha256:${root.managerVersion}`,
+    channelSpecContentHash: `sha256:${root.channelVersion}`,
+    configurationEpochId: epoch,
+    maxEntriesPerSession: root.slug === "pb-ride" ? 3 : 1,
+  }));
+  for (const version of ["stream-profit-protection-v1", "stream-macd-wide40-v1", "unknown-version"]) {
+  const release = observeActiveRelease([event(
+    `stream: rc54-release ACTIVE release:receipt-bound-test config=sha256:${hash}`,
+    {
+      state: "receipt-bound",
+      paperOnly: true,
+      releaseId: "release:receipt-bound-test",
+      manifestContentHash: `sha256:${hash}`,
+      configurationEpochId: epoch,
+      activationReceiptId: "activation-receipt-test",
+      workerCompatibilityVersion: version,
+      roots,
+    },
+  )]);
+  const state = deriveEffectiveChannelState({ channel: channel("pb-ride"), release });
+  if (version === "unknown-version") { assert.equal(state.authority.state, "unverified"); continue; }
+  assert.equal(state.authority.source, "activation-receipt");
+  assert.equal(state.execution.posture, "paper-executing");
+  assert.equal(state.economics.state, "receipt-summary");
+  assert.equal(state.economics.quantity, 2);
+  assert.equal(state.economics.riskBudgetUsd, null);
+  assert.equal(state.economics.configurationEpochId, epoch);
+  }
+});
+
 test("evidence freshness stays structural and never claims exact configuration", () => {
   const state = deriveEffectiveChannelState({
     channel: channel("pb-ride"),
