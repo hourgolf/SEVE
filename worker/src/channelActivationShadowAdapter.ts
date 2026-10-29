@@ -35,6 +35,7 @@ interface CurrentWorkerRootReceipt {
 export interface ChannelActivationWorkerStageInput {
   candidate: Readonly<ShadowActivationCandidate>;
   expectedCurrentReleaseId?: string;
+  expectedCurrentWorkerCompatibility?: string;
   currentReleaseId: string;
   currentWorkerVersion: string;
   currentWorkerRuntimeVersion: string;
@@ -322,6 +323,7 @@ export function stageChannelActivationShadow(
     blockers.push(...startupReceiptBlockers({
       receipt: input.startupReceipt,
       expectedReleaseId: input.expectedCurrentReleaseId,
+      expectedWorkerCompatibility: input.expectedCurrentWorkerCompatibility,
       expectedRoots: compiled.channelSpecs.map((spec): CurrentWorkerRootReceipt => {
         const current = spec.id === input.candidate.proposedSpec?.id
           ? input.candidate.activeSpec as typeof spec
