@@ -135,14 +135,15 @@ async function main() {
     assert.equal(sellCount, 1);
     const frozen = inspectFixedSellPlans(h.intent, (await h.coverage.snapshot(h.intent)).records).plans[0];
     confirmCancel(); h.setNow(h.coverage.now() + 1_001);
-    await reconcileFixedLifecycle(ports, h.intent); // confirm partial first-rung cancellation, book one contract
-    setBid(10); await reconcileFixedLifecycle(ports, h.intent); // next generation continues original wave/rung
-    assert.equal(sellCount, 2);
+    await reconcileFixedLifecycle(ports, h.intent); // cancel, book partial, submit next rung in this pass
+    assert.equal(sellCount, 2, "confirmed canceled partial advances without a second recovery pass");
+    setBid(10); await reconcileFixedLifecycle(ports, h.intent); // same frozen wave after price recovery
+    assert.equal(sellCount, 2, "unexpired working rung cannot advance or reprice");
     const sells = requests.filter(r => r.side === "sell");
     assert.deepEqual(sells.map(r => [r.qty, r.type, r.limit_price]), [["4", "limit", frozen.rungs[0].limitPrice], ["3", "limit", frozen.rungs[1].limitPrice]]);
     h.setNow(h.coverage.now() + 1_001);
     await reconcileFixedLifecycle(ports, h.intent); // terminal zero second limit, no invented sale
-    assert.equal(sellCount, 2);
+    assert.equal(sellCount, 3, "confirmed terminal-zero cancellation submits final market rung in the same pass");
     const final = await reconcileFixedLifecycle(ports, h.intent);
     assert.equal(final.state, "settled"); assert.equal(sellCount, 3);
     assert.equal(requests.at(-1)?.type, "market"); assert.equal(requests.at(-1)?.qty, "3");

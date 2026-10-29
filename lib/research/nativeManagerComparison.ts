@@ -49,7 +49,7 @@ export function shadowManagerStop(manager: string): number | null {
     "VB-MACD-CURRENT-LOCK18", "VB-LEVEL-CURRENT-LOCK25", "MOMO-B30-R50-K67-CONTROL"].includes(manager)) return 30;
   if (["GRIND-SMART-ALL-OUT-8", "ORB-TREND-SOURCE-30/35"].includes(manager)) return 35;
   if (["MOMO2-CURRENT-LOCK27", "MOMO2-B20-BE-R50"].includes(manager)) return 40;
-  return manager === "WIDE20/50" ? 50 : null;
+  return ["WIDE20/50", "WIDE40/50"].includes(manager) ? 50 : null;
 }
 export function comparisonSpec(position: ComparisonPosition, specs: readonly ComparisonSpec[]) {
   const identity = object(position.entry_features?.configuration_identity);
@@ -132,7 +132,7 @@ export function nativeComparisonReason(input: {
   const target = n(spec.take_profit.targetPct), stop = n(spec.stop_loss.catastrophePct);
   const equivalent = spec.take_profit.fraction === 0 && spec.ratchet_parameters?.kind === "none"
     ? ({ "20/30": "LOCK20/30", "30/30": "LOCK30/30", "50/30": "LOCK50/30", "20/50": "WIDE20/50",
-      "8/35": "GRIND-SMART-ALL-OUT-8", "18/30": "VB-MACD-CURRENT-LOCK18", "25/30": "VB-LEVEL-CURRENT-LOCK25",
+      "40/50": "WIDE40/50", "8/35": "GRIND-SMART-ALL-OUT-8", "18/30": "VB-MACD-CURRENT-LOCK18", "25/30": "VB-LEVEL-CURRENT-LOCK25",
       "27/40": "MOMO2-CURRENT-LOCK27" } as Record<string, string>)[`${target}/${stop}`] : null;
   const baseline = equivalent && input.runs.find(x => x.position_id === p.id && x.manager_id === equivalent
     && x.shadow_book_version === run.shadow_book_version);

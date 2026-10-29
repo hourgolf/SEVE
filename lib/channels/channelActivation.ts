@@ -1,4 +1,4 @@
-import { PROFIT_PROTECTION_COMPATIBILITY } from "./profitProtection";
+import { managerManifestCompatibility } from "./macdWide40";
 import {
   CHANNEL_CONTROL_PLANE_COMPILER_VERSION,
   CHANNEL_CONTROL_PLANE_SCHEMA_VERSION,
@@ -207,8 +207,7 @@ export function buildShadowActivationCandidate(input: {
     createdAt: input.proposal.createdAt,
     status: "draft",
     channelSpecs,
-    workerCompatibilityVersion: channelSpecs.some(s => s.ratchetParameters.profitProtection)
-      ? PROFIT_PROTECTION_COMPATIBILITY : input.active.manifest.workerCompatibilityVersion,
+    workerCompatibilityVersion: managerManifestCompatibility(channelSpecs, input.active.manifest.workerCompatibilityVersion),
     admissionPolicies: projectAdmissionPolicyReentry(
       input.active.manifest.admissionPolicies,
       channelSpecs,

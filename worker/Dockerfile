@@ -32,7 +32,11 @@ COPY worker ./worker
 # EXISTING scripts/shadow-cron.ts (→ day-report → benched-sim) as a child, so the panel
 # stays current with no Mac. tsconfig.json carries the `@/*` path alias the scripts resolve.
 COPY scripts ./scripts
+# The daily report imports the shared historical attribution loader.
+COPY supabase/functions/_shared ./supabase/functions/_shared
 COPY tsconfig.json ./
+# Fail the image build if shared report-loader imports cannot resolve.
+RUN /app/worker/node_modules/.bin/tsx -e "import './supabase/functions/_shared/loadHistoricalAttribution.ts'; import './supabase/functions/_shared/historicalAttribution.ts';"
 
 WORKDIR /app/worker
 ENV NODE_ENV=production

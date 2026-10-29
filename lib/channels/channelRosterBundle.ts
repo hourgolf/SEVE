@@ -1,3 +1,4 @@
+import { managerManifestCompatibility } from "./macdWide40";
 import { FIXED_CONTRACT_ADMISSION_MODE, FIXED_CONTRACT_WORKER_COMPATIBILITY, LEGACY_RC54_WORKER_COMPATIBILITY } from "./fixedContractAdmission";
 import { validateCapacityContract } from "./channelPortfolioCapacity";
 import {
@@ -371,10 +372,10 @@ export function buildChannelRosterBundlePreview(input: {
     id: `manifest:bundle:${input.draft.id}`,
     releaseId: `release:bundle:${input.draft.id}`,
     cohortId: `operator-bundle:${input.draft.id}`,
-    workerCompatibilityVersion: specs.some(spec => spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE)
+    workerCompatibilityVersion: managerManifestCompatibility(specs, specs.some(spec => spec.entryParameters.admissionSizingMode === FIXED_CONTRACT_ADMISSION_MODE)
       ? FIXED_CONTRACT_WORKER_COMPATIBILITY
       : input.active.manifest.workerCompatibilityVersion === FIXED_CONTRACT_WORKER_COMPATIBILITY
-        ? LEGACY_RC54_WORKER_COMPATIBILITY : input.active.manifest.workerCompatibilityVersion,
+        ? LEGACY_RC54_WORKER_COMPATIBILITY : input.active.manifest.workerCompatibilityVersion),
     rollbackTargetManifestId: input.active.manifest.id,
     parentManifestId: input.active.manifest.id,
     createdBy: `operator:${input.draft.operatorId}`,
