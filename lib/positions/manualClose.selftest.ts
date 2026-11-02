@@ -4,6 +4,8 @@ import { MANUAL_CLOSE_REASONS, normalizeManualCloseTag } from "./manualClose";
 import {
   manualClosePolicyEvidence,
   resolveManualCloseAccount,
+  resolveManualCloseChannelIdentity,
+  resolveManualCloseSellQuantity,
 } from "./manualCloseServerEvidence";
 
 let checks = 0;
@@ -22,6 +24,55 @@ check("correction tag normalizes", normalizeManualCloseTag(" correction "), "cor
 check("manual is not a post-close tag", normalizeManualCloseTag("manual"), null);
 check("machine reason is not a post-close tag", normalizeManualCloseTag("stop_premium"), null);
 check("null is not a tag", normalizeManualCloseTag(null), null);
+
+check("channel identity retains the exact valid slug", resolveManualCloseChannelIdentity({
+  strategistId: "strategist-a",
+  slug: " vb-macd-state ",
+}), { ok: true, value: "vb-macd-state" });
+const channelReadFailure = resolveManualCloseChannelIdentity({
+  strategistId: "strategist-a",
+  slug: "vb-macd-state",
+  readError: "database unavailable",
+});
+check("channel read failure blocks manual close", channelReadFailure.ok, false);
+check("channel read failure is classified", !channelReadFailure.ok && channelReadFailure.kind, "read_error");
+const channelMissing = resolveManualCloseChannelIdentity({ strategistId: "strategist-a" });
+check("missing channel slug blocks manual close", channelMissing.ok, false);
+assert.match(!channelMissing.ok ? channelMissing.error : "", /lacks a valid channel identity/); checks++;
+const channelUnsafe = resolveManualCloseChannelIdentity({ strategistId: "strategist-a", slug: "manual/SPY" });
+check("unsafe channel slug blocks manual close", channelUnsafe.ok, false);
+
+check("verified long broker quantity caps the desk sell", resolveManualCloseSellQuantity({
+  deskQuantity: 4,
+  responseStatus: 200,
+  responseOk: true,
+  brokerQuantity: "2",
+}), { ok: true, value: {
+  deskQuantity: 4,
+  heldQuantity: 2,
+  sellQuantity: 2,
+  evidenceBasis: "verified_broker_position",
+} });
+check("verified broker absence authorizes zero-order close booking", resolveManualCloseSellQuantity({
+  deskQuantity: 4,
+  responseStatus: 404,
+  responseOk: false,
+}), { ok: true, value: {
+  deskQuantity: 4,
+  heldQuantity: 0,
+  sellQuantity: 0,
+  evidenceBasis: "verified_broker_absence",
+} });
+for (const [name, resolution] of [
+  ["transport failure", resolveManualCloseSellQuantity({ deskQuantity: 4, readError: "timeout" })],
+  ["broker HTTP failure", resolveManualCloseSellQuantity({ deskQuantity: 4, responseStatus: 503, responseOk: false })],
+  ["missing broker quantity", resolveManualCloseSellQuantity({ deskQuantity: 4, responseStatus: 200, responseOk: true })],
+  ["fractional broker quantity", resolveManualCloseSellQuantity({ deskQuantity: 4, responseStatus: 200, responseOk: true, brokerQuantity: "1.5" })],
+  ["short broker quantity", resolveManualCloseSellQuantity({ deskQuantity: 4, responseStatus: 200, responseOk: true, brokerQuantity: "-1" })],
+  ["invalid desk quantity", resolveManualCloseSellQuantity({ deskQuantity: 0, responseStatus: 200, responseOk: true, brokerQuantity: "1" })],
+] as const) {
+  check(`${name} blocks manual close`, resolution.ok, false);
+}
 
 const paperAccounts = [
   { id: "account-a", cred_ref: "A", mode: "paper" },
@@ -184,7 +235,11 @@ const routeSource = readFileSync(
 assert.match(routeSource, /from\("execution_observations"\)/); checks++;
 assert.match(routeSource, /resolveManualCloseAccount/); checks++;
 assert.match(routeSource, /manualClosePolicyEvidence/); checks++;
+assert.match(routeSource, /resolveManualCloseChannelIdentity/); checks++;
+assert.match(routeSource, /resolveManualCloseSellQuantity/); checks++;
 assert.match(routeSource, /position left open; no order placed/); checks++;
+assert.doesNotMatch(routeSource, /slug \?\? "manual"/); checks++;
+assert.doesNotMatch(routeSource, /let heldQty = qty/); checks++;
 assert.doesNotMatch(routeSource, /select\("slug,account_id"\)/); checks++;
 assert.doesNotMatch(routeSource, /from\("strategist_config"\)/); checks++;
 
